@@ -1,0 +1,40 @@
+:root {
+  --color-primary: #6d5dfc;
+  --color-primary-strong: #5947ec;
+  --color-primary-soft: #f0edff;
+  --color-success: #1f9d68;
+  --color-warning: #d9822b;
+  --color-danger: #d64545;
+  --text-strong: #1f2937;
+  --text: #475569;
+  --text-muted: #667085;
+  --surface: #ffffff;
+  --surface-subtle: #fafbff;
+  --background: #f7f8fc;
+  --border: #e7eaf2;
+  --focus-ring: #5947ec;
+  --radius-sm: 10px;
+  --radius-md: 14px;
+  --radius-card: 18px;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --shadow-card: 0 10px 32px rgba(31, 41, 55, 0.06);
+  --motion-fast: 180ms;
+  --motion-normal: 220ms;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+  }
+}

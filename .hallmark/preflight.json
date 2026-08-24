@@ -1,0 +1,20 @@
+{
+  "scannedAt": "2026-08-23",
+  "scope": "layout-components",
+  "framework": "Vue 3",
+  "fontStack": "system-ui UI stack inherited from src/styles/global.css",
+  "palette": "locked purple/lavender learning palette from src/styles/tokens.css",
+  "motion": "CSS token-based, motion-cut; no animation library",
+  "spacing": "4px scale from --space-* tokens",
+  "genre": "modern-minimal",
+  "audience": "teachers, students, and root administrators",
+  "useCase": "navigate the learning application while keeping page, class, and week context visible",
+  "tone": "soft utilitarian and clear",
+  "preserve": [
+    "existing tokens",
+    "existing font stack",
+    "existing spacing scale",
+    "Lucide icon system",
+    "reduced-motion behavior"
+  ]
+}
