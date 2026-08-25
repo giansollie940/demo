@@ -38,3 +38,10 @@ test('AppShell hosts Wise Owl and does not install unload listeners', async () =
   assert.match(shell, /WiseOwl/)
   assert.doesNotMatch(shell, /beforeunload|addEventListener\(['"]unload/)
 })
+
+
+test('Wise Owl pupil baseline is centered lower to match the original layout', async () => {
+  const owl = await text('src/components/owl/WiseOwl.vue')
+  assert.match(owl, /left-pupil\{left:8\.3%;top:11\.8%\}/)
+  assert.match(owl, /right-pupil\{left:49\.2%;top:11\.8%\}/)
+})

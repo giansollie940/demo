@@ -1,17 +1,33 @@
 *{box-sizing:border-box}
 html,body,#app{min-height:100%;margin:0;overflow-x:clip}
-body{min-width:0;background:var(--bg);color:var(--text);font-family:var(--font-body);line-height:1.5}
-h1,h2,h3{min-width:0;overflow-wrap:anywhere;font-family:var(--font-display);font-style:normal}
+body{min-width:0;background:radial-gradient(circle at 4% 6%,color-mix(in srgb,var(--color-lilac) 8%,transparent),transparent 24%),radial-gradient(circle at 94% 8%,color-mix(in srgb,var(--color-sky) 7%,transparent),transparent 23%),radial-gradient(circle at 78% 94%,color-mix(in srgb,var(--color-mint) 6%,transparent),transparent 22%),var(--bg);color:var(--text);font-family:var(--font-body);line-height:1.5}
+h1,h2,h3{min-width:0;overflow-wrap:anywhere;font-family:var(--font-display);font-style:normal;letter-spacing:-.015em}
 button,input,select,textarea{font:inherit}
 button{cursor:pointer}
 a{color:inherit;text-decoration:none}
 img{max-width:100%;display:block}
+::selection{background:color-mix(in srgb,var(--color-primary) 24%,transparent)}
 :focus-visible{outline:3px solid var(--focus-ring);outline-offset:2px}
-.app-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);box-shadow:var(--shadow-sm)}
+.app-card{background:linear-gradient(145deg,var(--surface),color-mix(in srgb,var(--wash-violet) 18%,var(--surface)));border:1px solid color-mix(in srgb,var(--color-primary) 8%,var(--border));border-radius:var(--radius-lg);box-shadow:var(--shadow-sm);transition:border-color var(--transition-fast),box-shadow var(--transition-fast),transform var(--transition-fast)}
+.app-card:hover{border-color:color-mix(in srgb,var(--color-primary) 18%,var(--border));box-shadow:0 10px 28px rgb(54 44 104 / .11)}
 .page-stack{display:grid;gap:var(--space-6)}
 .page-stack>*{min-width:0}
 .page-header{display:flex;justify-content:space-between;gap:var(--space-4);align-items:flex-start;flex-wrap:wrap}
 .page-header h1{font-size:clamp(1.45rem,2vw,2rem);line-height:1.15;margin:0}.page-header p{margin:.45rem 0 0;color:var(--text-muted)}
 .muted{color:var(--text-muted)}
 .sr-only{position:absolute!important;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
+/* Bright Learning page banners: same structure, different gentle washes by task. */
+.registration-header,.history-page>header,.comments-page>header{--page-wash-a:var(--wash-mint);--page-wash-b:var(--wash-sky)}
+.approval-header,.tracking-header,.weeks-header{--page-wash-a:var(--wash-sky);--page-wash-b:var(--wash-violet)}
+.students-header,.statistics-page>.page-header{--page-wash-a:var(--wash-sun);--page-wash-b:var(--wash-mint)}
+.admin-header,.settings-page>header{--page-wash-a:var(--wash-violet);--page-wash-b:var(--wash-pink)}
+.registration-header,.history-page>header,.comments-page>header,.approval-header,.tracking-header,.weeks-header,.students-header,.statistics-page>.page-header,.admin-header,.settings-page>header{padding:18px 20px;border:1px solid color-mix(in srgb,var(--color-primary) 9%,var(--border));border-radius:20px;background:linear-gradient(135deg,var(--page-wash-a),color-mix(in srgb,var(--page-wash-b) 72%,var(--surface)));box-shadow:0 8px 24px rgb(54 44 104 / .06)}
+/* Reusable multicolor summary cards across student, teacher and admin screens. */
+.metrics>.app-card:nth-child(1),.approval-summary>.app-card:nth-child(1),.week-summary>.app-card:nth-child(1),.summary>.app-card:nth-child(1),.metric-grid>.app-card:nth-child(1){--card-accent:var(--color-sky);--card-wash:var(--wash-sky)}
+.metrics>.app-card:nth-child(2),.approval-summary>.app-card:nth-child(2),.week-summary>.app-card:nth-child(2),.summary>.app-card:nth-child(2),.metric-grid>.app-card:nth-child(2){--card-accent:var(--color-mint);--card-wash:var(--wash-mint)}
+.metrics>.app-card:nth-child(3),.approval-summary>.app-card:nth-child(3),.week-summary>.app-card:nth-child(3),.summary>.app-card:nth-child(3),.metric-grid>.app-card:nth-child(3){--card-accent:var(--color-coral);--card-wash:var(--wash-coral)}
+.metrics>.app-card:nth-child(4),.week-summary>.app-card:nth-child(4),.metric-grid>.app-card:nth-child(4){--card-accent:var(--color-sun);--card-wash:var(--wash-sun)}
+.week-summary>.app-card:nth-child(5){--card-accent:var(--color-pink);--card-wash:var(--wash-pink)}
+.metrics>.app-card,.approval-summary>.app-card,.week-summary>.app-card,.summary>.app-card,.metric-grid>.app-card{position:relative;overflow:hidden;background:linear-gradient(145deg,var(--surface),color-mix(in srgb,var(--card-wash,var(--wash-violet)) 72%,var(--surface)));border-color:color-mix(in srgb,var(--card-accent,var(--color-primary)) 20%,var(--border))}
+.metrics>.app-card::after,.approval-summary>.app-card::after,.week-summary>.app-card::after,.summary>.app-card::after,.metric-grid>.app-card::after{content:"";position:absolute;left:0;top:0;bottom:0;width:4px;background:var(--card-accent,var(--color-primary))}
 @media (prefers-reduced-motion: reduce){*,*::before,*::after{scroll-behavior:auto!important;animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important}}

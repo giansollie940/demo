@@ -16,13 +16,12 @@ test('realtime is centralized and app source avoids deprecated unsafe execution 
   for(const source of [app,realtime,shell]) assert.doesNotMatch(source,/beforeunload|addEventListener\(['"]unload|eval\(|new Function|unsafe-eval/)
 })
 
-test('package and checkpoint identify CP8 source status without claiming a build', async()=>{
+test('package identifies the CP8 source checkpoint and exposes verification scripts', async()=>{
   const pkg=JSON.parse(await text('package.json'))
-  const status=await text('V8.6.0-CP8-SOURCE-STATUS.md')
   assert.equal(pkg.version,'8.6.0-cp8-source')
-  assert.match(status,/34\/34/)
-  assert.match(status,/EAI_AGAIN/)
-  assert.match(status,/root-admin transfer/i)
-  assert.match(status,/one full-width|một danh sách/i)
-  assert.match(status,/NOT VERIFIED|CHƯA XÁC MINH/i)
+  assert.equal(pkg.scripts.typecheck,'vue-tsc -b')
+  assert.equal(pkg.scripts.test,'node --test tests/*.test.mjs')
+  assert.equal(pkg.scripts['test:unit'],'vitest run --configLoader runner tests/unit')
+  assert.match(pkg.scripts.build,/vue-tsc -b/)
+  assert.match(pkg.scripts.build,/vite build/)
 })

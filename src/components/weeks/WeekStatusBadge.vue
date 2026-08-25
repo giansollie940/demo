@@ -20,5 +20,5 @@ const config = computed(() => ({
 </template>
 
 <style scoped>
-.week-status{display:inline-flex;align-items:center;gap:8px;padding:8px 12px;border-radius:999px;background:var(--surface-soft);color:var(--text-muted);font-size:.78rem;font-weight:850}.week-status svg{width:16px}.is-open{background:color-mix(in srgb,var(--color-success) 13%,var(--surface));color:var(--color-success)}.is-locked{color:var(--text-muted)}.is-upcoming{background:color-mix(in srgb,var(--color-info) 11%,var(--surface));color:var(--color-info)}.is-holiday{background:color-mix(in srgb,var(--color-warning) 14%,var(--surface));color:var(--color-warning)}
+.week-status{display:inline-flex;align-items:center;gap:8px;padding:8px 12px;border-radius:999px;background:var(--surface-soft);color:var(--text-muted);font-size:.78rem;font-weight:850}.week-status svg{width:16px}.is-open{background:var(--wash-mint);color:var(--color-success)}.is-locked{color:var(--text-muted)}.is-upcoming{background:var(--wash-sky);color:var(--color-info)}.is-holiday{background:var(--wash-sun);color:var(--color-warning)}
 </style>

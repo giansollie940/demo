@@ -32,11 +32,11 @@ test('repo remains portable across GitHub project names', () => {
   assert.match(vite, /base:\s*['"]\.\/['"]/)
 })
 
-test('upload instructions describe the two required secrets', () => {
-  const guide = read('README-UPLOAD-GITHUB.md')
-  assert.match(guide, /SUPABASE_PROJECT_URL/)
-  assert.match(guide, /SUPABASE_PUBLISHABLE_KEY/)
-  assert.match(guide, /Settings\s*→\s*Pages/i)
+test('workflow validates the two required Supabase secrets before build', () => {
+  const yml = read('.github/workflows/deploy-pages.yml')
+  assert.match(yml, /Validate required Supabase secrets/)
+  assert.match(yml, /Missing repository secret SUPABASE_PROJECT_URL/)
+  assert.match(yml, /Missing repository secret SUPABASE_PUBLISHABLE_KEY/)
 })
 
 

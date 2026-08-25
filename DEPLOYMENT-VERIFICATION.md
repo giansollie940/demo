@@ -1,12 +1,20 @@
-# Deployment verification — V8.6.0 GitHub Upload Ready v3
+# Deployment verification — V8.6.0 GitHub Upload Ready v4
 
-## Root/typecheck fixes included
-- `tsconfig.json`, `tsconfig.app.json`, `tsconfig.node.json` are at repository root.
-- GitHub Actions has a root-file guard before `npm ci`/typecheck.
-- `CommentsPage.vue` and `HistoryPage.vue` map `draft` badge tone to `neutral` (supported by `AppBadge`).
-- Regression test protects this AppBadge tone contract.
+This package is intended to be extracted and its CONTENTS uploaded to the repository root.
 
-## Local packaging verification
-- `npm test`: run on source before packaging; all static tests passed.
-- ZIP is re-extracted and tested again before handoff.
-- `npm run typecheck` cannot run in the packaging container without installed dependencies (`vue-tsc` unavailable); GitHub Actions remains the authoritative typecheck/build gate.
+Required root build files:
+- package.json
+- package-lock.json
+- tsconfig.json
+- tsconfig.app.json
+- tsconfig.node.json
+- vite.config.ts
+- index.html
+- .github/workflows/deploy-pages.yml
+
+CI v4 fix:
+- Static tests no longer require optional Markdown deployment/status files.
+- Supabase secret requirements are verified from the workflow itself.
+- CP8 checkpoint/build scripts are verified from package.json.
+
+Production source was not changed by the v4 CI-test fix.

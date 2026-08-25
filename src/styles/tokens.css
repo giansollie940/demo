@@ -1,18 +1,25 @@
-/* Hallmark · macrostructure: Workbench · tone: utilitarian · anchor hue: violet · genre: modern-minimal · nav: N3 side-rail · footer: none */
-/* Hallmark · pre-emit critique: P4 H4 E4 S4 R4 V4 */
+/* Bright Learning · lively pastel accents with accessible semantic actions */
 :root {
-  --color-primary:#6d5bd0;
-  --color-primary-strong:#5745bd;
-  --color-info:#2366bd;
-  --color-success:#207a50;
-  --color-warning:#9b5c00;
-  --color-danger:#b52f42;
+  --color-primary:#6c5ce7;
+  --color-primary-strong:#5848cf;
+  --color-info:#3178d5;
+  --color-success:#168252;
+  --color-warning:#ad6908;
+  --color-danger:#cf3d55;
+  --color-sky:#3b82f6;
+  --color-mint:#1fa971;
+  --color-sun:#e3a117;
+  --color-coral:#ed6673;
+  --color-pink:#df5d9a;
+  --color-lilac:#8b5cf6;
+  --gradient-primary:linear-gradient(135deg,#6c5ce7 0%,#7c6cf2 54%,#5b8def 100%);
+  --gradient-celebrate:linear-gradient(115deg,#6c5ce7 0%,#3b82f6 28%,#1fa971 52%,#e3a117 76%,#ed6673 100%);
   --space-1:4px; --space-2:8px; --space-3:12px; --space-4:16px;
   --space-5:20px; --space-6:24px; --space-8:32px;
   --radius-sm:10px; --radius-md:14px; --radius-lg:18px; --radius-xl:24px;
-  --shadow-sm:0 6px 18px rgb(36 29 71 / .08);
-  --shadow-md:0 18px 44px rgb(36 29 71 / .12);
-  --shadow-button:0 8px 20px rgb(31 39 55 / .14);
+  --shadow-sm:0 7px 20px rgb(54 44 104 / .09);
+  --shadow-md:0 20px 48px rgb(54 44 104 / .14);
+  --shadow-button:0 9px 22px rgb(68 54 145 / .20);
   --spinner-track:rgb(255 255 255 / .4);
   --color-on-action:#fff;
   --font-display:"Aptos Display","Segoe UI Variable Display","Segoe UI",sans-serif;

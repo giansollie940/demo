@@ -58,10 +58,10 @@ function moveFocus(event: KeyboardEvent, index: number) {
 </template>
 
 <style scoped>
-.app-tabs{display:inline-flex;gap:4px;padding:4px;border:1px solid var(--border);border-radius:14px;background:var(--surface-soft)}
+.app-tabs{display:inline-flex;gap:4px;padding:4px;border:1px solid color-mix(in srgb,var(--color-primary) 12%,var(--border));border-radius:14px;background:linear-gradient(110deg,var(--wash-violet),var(--wash-sky))}
 .app-tabs button{min-height:44px;border:0;border-radius:10px;padding:8px 12px;background:transparent;color:var(--text-muted);font-weight:800;white-space:nowrap;transition:background var(--transition-fast),color var(--transition-fast),transform var(--transition-fast)}
 .app-tabs button:hover:not(:disabled){color:var(--text)}
-.app-tabs button.active{background:var(--surface);color:var(--color-primary);box-shadow:var(--shadow-sm)}
+.app-tabs button.active{background:var(--gradient-primary);color:var(--color-on-action);box-shadow:var(--shadow-button)}
 .app-tabs button:disabled{opacity:.5;cursor:not-allowed}
 @media(max-width:560px){.app-tabs{display:grid;grid-template-columns:1fr 1fr;width:100%}.app-tabs button{min-width:0;padding-inline:8px}}
 @media(max-width:360px){.app-tabs{grid-template-columns:1fr}}

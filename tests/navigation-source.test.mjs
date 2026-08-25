@@ -18,3 +18,17 @@ test('router uses hash history for GitHub Pages',()=>{
   const text=read('src/app/router/index.ts');
   assert.match(text,/createWebHashHistory/);
 });
+
+
+test('learner-only pages are hidden from teacher and admin navigation and protected at route level',()=>{
+  const nav=read('src/features/navigation/navigation.ts');
+  assert.match(nav,/const learners:UserRole\[]=/);
+  assert.match(nav,/Đăng ký tự học',to:'\/register'.*roles:learners/);
+  assert.match(nav,/Lịch sử',to:'\/history'.*roles:learners/);
+  assert.match(nav,/Nhận xét GV',to:'\/comments'.*roles:learners/);
+  const routes=read('src/app/router/routes.ts');
+  assert.match(routes,/const learners: UserRole\[] = \['student', 'monitor'\]/);
+  assert.match(routes,/path: 'register'.*roles: learners/);
+  assert.match(routes,/path: 'history'.*roles: learners/);
+  assert.match(routes,/path: 'comments'.*roles: learners/);
+});
