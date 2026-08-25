@@ -1,0 +1,5 @@
+<script setup lang="ts">
+withDefaults(defineProps<{label:string;active?:boolean}>(),{active:false})
+</script>
+<template><button class="icon-button" :class="{active}" type="button" :aria-label="label" :title="label"><slot /></button></template>
+<style scoped>.icon-button{width:40px;height:40px;display:grid;place-items:center;border:1px solid var(--border);border-radius:12px;background:var(--surface);color:var(--text-muted);transition:background var(--transition-fast),color var(--transition-fast),transform var(--transition-fast),box-shadow var(--transition-fast)}.icon-button:hover{background:var(--surface-soft);transform:translateY(-2px) scale(1.04);box-shadow:var(--shadow-sm)}.icon-button.active{background:var(--surface-soft);color:var(--color-primary)}.icon-button:active{background:color-mix(in srgb,var(--color-primary) 10%,var(--surface));transform:scale(.96)}.icon-button :deep(svg){width:19px;height:19px;stroke:currentColor}@media(prefers-reduced-motion:reduce){.icon-button{transition:none}.icon-button:hover,.icon-button:active{transform:none}}</style>
