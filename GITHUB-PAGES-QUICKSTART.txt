@@ -1,0 +1,21 @@
+UPLOAD TO GITHUB ROOT, THEN:
+1) Settings > Secrets and variables > Actions
+   - SUPABASE_PROJECT_URL
+   - SUPABASE_PUBLISHABLE_KEY
+2) Settings > Pages > Source > GitHub Actions
+3) Actions > Build and Deploy Sổ Tự Học Vue
+
+Full guide: README-UPLOAD-GITHUB.md
+
+LƯU Ý BẮT BUỘC VỀ ROOT REPO
+-----------------------------
+Sau khi upload, trang Code của repo phải hiển thị trực tiếp các file:
+- package.json
+- package-lock.json
+- tsconfig.json
+- tsconfig.app.json
+- tsconfig.node.json
+- vite.config.ts
+- index.html
+Nếu các file này nằm trong một folder con, hoặc thiếu tsconfig.json, GitHub Actions sẽ dừng trước Typecheck.
+
