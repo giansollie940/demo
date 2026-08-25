@@ -44,3 +44,14 @@ test('settings saves through legacy syncState bridge and preserves AI settings',
   assert.match(page, /Tắt:/)
   assert.doesNotMatch(page, /adminManageClasses/)
 })
+
+test('history and comments use only AppBadge-supported tones', async () => {
+  const badge = await text('src/components/ui/AppBadge.vue')
+  const history = await text('src/pages/HistoryPage.vue')
+  const comments = await text('src/pages/CommentsPage.vue')
+  assert.match(badge, /'neutral'\|'info'\|'success'\|'warning'\|'danger'\|'primary'/)
+  assert.match(history, /status==='draft'\?'neutral'/)
+  assert.match(comments, /status==='draft'\?'neutral'/)
+  assert.doesNotMatch(history, /status==='draft'\?'secondary'/)
+  assert.doesNotMatch(comments, /status==='draft'\?'secondary'/)
+})

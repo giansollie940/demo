@@ -12,7 +12,7 @@ const rows = computed(() => (auth.legacyState?.registrations ?? [])
   .sort((a,b) => Number(b.updatedAt ?? 0) - Number(a.updatedAt ?? 0)))
 function weekNumber(id:string){return auth.legacyState?.weeks.find(item=>item.id===id)?.number ?? '?'}
 function statusLabel(status:string){return status==='approved'?'Đã duyệt':status==='needs_revision'?'Cần chỉnh sửa':status==='draft'?'Bản nháp':'Chờ duyệt'}
-function tone(status:string){return status==='approved'?'success':status==='needs_revision'?'warning':status==='draft'?'secondary':'info'}
+function tone(status:string){return status==='approved'?'success':status==='needs_revision'?'warning':status==='draft'?'neutral':'info'}
 </script>
 <template>
   <div class="page-stack history-page">
