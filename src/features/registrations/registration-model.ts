@@ -129,6 +129,54 @@ export function effectiveRegistrationStatus(
 
 
 
+export type NormalizedAiDecision = 'auto_approve' | 'request_revision' | 'manual_review' | ''
+
+export function normalizedAiDecision(registration: RegistrationRecord | null | undefined): NormalizedAiDecision {
+  if (!registration) return ''
+  const value = String(registration.aiDecision ?? '').trim().toLowerCase()
+  if (['auto_approve', 'approve', 'approved'].includes(value)) return 'auto_approve'
+  if (['request_revision', 'needs_revision', 'revision'].includes(value)) return 'request_revision'
+  if (['manual_review', 'manual', 'teacher_review'].includes(value)) return 'manual_review'
+  return ''
+}
+
+export function aiDecisionLabel(registration: RegistrationRecord | null | undefined): string {
+  const decision = normalizedAiDecision(registration)
+  if (decision === 'auto_approve') return 'AI đề xuất duyệt'
+  if (decision === 'request_revision') return 'AI yêu cầu sửa'
+  if (decision === 'manual_review') return 'AI chuyển GV'
+  return '—'
+}
+
+export function aiCategoryLabel(registration: RegistrationRecord | null | undefined): string {
+  const category = String(registration?.aiCategory ?? '').trim().toLowerCase()
+  const labels: Record<string, string> = {
+    study: 'Học tập',
+    device_for_learning: 'Thiết bị phục vụ học tập',
+    unclear_device_use: 'Chưa rõ mục đích dùng thiết bị',
+    entertainment_or_social: 'Giải trí / mạng xã hội',
+    mixed_learning_and_leisure: 'Học tập lẫn giải trí',
+    unclear_other: 'Chưa rõ nội dung',
+  }
+  return labels[category] ?? (category || '—')
+}
+
+/**
+ * True when AI reports a completed decision but the persisted business state does not
+ * match that decision. The frontend must surface this instead of silently approving.
+ */
+export function aiOutcomeMismatch(registration: RegistrationRecord | null | undefined): boolean {
+  if (!registration) return false
+  if (String(registration.aiReviewStatus ?? '').toLowerCase() !== 'completed') return false
+  const decision = normalizedAiDecision(registration)
+  if (decision === 'auto_approve') {
+    return registration.status !== 'approved' || registration.approvalSource !== 'ai'
+  }
+  if (decision === 'request_revision') return registration.status !== 'needs_revision'
+  if (decision === 'manual_review') return registration.status !== 'submitted'
+  return false
+}
+
 export function aiReviewInProgress(registration: RegistrationRecord | null | undefined): boolean {
   if (!registration) return false
   const value = String(registration.aiReviewStatus ?? '').toLowerCase()
@@ -137,7 +185,8 @@ export function aiReviewInProgress(registration: RegistrationRecord | null | und
 
 /**
  * Current registration status is authoritative for the teacher queue.
- * AI status is historical except while AI is actively pending/processing.
+ * A completed AI/backend mismatch remains visible to the teacher as a fail-safe,
+ * but is labelled as a sync problem rather than as an AI manual-review decision.
  */
 export function needsTeacherAction(registration: RegistrationRecord | null | undefined): boolean {
   if (!registration || registration.isDeleted === true) return false
@@ -146,25 +195,41 @@ export function needsTeacherAction(registration: RegistrationRecord | null | und
   return true
 }
 
-/** Human-readable AI history without turning resolved registrations back into a queue item. */
+/** Human-readable AI history while preserving the exact backend decision. */
 export function aiReviewHistoryLabel(registration: RegistrationRecord | null | undefined): string {
   if (!registration) return '—'
-  const ai = String(registration.aiReviewStatus ?? registration.aiDecision ?? '').toLowerCase()
-  if (registration.status === 'approved' && ai === 'manual') return 'AI chuyển GV · Đã xử lý'
-  if (registration.status === 'needs_revision' && ai === 'approved') return 'AI từng duyệt · GV yêu cầu sửa'
-  if (registration.status === 'needs_revision' && ai === 'manual') return 'GV yêu cầu sửa'
-  if (registration.status === 'submitted' && ai === 'manual') return 'AI chuyển GV'
-  if (registration.status === 'submitted' && ai === 'error') return 'AI lỗi · GV xử lý'
+  const reviewStatus = String(registration.aiReviewStatus ?? '').toLowerCase()
+  const decision = normalizedAiDecision(registration)
+  const mismatch = aiOutcomeMismatch(registration)
+
+  if (reviewStatus === 'completed') {
+    if (decision === 'auto_approve') return mismatch ? 'AI duyệt · Chưa áp dụng' : 'AI duyệt'
+    if (decision === 'request_revision') return mismatch ? 'AI yêu cầu sửa · Chưa áp dụng' : 'AI yêu cầu sửa'
+    if (decision === 'manual_review') {
+      return registration.status === 'approved' ? 'AI chuyển GV · Đã xử lý' : 'AI chuyển GV'
+    }
+    return 'AI đã xử lý · Chưa rõ quyết định'
+  }
+
+  if (registration.status === 'approved' && ['manual', 'manual_review'].includes(reviewStatus)) return 'AI chuyển GV · Đã xử lý'
+  if (registration.status === 'needs_revision' && ['approved', 'auto_approve'].includes(reviewStatus)) return 'AI từng duyệt · GV yêu cầu sửa'
+  if (registration.status === 'needs_revision' && ['manual', 'manual_review'].includes(reviewStatus)) return 'GV yêu cầu sửa'
+  if (registration.status === 'submitted' && ['manual', 'manual_review'].includes(reviewStatus)) return 'AI chuyển GV'
+  if (registration.status === 'submitted' && reviewStatus === 'error') return 'AI lỗi · GV xử lý'
   const labels: Record<string, string> = {
     approved: 'AI duyệt',
+    auto_approve: 'AI duyệt',
     manual: 'AI chuyển GV',
+    manual_review: 'AI chuyển GV',
     needs_revision: 'AI yêu cầu sửa',
+    request_revision: 'AI yêu cầu sửa',
     error: 'AI lỗi',
     pending: 'Đang chờ AI',
     processing: 'AI đang xử lý',
     not_needed: 'Không áp dụng AI',
   }
-  return labels[ai] ?? (ai ? String(registration.aiReviewStatus ?? registration.aiDecision) : '—')
+  const fallback = reviewStatus || String(registration.aiDecision ?? '').toLowerCase()
+  return labels[fallback] ?? (fallback ? String(registration.aiReviewStatus ?? registration.aiDecision) : '—')
 }
 
 export interface RegistrationManagerActions {

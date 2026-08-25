@@ -8,7 +8,7 @@ import SessionSummaryCard from '../components/tracking/SessionSummaryCard.vue'
 import TrackingFilters from '../components/tracking/TrackingFilters.vue'
 import StudentTrackingRow from '../components/tracking/StudentTrackingRow.vue'
 import { filterTrackingRows, summarizeTrackingSession, trackingFilterCounts, type TrackingFilter, type TrackingSort } from '../features/tracking/tracking-model'
-import { registrationManagerActions } from '../features/registrations/registration-model'
+import { aiOutcomeMismatch, aiReviewHistoryLabel, needsTeacherAction, registrationManagerActions } from '../features/registrations/registration-model'
 import { approveRegistrationsMutation, deleteManagedRegistration, markHandledRegistrationNotificationsRead, requestManagedRevision, saveTeacherCommentMutation, type ApprovalMutationRuntime } from '../features/approvals/approval-mutations'
 import { useLegacyMutationRuntime } from '../features/shared/useLegacyMutationRuntime'
 import { useWeekData } from '../features/weeks/queries'
@@ -35,7 +35,7 @@ const manager=computed(()=>['teacher','admin'].includes(auth.currentUser?.role??
 const aiEnabled=computed(()=>Boolean(auth.legacyState?.settings?.aiAutomationEnabled??auth.legacyState?.settings?.smartApprovalEnabled??auth.legacyState?.settings?.aiReviewEnabled??true))
 const dayName=(dow:number)=>['Thứ 2','Thứ 3','Thứ 4','Thứ 5','Thứ 6','Thứ 7','Chủ nhật'][Number(dow)]??`Ngày ${Number(dow)+1}`
 const label=(slot:ScheduleSlot)=>`${dayName(slot.dow)} · Tiết ${slot.period}`
-const key=(slot:ScheduleSlot)=>`${slot.dow}-${slot.period}`
+function key(slot:ScheduleSlot){return `${slot.dow}-${slot.period}`}
 function runtime(){return createRuntime() as ApprovalMutationRuntime}
 function actionsFor(row:(typeof visibleRows.value)[number]){if(!manager.value||!row.registration||!week.value)return null;return registrationManagerActions({registration:row.registration,week:week.value,periods:auth.legacyState?.periods??[],nowMs:Date.now()})}
 function aiCandidate(registration:RegistrationRecord|undefined|null){if(!registration||registration.isDeleted===true||registration.revisionOverdueAt)return false;const ai=String(registration.aiReviewStatus??'').toLowerCase();return registration.status==='approved'||(registration.status==='submitted'&&!['pending','processing'].includes(ai))}
@@ -47,6 +47,8 @@ async function revise(id:string){const comment=window.prompt('Nhập hướng d�
 async function comment(id:string){const row=registrations.value.find(item=>item.id===id);const value=window.prompt('Nhận xét giáo viên:',String(row?.teacherComment??''))?.trim();if(!value)return;await run(id,()=>saveTeacherCommentMutation(runtime(),classId.value!,id,value),'Đã lưu nhận xét.')}
 async function remove(id:string){if(!window.confirm('Xóa đăng ký này?'))return;await run(id,()=>deleteManagedRegistration(runtime(),classId.value!,id),'Đã xóa đăng ký.')}
 async function refreshAfterAi(){if(!classId.value)return;await auth.reload(classId.value);context.hydrate(auth.legacyState);await weekQuery.refetch()}
+function refreshedRegistration(id:string){return registrations.value.find(item=>item.id===id)??auth.legacyState?.registrations.find(item=>item.id===id)??null}
+function aiOutcomeMessage(row:RegistrationRecord|null){if(!row)return{state:'server-changed' as InlineStatusState,message:'AI đã phản hồi nhưng chưa đọc được trạng thái đăng ký mới.'};if(aiOutcomeMismatch(row))return{state:'error' as InlineStatusState,message:`${aiReviewHistoryLabel(row)}. Kết quả AI chưa được backend áp dụng vào trạng thái đăng ký; đăng ký được giữ trong hàng GV để không bỏ sót.`};if(row.status==='approved'&&row.approvalSource==='ai')return{state:'success' as InlineStatusState,message:'AI đã duyệt đăng ký.'};if(row.status==='needs_revision')return{state:'server-changed' as InlineStatusState,message:'AI yêu cầu học sinh chỉnh sửa đăng ký.'};if(needsTeacherAction(row))return{state:'server-changed' as InlineStatusState,message:'AI đã chuyển đăng ký cho giáo viên xử lý.'};return{state:'success' as InlineStatusState,message:'AI đã xử lý đăng ký.'}}
 async function markOldNotificationRead(ids:string[]){if(!ids.length)return;await markHandledRegistrationNotificationsRead(runtime(),ids)}
 async function rerunRegistrationAi(id:string){
   if(!aiEnabled.value||!classId.value)return
@@ -55,10 +57,11 @@ async function rerunRegistrationAi(id:string){
   try{
     await markOldNotificationRead([id])
     await legacyApi.prepareRegistrationAiRereview(id)
-    const result=await legacyApi.requestAiReview(id) as Record<string,unknown>|undefined
+    await legacyApi.requestAiReview(id)
     await refreshAfterAi()
-    status.value=result?.fallbackToManual?'server-changed':'success'
-    statusMessage.value=result?.fallbackToManual?'AI chưa thể kết luận; đăng ký đã chuyển giáo viên xử lý.':'AI đã duyệt lại đăng ký.'
+    const outcome=aiOutcomeMessage(refreshedRegistration(id))
+    status.value=outcome.state
+    statusMessage.value=outcome.message
   }catch(error){status.value='error';statusMessage.value=error instanceof Error?error.message:'Không gọi được AI duyệt lại.';try{await refreshAfterAi()}catch{}}
   finally{busyId.value=null}
 }

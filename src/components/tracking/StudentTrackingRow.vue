@@ -2,11 +2,12 @@
 import { AlertTriangle, BrainCircuit, Check, Laptop2, MessageSquareText, PencilLine, Trash2, UserRoundX } from 'lucide-vue-next'
 import AppButton from '../ui/AppButton.vue'
 import type { TrackingRow } from '../../features/tracking/tracking-model'
-import { aiReviewHistoryLabel, type RegistrationManagerActions } from '../../features/registrations/registration-model'
+import { aiOutcomeMismatch, aiReviewHistoryLabel, type RegistrationManagerActions } from '../../features/registrations/registration-model'
 const props=withDefaults(defineProps<{row:TrackingRow;actions?:RegistrationManagerActions|null;busy?:boolean;canAiRereview?:boolean}>(),{canAiRereview:false})
 const emit=defineEmits<{approve:[];revision:[];comment:[];delete:[];aiRereview:[]}>()
 const statusText=()=>props.row.bucket==='missing'?'Chưa đăng ký':props.row.registration?.revisionOverdueAt?'Báo cáo lỗi':props.row.registration?.status==='approved'?'Đã duyệt':props.row.registration?.status==='needs_revision'?'Cần chỉnh sửa':'Chờ duyệt'
 const aiText=()=>aiReviewHistoryLabel(props.row.registration)
+const aiMismatch=()=>aiOutcomeMismatch(props.row.registration)
 </script>
 <template>
   <article class="tracking-row" :data-bucket="row.bucket">
@@ -26,7 +27,7 @@ const aiText=()=>aiReviewHistoryLabel(props.row.registration)
       <AppButton v-if="actions.canDelete" variant="danger" :disabled="busy" @click="emit('delete')"><Trash2 aria-hidden="true"/>Xóa</AppButton>
     </div>
     <div v-if="row.bucket==='missing'" class="missing-note"><UserRoundX aria-hidden="true"/>Học sinh chưa có đăng ký cho buổi này.</div>
-    <div v-else-if="row.bucket==='attention'" class="attention-note"><AlertTriangle aria-hidden="true"/>Đăng ký cần giáo viên kiểm tra.</div>
+    <div v-else-if="row.bucket==='attention'" class="attention-note"><AlertTriangle aria-hidden="true"/>{{ aiMismatch()?'Kết quả AI chưa được áp dụng vào trạng thái đăng ký.':'Đăng ký cần giáo viên kiểm tra.' }}</div>
   </article>
 </template>
 <style scoped>
