@@ -6,8 +6,9 @@ const read = (p) => fs.readFileSync(new URL(`../${p}`, import.meta.url), 'utf8')
 
 test('GitHub Pages workflow builds and deploys dist', () => {
   const yml = read('.github/workflows/deploy-pages.yml')
-  assert.match(yml, /actions\/checkout@v4/)
-  assert.match(yml, /actions\/setup-node@v4/)
+  assert.match(yml, /actions\/checkout@v7/)
+  assert.match(yml, /actions\/setup-node@v7/)
+  assert.match(yml, /node-version:\s*['"]24['"]/)
   assert.match(yml, /npm ci/)
   assert.match(yml, /npm run typecheck/)
   assert.match(yml, /npm test/)
@@ -36,4 +37,16 @@ test('upload instructions describe the two required secrets', () => {
   assert.match(guide, /SUPABASE_PROJECT_URL/)
   assert.match(guide, /SUPABASE_PUBLISHABLE_KEY/)
   assert.match(guide, /Settings\s*→\s*Pages/i)
+})
+
+
+test('root TypeScript project config required by vue-tsc exists', () => {
+  for (const file of ['tsconfig.json', 'tsconfig.app.json', 'tsconfig.node.json']) {
+    assert.equal(fs.existsSync(new URL(`../${file}`, import.meta.url)), true, `${file} must exist at repository root`)
+  }
+  const rootTsconfig = JSON.parse(read('tsconfig.json'))
+  assert.deepEqual(rootTsconfig.references, [
+    { path: './tsconfig.app.json' },
+    { path: './tsconfig.node.json' },
+  ])
 })
