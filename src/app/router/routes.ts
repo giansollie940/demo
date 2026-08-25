@@ -13,6 +13,7 @@ import StatisticsPage from '../../pages/StatisticsPage.vue'
 import HistoryPage from '../../pages/HistoryPage.vue'
 import CommentsPage from '../../pages/CommentsPage.vue'
 import SettingsPage from '../../pages/SettingsPage.vue'
+import IssuesPage from '../../pages/IssuesPage.vue'
 import type { UserRole } from '../../types/legacy'
 
 const learners: UserRole[] = ['student', 'monitor']
@@ -28,6 +29,7 @@ export const routes: RouteRecordRaw[] = [
       { path: 'dashboard', component: DashboardPage, meta: { title: 'Tổng quan' } },
       { path: 'register', component: RegistrationPage, meta: { title: 'Đăng ký tự học', roles: learners } },
       { path: 'review', component: ApprovalPage, meta: { title: 'Duyệt đăng ký', roles: managers } },
+      { path: 'issues', component: IssuesPage, meta: { title: 'Báo cáo lỗi' } },
       { path: 'tracking', component: TrackingPage, meta: { title: 'Theo dõi cả lớp', roles: ['monitor', ...managers] } },
       { path: 'weeks', component: WeeksPage, meta: { title: 'Quản lý tuần', roles: managers } },
       { path: 'schedule', component: SchedulePage, meta: { title: 'Thời khóa biểu', roles: managers } },

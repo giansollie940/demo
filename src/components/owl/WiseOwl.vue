@@ -7,16 +7,17 @@ import { useContextStore } from '../../stores/context'
 import { usePreferencesStore } from '../../stores/preferences'
 import { buildOwlContextMessages, createQuoteRotator, messageFromQuote, type OwlMessage } from '../../features/owl/owl-model'
 import { useDailyQuote } from '../../features/owl/daily-quote'
+import { useNowTicker } from '../../features/shared/useNowTicker'
 
 const MAX_PUPIL_OFFSET = 3
 const MAX_HEAD_TILT = 5
 const FOLLOW_EASE = .18
-const auth=useAuthStore(),context=useContextStore(),preferences=usePreferencesStore(),route=useRoute(),dailyQuoteQuery=useDailyQuote()
+const auth=useAuthStore(),context=useContextStore(),preferences=usePreferencesStore(),route=useRoute(),dailyQuoteQuery=useDailyQuote(),nowMs=useNowTicker(30_000)
 const stage=ref<HTMLElement|null>(null),speechOpen=ref(false),cursor=ref(0),message=ref<OwlMessage|null>(null)
 const quoteRotator=createQuoteRotator(undefined,{recentLimit:4})
 let raf=0,currentX=0,currentY=0,targetX=0,targetY=0,currentTilt=0,targetTilt=0
 const assets=(name:string)=>`${import.meta.env.BASE_URL}assets/images/owl/${name}`
-const contextual=computed(()=>auth.legacyState&&auth.currentUser?buildOwlContextMessages({state:auth.legacyState,user:auth.currentUser,path:route.path}):[])
+const contextual=computed(()=>auth.legacyState&&auth.currentUser?buildOwlContextMessages({state:auth.legacyState,user:auth.currentUser,path:route.path,weekId:context.selectedWeekId,nowMs:nowMs.value}):[])
 const urgent=computed(()=>contextual.value.some(item=>item.urgent))
 
 function reduceMotion(){return window.matchMedia?.('(prefers-reduced-motion: reduce)').matches===true}

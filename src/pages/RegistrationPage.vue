@@ -13,9 +13,10 @@ import { deriveRegistrationEligibility, type RegistrationEligibility } from '../
 import { cancelEmergencyRegistration, createEmergencyRegistrationWithAi, saveRegistrationMutation, submitRegistrationWithAi, type RegistrationMutationRuntime } from '../features/registrations/registration-mutations'
 import { useLegacyMutationRuntime } from '../features/shared/useLegacyMutationRuntime'
 import { useDirtyEditor } from '../features/shared/dirty-registry'
+import { useNowTicker } from '../features/shared/useNowTicker'
 import type { PeriodRecord, RegistrationRecord, ScheduleSlot } from '../types/legacy'
 
-const auth=useAuthStore(),context=useContextStore(),createRuntime=useLegacyMutationRuntime(),dirtyEditor=useDirtyEditor('registration-dialog')
+const auth=useAuthStore(),context=useContextStore(),createRuntime=useLegacyMutationRuntime(),dirtyEditor=useDirtyEditor('registration-dialog'),nowMs=useNowTicker(30_000)
 const classId=computed(()=>context.selectedClassId),weekId=computed(()=>context.selectedWeekId),week=computed(()=>context.selectedWeek)
 const weekQuery=useWeekData(classId,weekId)
 const studentRole=computed(()=>['student','monitor'].includes(auth.currentUser?.role??''))
@@ -23,12 +24,14 @@ const slots=computed<ScheduleSlot[]>(()=>{const rows=weekQuery.data.value?.overr
 const registrations=computed(()=>weekQuery.data.value?.registrations??auth.legacyState?.registrations.filter(row=>row.weekId===weekId.value)??[])
 const lifecycleStatus=computed(()=>{const state=auth.legacyState;if(!state||!weekId.value)return'upcoming';return getWeekLifecycle({weeks:state.weeks,periods:state.periods,getSlots:id=>id===weekId.value?slots.value:state.schedule}).statuses[weekId.value]??'upcoming'})
 const deadlineTime=computed(()=>String(auth.legacyState?.settings.registrationDeadlineTime||'20:00'))
-const dialogOpen=ref(false),dialogMode=ref<'regular'|'emergency'>('regular'),selected=ref<{slot:ScheduleSlot;period:PeriodRecord;registration:RegistrationRecord|null;eligibility:RegistrationEligibility}|null>(null)
+const dialogOpen=ref(false),dialogMode=ref<'regular'|'emergency'>('regular'),selected=ref<{slot:ScheduleSlot;period:PeriodRecord}|null>(null)
 const saving=ref(false),error=ref(''),status=ref<InlineStatusState>('idle'),statusMessage=ref('')
 function registrationFor(slot:ScheduleSlot){return registrations.value.find(row=>row.studentId===auth.currentUser?.id&&row.weekId===weekId.value&&row.dow===slot.dow&&row.period===slot.period)??null}
 function periodFor(slot:ScheduleSlot){return auth.legacyState?.periods.find(item=>Number(item.n)===Number(slot.period))??null}
-function eligibilityFor(slot:ScheduleSlot,registration:RegistrationRecord|null){const currentWeek=week.value,period=periodFor(slot);if(!currentWeek||!period)return null;const result=deriveRegistrationEligibility({week:currentWeek,dow:slot.dow,period:slot.period,periods:auth.legacyState?.periods??[],deadlineTime:deadlineTime.value,registration,effectiveWeekStatus:lifecycleStatus.value,nowMs:Date.now()});return studentRole.value?result:{...result,regularNewAllowed:false,editable:false,emergencyAllowed:false}}
-function open(slot:ScheduleSlot,mode:'regular'|'emergency'){const period=periodFor(slot),registration=registrationFor(slot),eligibility=eligibilityFor(slot,registration);if(!period||!eligibility)return;selected.value={slot,period,registration,eligibility};dialogMode.value=mode;error.value='';dialogOpen.value=true}
+function eligibilityFor(slot:ScheduleSlot,registration:RegistrationRecord|null){const currentWeek=week.value,period=periodFor(slot);if(!currentWeek||!period)return null;const result=deriveRegistrationEligibility({week:currentWeek,dow:slot.dow,period:slot.period,periods:auth.legacyState?.periods??[],deadlineTime:deadlineTime.value,registration,effectiveWeekStatus:lifecycleStatus.value,nowMs:nowMs.value});return studentRole.value?result:{...result,regularNewAllowed:false,editable:false,emergencyAllowed:false}}
+const selectedRegistration=computed(()=>selected.value?registrationFor(selected.value.slot):null)
+const selectedEligibility=computed<RegistrationEligibility|null>(()=>selected.value?eligibilityFor(selected.value.slot,selectedRegistration.value):null)
+function open(slot:ScheduleSlot,mode:'regular'|'emergency'){const period=periodFor(slot),eligibility=eligibilityFor(slot,registrationFor(slot));if(!period||!eligibility)return;selected.value={slot,period};dialogMode.value=mode;error.value='';dialogOpen.value=true}
 function close(){dialogOpen.value=false;selected.value=null;dirtyEditor.markClean()}
 function runtime(){return createRuntime() as RegistrationMutationRuntime}
 function messageOf(value:unknown){return value instanceof Error?value.message:'Không hoàn tất được đăng ký.'}
@@ -46,7 +49,7 @@ async function cancelEmergency(id:string){if(!classId.value)return;if(!window.co
       <StudySessionCard v-for="slot in slots" :key="`${slot.dow}-${slot.period}`" :week="week!" :period="periodFor(slot)!" :dow="slot.dow" :registration="registrationFor(slot)" :eligibility="eligibilityFor(slot,registrationFor(slot))!" @open="open(slot,$event)" @cancel-emergency="cancelEmergency" />
     </section>
     <AppCard v-else padding="lg" class="empty-registration"><h2>Tuần này chưa có tiết tự học</h2><p>Giáo viên cần cấu hình thời khóa biểu trước khi học sinh đăng ký.</p></AppCard>
-    <RegistrationDialog v-if="selected&&week" :open="dialogOpen" :mode="dialogMode" :week="week" :period="selected.period" :dow="selected.slot.dow" :registration="selected.registration" :eligibility="selected.eligibility" :saving="saving" :error="error" @close="close" @dirty="dirtyEditor.setDirty" @save-draft="saveDraft" @submit="submit" />
+    <RegistrationDialog v-if="selected&&selectedEligibility&&week" :open="dialogOpen" :mode="dialogMode" :week="week" :period="selected.period" :dow="selected.slot.dow" :registration="selectedRegistration" :eligibility="selectedEligibility" :saving="saving" :error="error" @close="close" @dirty="dirtyEditor.setDirty" @save-draft="saveDraft" @submit="submit" />
   </div>
 </template>
 

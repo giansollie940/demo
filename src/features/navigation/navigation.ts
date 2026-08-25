@@ -9,6 +9,7 @@ export const navigation:NavigationItem[]=[
   {label:'Tổng quan',to:'/dashboard',icon:'LayoutDashboard',roles:all},
   {label:'Đăng ký tự học',to:'/register',icon:'NotebookPen',roles:learners},
   {label:'Duyệt đăng ký',to:'/review',icon:'ClipboardCheck',roles:managers},
+  {label:'Báo cáo lỗi',to:'/issues',icon:'TriangleAlert',roles:all},
   {label:'Theo dõi cả lớp',to:'/tracking',icon:'UsersRound',roles:['monitor',...managers]},
   {label:'Quản lý tuần',to:'/weeks',icon:'CalendarRange',roles:managers},
   {label:'Thời khóa biểu',to:'/schedule',icon:'CalendarClock',roles:managers},

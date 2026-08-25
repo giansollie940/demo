@@ -1,11 +1,11 @@
 <script setup lang="ts">
 import { computed, type Component } from 'vue'
 import { useRoute } from 'vue-router'
-import { CalendarClock, CalendarRange, ChartNoAxesCombined, ClipboardCheck, GraduationCap, History, LayoutDashboard, MessagesSquare, NotebookPen, Settings, ShieldCheck, UsersRound } from 'lucide-vue-next'
+import { CalendarClock, CalendarRange, ChartNoAxesCombined, ClipboardCheck, GraduationCap, History, LayoutDashboard, MessagesSquare, NotebookPen, Settings, ShieldCheck, TriangleAlert, UsersRound } from 'lucide-vue-next'
 import { useAuthStore } from '../../stores/auth'
 import { visibleNavigation } from '../../features/navigation/navigation'
 const props=defineProps<{collapsed:boolean}>();const route=useRoute();const auth=useAuthStore()
-const icons:Record<string,Component>={LayoutDashboard,NotebookPen,ClipboardCheck,UsersRound,CalendarRange,CalendarClock,GraduationCap,ChartNoAxesCombined,History,MessagesSquare,ShieldCheck,Settings}
+const icons:Record<string,Component>={LayoutDashboard,NotebookPen,ClipboardCheck,UsersRound,CalendarRange,CalendarClock,GraduationCap,ChartNoAxesCombined,History,MessagesSquare,ShieldCheck,TriangleAlert,Settings}
 const items=computed(()=>visibleNavigation(auth.currentUser?.role))
 </script>
 <template><nav class="side-nav" aria-label="Điều hướng chính"><RouterLink v-for="item in items" :key="item.to" :to="item.to" class="nav-item" :class="{active:route.path===item.to}" :title="collapsed?item.label:undefined"><component :is="icons[item.icon]"/><span v-if="!collapsed">{{ item.label }}</span></RouterLink></nav></template>

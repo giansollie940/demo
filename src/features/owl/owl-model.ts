@@ -1,5 +1,5 @@
 import type { CurrentUser, LegacyState, RegistrationRecord } from '../../types/legacy'
-import { needsTeacherAction } from '../registrations/registration-model'
+import { isRevisionOverdue, needsTeacherAction } from '../registrations/registration-model'
 
 export interface OwlQuote { id?: string; text: string; author: string; url?: string }
 export interface OwlMessage { kind: 'urgent' | 'page' | 'tip' | 'quote'; text: string; urgent?: boolean; quote?: OwlQuote }
@@ -53,37 +53,37 @@ export function createQuoteRotator(baseQuotes: OwlQuote[] = OWL_QUOTES, { recent
   return { next, reset }
 }
 
-function currentWeekRegistrations(state: LegacyState): RegistrationRecord[] {
-  return state.registrations.filter(row => row.weekId === state.currentWeekId && row.isDeleted !== true)
+function weekRegistrations(state: LegacyState, weekId: string | null | undefined): RegistrationRecord[] {
+  const targetWeekId = weekId || state.currentWeekId
+  return state.registrations.filter(row => row.weekId === targetWeekId && row.isDeleted !== true)
 }
 function learnerCount(state: LegacyState): number { return state.users.filter(user => user.active !== false && ['student','monitor'].includes(user.role)).length }
-function mine(state: LegacyState, user: CurrentUser): RegistrationRecord[] { return currentWeekRegistrations(state).filter(row => row.studentId === user.id) }
+function mine(state: LegacyState, user: CurrentUser, weekId: string | null | undefined): RegistrationRecord[] { return weekRegistrations(state, weekId).filter(row => row.studentId === user.id) }
 function routeName(path: string): string { return path.replace(/^\//, '') || 'dashboard' }
+function overdue(row: RegistrationRecord, state: LegacyState, nowMs: number): boolean {
+  const week = state.weeks.find(item => item.id === row.weekId)
+  if (!week) return Boolean(row.revisionOverdueAt)
+  return isRevisionOverdue(row, { week, periods: state.periods, nowMs })
+}
 
-export function buildOwlContextMessages({ state, user, path }: { state: LegacyState; user: CurrentUser; path: string }): OwlMessage[] {
+export function buildOwlContextMessages({ state, user, path, weekId = state.currentWeekId, nowMs = Date.now() }: { state: LegacyState; user: CurrentUser; path: string; weekId?: string | null; nowMs?: number }): OwlMessage[] {
   const route = routeName(path)
-  const week = state.weeks.find(item => item.id === state.currentWeekId)
+  const week = state.weeks.find(item => item.id === weekId) ?? state.weeks.find(item => item.id === state.currentWeekId)
   const weekLabel = week ? `Tuần ${week.number}` : 'tuần đang xem'
   const manager = ['teacher','admin'].includes(user.role)
   const messages: OwlMessage[] = []
   if (manager) {
-    const current = currentWeekRegistrations(state)
+    const current = weekRegistrations(state, weekId)
     const unresolved = current.filter(row => needsTeacherAction(row))
     const waiting = unresolved.length
-    const unresolvedIds = new Set(unresolved.map(row => row.id))
-    const currentById = new Map(current.map(row => [row.id, row]))
-    const unread = (Array.isArray(state.notifications) ? state.notifications : []).filter(item => {
-      if ((item as {isRead?:boolean})?.isRead) return false
-      const registrationId = String((item as {registrationId?:string|null})?.registrationId ?? '')
-      if (!registrationId) return true
-      const linked = currentById.get(registrationId)
-      return !linked || unresolvedIds.has(registrationId)
-    }).length
+    // The red dot represents actionable work, never a generic unread-notification count.
+    // This prevents an already-approved registration from keeping the owl in alert state
+    // when a stale or late notification event is still present locally.
     if (waiting) messages.push({ kind:'urgent', urgent:true, text:`${weekLabel} còn ${waiting} đăng ký cần giáo viên xử lý.` })
-    if (unread) messages.push({ kind:'urgent', urgent:true, text:`Bạn có ${unread} thông báo chưa đọc.` })
     if (route === 'students') messages.push({ kind:'page', text:`Lớp hiện có ${learnerCount(state)} học sinh/cán sự đang hoạt động.` })
     else if (route === 'review') messages.push({ kind:'page', text: waiting ? `Mở từng đăng ký để xem lý do AI và phản hồi học sinh.` : `Danh sách duyệt của ${weekLabel} hiện đã gọn.` })
     else if (route === 'tracking') messages.push({ kind:'page', text:`Theo dõi từng buổi bằng bộ lọc để tìm nhanh học sinh chưa đăng ký hoặc cần xử lý.` })
+    else if (route === 'issues') messages.push({ kind:'page', text:`Báo cáo lỗi chỉ giữ các yêu cầu sửa đã quá giờ bắt đầu tiết; chúng không còn nằm trong hàng chờ giáo viên.` })
     else if (route === 'weeks') messages.push({ kind:'page', text:`Bạn đang quản lý ${weekLabel}. Tuần kế tiếp được mở sớm để học sinh đăng ký trước.` })
     else if (route === 'schedule') messages.push({ kind:'page', text:`Thời khóa biểu hiện có ${state.schedule.length} tiết mặc định; tuần có lịch riêng sẽ dùng override.` })
     else if (route === 'statistics') messages.push({ kind:'page', text:`Thống kê đang so sánh đăng ký hợp lệ, cần xử lý và chưa đăng ký theo tuần.` })
@@ -91,11 +91,14 @@ export function buildOwlContextMessages({ state, user, path }: { state: LegacySt
     else if (route === 'settings') messages.push({ kind:'page', text:`Cài đặt chỉ được lưu khi bạn bấm “Lưu cài đặt”.` })
     else messages.push({ kind:'page', text:`Dashboard ${weekLabel}: ${learnerCount(state)} học sinh/cán sự hoạt động.` })
   } else {
-    const own = mine(state, user)
-    const needs = own.filter(row => row.status === 'needs_revision').length
+    const own = mine(state, user, weekId)
+    const needs = own.filter(row => row.status === 'needs_revision' && !overdue(row, state, nowMs)).length
+    const issues = own.filter(row => overdue(row, state, nowMs)).length
     const submitted = own.filter(row => row.status === 'submitted').length
-    if (needs) messages.push({ kind:'urgent', urgent:true, text:`Bạn có ${needs} đăng ký được giáo viên yêu cầu chỉnh sửa.` })
+    if (needs) messages.push({ kind:'urgent', urgent:true, text:`Bạn có ${needs} đăng ký được giáo viên hoặc AI yêu cầu chỉnh sửa.` })
+    if (issues) messages.push({ kind:'page', text:`Bạn có ${issues} đăng ký đã chuyển sang Báo cáo lỗi vì chưa sửa trước giờ bắt đầu tiết.` })
     if (route === 'register' || route === 'dashboard') messages.push({ kind:'page', text: submitted ? `${weekLabel}: ${submitted} đăng ký của bạn đang chờ duyệt.` : `${weekLabel}: hãy hoàn thiện nội dung trước deadline từng buổi.` })
+    else if (route === 'issues') messages.push({ kind:'page', text: issues ? `Mở từng mục để xem yêu cầu sửa đã bị quá hạn.` : `${weekLabel} chưa có Báo cáo lỗi.` })
     else if (route === 'history') messages.push({ kind:'page', text:`Lịch sử của bạn có ${state.registrations.filter(row=>row.studentId===user.id).length} lượt đăng ký.` })
     else if (route === 'comments') messages.push({ kind:'page', text:`Bạn có ${state.registrations.filter(row=>row.studentId===user.id&&row.teacherComment).length} đăng ký từng nhận phản hồi giáo viên.` })
   }

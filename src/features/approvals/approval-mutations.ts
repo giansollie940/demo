@@ -6,12 +6,16 @@ export interface ApprovalMutationRuntime extends Omit<LegacyMutationRuntime, 'se
   service: Pick<LegacySupabaseService, 'syncState' | 'teacherRebaseWeeks' | 'requestRegistrationRevision' | 'deleteRegistration' | 'markNotificationsRead'>
 }
 
-export async function markHandledRegistrationNotificationsRead(runtime:ApprovalMutationRuntime,registrationIds:string[]):Promise<boolean>{
+function handledNotificationIds(state:LegacyState,registrationIds:string[]):string[]{
   const selected=new Set(registrationIds)
-  const ids=(runtime.getState().notifications??[])
+  return (state.notifications??[])
     .filter(item=>item.isRead!==true&&item.registrationId&&selected.has(String(item.registrationId)))
     .map(item=>String(item.id||''))
     .filter(Boolean)
+}
+
+export async function markHandledRegistrationNotificationsRead(runtime:ApprovalMutationRuntime,registrationIds:string[]):Promise<boolean>{
+  const ids=handledNotificationIds(runtime.getState(),registrationIds)
   if(!ids.length)return false
   await runtime.service.markNotificationsRead(ids)
   return true
@@ -24,6 +28,10 @@ export async function approveRegistrationsMutation(
   nowMs = Date.now(),
 ): Promise<LegacyState> {
   const selected = new Set(registrationIds)
+  // Capture before commitStateMutation reloads canonical state. The DB trigger may remove
+  // the notification during approval, while a late Realtime event could otherwise reinsert
+  // a stale unread copy in the client.
+  const notificationIds=handledNotificationIds(runtime.getState(),registrationIds)
   const canonical=await commitStateMutation(runtime, classId, source => {
     const next = structuredClone(source)
     for (const row of next.registrations) {
@@ -36,7 +44,10 @@ export async function approveRegistrationsMutation(
     }
     return next
   })
-  if(await markHandledRegistrationNotificationsRead(runtime,registrationIds))return refreshMutationRuntime(runtime,classId)
+  if(notificationIds.length){
+    await runtime.service.markNotificationsRead(notificationIds)
+    return refreshMutationRuntime(runtime,classId)
+  }
   return canonical
 }
 
