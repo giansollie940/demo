@@ -2,11 +2,11 @@
 import { AlertTriangle, BrainCircuit, Check, Laptop2, MessageSquareText, PencilLine, Trash2, UserRoundX } from 'lucide-vue-next'
 import AppButton from '../ui/AppButton.vue'
 import type { TrackingRow } from '../../features/tracking/tracking-model'
-import type { RegistrationManagerActions } from '../../features/registrations/registration-model'
+import { aiReviewHistoryLabel, type RegistrationManagerActions } from '../../features/registrations/registration-model'
 const props=withDefaults(defineProps<{row:TrackingRow;actions?:RegistrationManagerActions|null;busy?:boolean;canAiRereview?:boolean}>(),{canAiRereview:false})
 const emit=defineEmits<{approve:[];revision:[];comment:[];delete:[];aiRereview:[]}>()
 const statusText=()=>props.row.bucket==='missing'?'Chưa đăng ký':props.row.registration?.revisionOverdueAt?'Báo cáo lỗi':props.row.registration?.status==='approved'?'Đã duyệt':props.row.registration?.status==='needs_revision'?'Cần chỉnh sửa':'Chờ duyệt'
-const aiText=()=>{const value=String(props.row.registration?.aiReviewStatus??'').toLowerCase();return ({approved:'Đạt',manual:'GV xem',needs_revision:'Cần sửa',error:'Lỗi',pending:'Đang chờ',processing:'Đang xử lý'} as Record<string,string>)[value]??'—'}
+const aiText=()=>aiReviewHistoryLabel(props.row.registration)
 </script>
 <template>
   <article class="tracking-row" :data-bucket="row.bucket">

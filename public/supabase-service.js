@@ -613,11 +613,12 @@
       student_id:r.studentId, week_id:r.weekId, weekday:Number(r.dow)+1,
       period_number:Number(r.period), content:r.content, note:r.note || null,
       status:r.status, teacher_comment:r.teacherComment || null,
+      approval_source:r.approvalSource || "manual",
       uses_electronic_device:r.usesElectronicDevice===true,
+      approved_at:r.status === "approved" && r.approvedAt ? new Date(r.approvedAt).toISOString() : null,
       updated_at:new Date().toISOString()
     };
     if (r.status === "submitted") out.submitted_at = new Date().toISOString();
-    if (r.approvedAt) out.approved_at = new Date(r.approvedAt).toISOString();
     if (isUuid(r.id)) out.id = r.id;
     return out;
   }

@@ -100,6 +100,19 @@ describe('regular registration mutation', () => {
     })
   })
 
+  it('re-runs AI after a student resubmits a teacher revision request', async () => {
+    const fixture = runtimeFixture()
+    fixture.runtime.getState().registrations.push({
+      id: 'reg-revision', studentId: 'student-1', weekId: 'week-1', dow: 0, period: 1,
+      content: 'Cũ', status: 'needs_revision', teacherComment: 'Ghi rõ nội dung cần ôn.',
+      approvalSource: 'ai', aiReviewStatus: 'approved', aiReason: 'AI từng duyệt trước đó',
+    })
+    const result = await submitRegistrationWithAi(fixture.runtime, input, 2500)
+    expect(result.aiAttempted).toBe(true)
+    expect(result.registration).toMatchObject({ status: 'approved', approvalSource: 'ai' })
+    expect(result.registration.teacherComment).toBe('Ghi rõ nội dung cần ôn.')
+  })
+
   it('runs pending AI review and returns canonical AI approval', async () => {
     const fixture = runtimeFixture()
     const result = await submitRegistrationWithAi(fixture.runtime, input, 3000)

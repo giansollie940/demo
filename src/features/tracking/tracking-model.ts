@@ -1,4 +1,5 @@
 import type { CurrentUser, RegistrationRecord, ScheduleSlot } from '../../types/legacy'
+import { needsTeacherAction } from '../registrations/registration-model'
 
 export type TrackingBucket = 'registered' | 'missing' | 'attention'
 export type TrackingFilter = 'all' | 'registered' | 'missing' | 'attention' | 'device' | 'no-device'
@@ -27,7 +28,7 @@ export function activeLearners(users: CurrentUser[]): CurrentUser[] {
 export function registrationBucket(registration: RegistrationRecord | null): TrackingBucket {
   if (!registration || registration.status === 'draft') return 'missing'
   if (registration.revisionOverdueAt) return 'attention'
-  if (registration.status === 'submitted' || registration.aiReviewStatus === 'error') return 'attention'
+  if (needsTeacherAction(registration)) return 'attention'
   return 'registered'
 }
 

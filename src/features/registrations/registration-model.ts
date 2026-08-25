@@ -127,6 +127,46 @@ export function effectiveRegistrationStatus(
   return isRevisionOverdue(registration, options) ? 'revision_overdue' : registration.status
 }
 
+
+
+export function aiReviewInProgress(registration: RegistrationRecord | null | undefined): boolean {
+  if (!registration) return false
+  const value = String(registration.aiReviewStatus ?? '').toLowerCase()
+  return value === 'pending' || value === 'processing'
+}
+
+/**
+ * Current registration status is authoritative for the teacher queue.
+ * AI status is historical except while AI is actively pending/processing.
+ */
+export function needsTeacherAction(registration: RegistrationRecord | null | undefined): boolean {
+  if (!registration || registration.isDeleted === true) return false
+  if (registration.status !== 'submitted') return false
+  if (aiReviewInProgress(registration)) return false
+  return true
+}
+
+/** Human-readable AI history without turning resolved registrations back into a queue item. */
+export function aiReviewHistoryLabel(registration: RegistrationRecord | null | undefined): string {
+  if (!registration) return '—'
+  const ai = String(registration.aiReviewStatus ?? registration.aiDecision ?? '').toLowerCase()
+  if (registration.status === 'approved' && ai === 'manual') return 'AI chuyển GV · Đã xử lý'
+  if (registration.status === 'needs_revision' && ai === 'approved') return 'AI từng duyệt · GV yêu cầu sửa'
+  if (registration.status === 'needs_revision' && ai === 'manual') return 'GV yêu cầu sửa'
+  if (registration.status === 'submitted' && ai === 'manual') return 'AI chuyển GV'
+  if (registration.status === 'submitted' && ai === 'error') return 'AI lỗi · GV xử lý'
+  const labels: Record<string, string> = {
+    approved: 'AI duyệt',
+    manual: 'AI chuyển GV',
+    needs_revision: 'AI yêu cầu sửa',
+    error: 'AI lỗi',
+    pending: 'Đang chờ AI',
+    processing: 'AI đang xử lý',
+    not_needed: 'Không áp dụng AI',
+  }
+  return labels[ai] ?? (ai ? String(registration.aiReviewStatus ?? registration.aiDecision) : '—')
+}
+
 export interface RegistrationManagerActions {
   canApprove: boolean
   canRequestRevision: boolean
@@ -150,9 +190,8 @@ export function registrationManagerActions({
   const start = sessionStartMs({ week, dow: registration.dow, period: registration.period, periods })
   const started = Number.isFinite(start) && nowMs >= start
   const reported = isRevisionOverdue(registration, { week, periods, nowMs })
-  const aiBusy = ['pending', 'processing'].includes(registration.aiReviewStatus ?? '')
   return {
-    canApprove: !reported && registration.status === 'submitted' && !aiBusy,
+    canApprove: !reported && needsTeacherAction(registration),
     canRequestRevision: !reported && !started && ['submitted', 'needs_revision', 'approved'].includes(registration.status),
     canComment: true,
     canDelete: true,

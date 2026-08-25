@@ -4,7 +4,7 @@ import { AlertTriangle, Bot, Check, Laptop2, MessageSquareText, PencilLine, Tras
 import AppButton from '../ui/AppButton.vue'
 import InlineStatus from '../ui/InlineStatus.vue'
 import type { CurrentUser, RegistrationRecord } from '../../types/legacy'
-import type { RegistrationManagerActions } from '../../features/registrations/registration-model'
+import { aiReviewHistoryLabel, type RegistrationManagerActions } from '../../features/registrations/registration-model'
 
 const props = defineProps<{
   registration: RegistrationRecord
@@ -27,6 +27,8 @@ watch(comment,(value)=>emit('dirty',value.trim()!==String(props.registration.tea
 const confidence = computed(()=>typeof props.registration.aiConfidence==='number'?`${Math.round(props.registration.aiConfidence*100)}%`:'–')
 const dayName = computed(()=>['Thứ 2','Thứ 3','Thứ 4','Thứ 5','Thứ 6','Thứ 7','Chủ nhật'][Number(props.registration.dow)] ?? `Ngày ${Number(props.registration.dow)+1}`)
 const statusLabel = computed(()=>props.registration.status==='approved'?'Đã duyệt':props.registration.status==='needs_revision'?'Cần chỉnh sửa':props.registration.status==='draft'?'Bản nháp':'Chờ duyệt')
+const aiHistoryLabel = computed(()=>aiReviewHistoryLabel(props.registration))
+const approvalLabel = computed(()=>props.registration.status==='approved'?(props.registration.approvalSource==='ai'?'AI duyệt':'GV duyệt'):'—')
 </script>
 
 <template>
@@ -42,7 +44,7 @@ const statusLabel = computed(()=>props.registration.status==='approved'?'Đã du
       <div class="detail-block wide"><h3>Nội dung tự học</h3><p>{{ registration.content || 'Chưa nhập nội dung.' }}</p><small v-if="registration.note">{{ registration.note }}</small></div>
       <div class="detail-block"><h3><Laptop2 aria-hidden="true" />Thiết bị điện tử</h3><p>{{ registration.usesElectronicDevice ? 'Có đăng ký sử dụng' : 'Không đăng ký' }}</p></div>
       <div v-if="registration.isEmergency" class="detail-block emergency"><h3><AlertTriangle aria-hidden="true" />Đăng ký bổ sung</h3><p>{{ registration.emergencyReason || 'Không có lý do.' }}</p></div>
-      <div class="detail-block ai-block"><h3><Bot aria-hidden="true" />Kết quả AI</h3><div class="ai-meta"><span>Trạng thái: <b>{{ registration.aiReviewStatus || registration.aiDecision || 'Không áp dụng' }}</b></span><span>Độ tin cậy: <b>{{ confidence }}</b></span></div><p>{{ registration.aiReason || registration.autoReviewReason || 'AI chưa có nhận xét.' }}</p></div>
+      <div class="detail-block ai-block"><h3><Bot aria-hidden="true" />Kết quả AI</h3><div class="ai-meta"><span>Lịch sử AI: <b>{{ aiHistoryLabel }}</b></span><span>Nguồn duyệt hiện tại: <b>{{ approvalLabel }}</b></span><span>Độ tin cậy: <b>{{ confidence }}</b></span></div><p>{{ registration.aiReason || registration.autoReviewReason || 'AI chưa có nhận xét.' }}</p></div>
     </section>
 
     <section class="teacher-note">

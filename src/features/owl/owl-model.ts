@@ -1,4 +1,5 @@
 import type { CurrentUser, LegacyState, RegistrationRecord } from '../../types/legacy'
+import { needsTeacherAction } from '../registrations/registration-model'
 
 export interface OwlQuote { id?: string; text: string; author: string; url?: string }
 export interface OwlMessage { kind: 'urgent' | 'page' | 'tip' | 'quote'; text: string; urgent?: boolean; quote?: OwlQuote }
@@ -66,8 +67,18 @@ export function buildOwlContextMessages({ state, user, path }: { state: LegacySt
   const manager = ['teacher','admin'].includes(user.role)
   const messages: OwlMessage[] = []
   if (manager) {
-    const waiting = currentWeekRegistrations(state).filter(row => row.status === 'submitted' || row.aiReviewStatus === 'error').length
-    const unread = (Array.isArray(state.notifications) ? state.notifications : []).filter(item => !(item as {isRead?:boolean})?.isRead).length
+    const current = currentWeekRegistrations(state)
+    const unresolved = current.filter(row => needsTeacherAction(row))
+    const waiting = unresolved.length
+    const unresolvedIds = new Set(unresolved.map(row => row.id))
+    const currentById = new Map(current.map(row => [row.id, row]))
+    const unread = (Array.isArray(state.notifications) ? state.notifications : []).filter(item => {
+      if ((item as {isRead?:boolean})?.isRead) return false
+      const registrationId = String((item as {registrationId?:string|null})?.registrationId ?? '')
+      if (!registrationId) return true
+      const linked = currentById.get(registrationId)
+      return !linked || unresolvedIds.has(registrationId)
+    }).length
     if (waiting) messages.push({ kind:'urgent', urgent:true, text:`${weekLabel} còn ${waiting} đăng ký cần giáo viên xử lý.` })
     if (unread) messages.push({ kind:'urgent', urgent:true, text:`Bạn có ${unread} thông báo chưa đọc.` })
     if (route === 'students') messages.push({ kind:'page', text:`Lớp hiện có ${learnerCount(state)} học sinh/cán sự đang hoạt động.` })

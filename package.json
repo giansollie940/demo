@@ -1,7 +1,7 @@
 {
   "name": "so-tu-hoc-vue",
   "private": true,
-  "version": "8.6.0-cp8-source",
+  "version": "8.7.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
