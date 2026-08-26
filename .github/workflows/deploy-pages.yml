@@ -43,6 +43,22 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Ensure runtime config is absent during source verification
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -f public/config.js
+          test ! -f public/config.js
+
+      - name: Static source tests
+        run: npm test
+
+      - name: Unit tests
+        run: npm run test:unit
+
+      - name: Typecheck
+        run: npm run typecheck
+
       - name: Validate required Supabase secrets
         shell: bash
         env:
@@ -93,15 +109,6 @@ jobs:
           )
           console.log('Generated public/config.js with public browser configuration.')
           NODE
-
-      - name: Typecheck
-        run: npm run typecheck
-
-      - name: Static source tests
-        run: npm test
-
-      - name: Unit tests
-        run: npm run test:unit
 
       - name: Build production site
         run: npm run build
