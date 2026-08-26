@@ -51,8 +51,9 @@
 ## 2026-08-26 · UI + historical statistics refinement
 
 - Moved **Đăng xuất** into the signed-in profile dropdown in the top bar; removed the redundant sidebar logout button.
-- Standardized sidebar/menu affordance on the hamburger `Menu` icon for desktop collapse and mobile navigation.
-- Restored the vanilla-style layered `school-pattern-bg.png` background so the school pattern is visibly present behind the main surface in both themes.
+- Replaced the desktop hamburger collapse affordance with a circular edge-mounted `ChevronsLeft/ChevronsRight` control; mobile continues to use the hamburger menu where that icon is semantically correct.
+- Increased the visibility of the vanilla `school-pattern-bg.png` main-surface background (84% overlay instead of 93%) while retaining the same 1100px repeated academic pattern composition.
+- Added modern hover micro-interactions for sidebar items, the edge toggle, icon buttons and the signed-in profile chip, with reduced-motion support preserved.
 - Promoted the selected **TUẦN** number and date range to the primary Dashboard heading.
 - Fixed Statistics for old weeks: the selected week and 12-week trend now load canonical week data with Vue Query before calculating rates or exporting CSV.
-- Added regression coverage for profile logout ownership, hamburger navigation, vanilla background layering, week-heading prominence, and historical week statistics.
+- Added regression coverage for profile logout ownership, desktop edge-chevron/mobile hamburger navigation, visible vanilla background layering, hover micro-interactions, week-heading prominence, and historical week statistics.

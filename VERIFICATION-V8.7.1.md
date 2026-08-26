@@ -12,7 +12,7 @@ Lệnh:
 npm test
 ```
 
-Kết quả cuối sau parity fix: **82/82 PASS, 0 fail**.
+Kết quả cuối sau UI polish: **90/90 PASS, 0 fail**.
 
 Phạm vi gồm frontend V8.7.1 hiện có và contract mới cho:
 
@@ -28,7 +28,10 @@ Phạm vi gồm frontend V8.7.1 hiện có và contract mới cho:
 - approval mutation chụp notification IDs trước canonical reload;
 - `/issues` và `IssuesPage.vue` tồn tại, scope dữ liệu theo vai trò, hiển thị phản hồi GV/AI;
 - Registration và Wise Owl dùng clock reactive 30 giây; Dashboard tách `revision_overdue` khỏi `needs_revision`;
-- shell có school-pattern background, logged-in profile chip và sidebar encouragement.
+- shell có school-pattern background, logged-in profile chip và sidebar encouragement;
+- desktop sidebar dùng edge-chevron thay vì hamburger, mobile vẫn hamburger;
+- main background dùng cùng `school-pattern-bg.png` nhưng overlay giảm từ 93% xuống 84% để hoa văn nhìn thấy rõ;
+- sidebar items, edge toggle, icon buttons và profile chip có hover micro-interactions hiện đại; reduced-motion vẫn được tôn trọng.
 
 ### 2. Release verifier
 
