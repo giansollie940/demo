@@ -1,0 +1,42 @@
+:root,[data-theme='light'] {
+  color-scheme:light;
+  --bg:#f8f9ff;
+  --surface:#ffffff;
+  --surface-raised:#fdfcff;
+  --surface-soft:#f2f0ff;
+  --text:#22263a;
+  --text-muted:#667085;
+  --border:#e5e7f1;
+  --input:#ffffff;
+  --sidebar:#fbfbff;
+  --overlay:rgb(22 24 39 / .48);
+  --focus-ring:#5040c8;
+  --focus-inner:#ffffff;
+  --wash-violet:#f0edff;
+  --wash-sky:#eaf4ff;
+  --wash-mint:#e9faf2;
+  --wash-sun:#fff6d9;
+  --wash-coral:#fff0f1;
+  --wash-pink:#fff0f7;
+}
+[data-theme='dark'] {
+  color-scheme:dark;
+  --bg:#11131d;
+  --surface:#1a1d2a;
+  --surface-raised:#202434;
+  --surface-soft:#292744;
+  --text:#f7f5ff;
+  --text-muted:#b3aec2;
+  --border:#34394c;
+  --input:#171a26;
+  --sidebar:#151824;
+  --overlay:rgb(0 0 0 / .64);
+  --focus-ring:#b9adff;
+  --focus-inner:#1a1d2a;
+  --wash-violet:#2a2547;
+  --wash-sky:#1d2d45;
+  --wash-mint:#19362e;
+  --wash-sun:#3b311d;
+  --wash-coral:#40252d;
+  --wash-pink:#3c2436;
+}
