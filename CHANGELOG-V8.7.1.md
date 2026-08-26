@@ -40,3 +40,19 @@
 
 - Thêm `scripts/package-edge-functions.mjs` để tái tạo 10 ZIP Edge Function.
 - Thêm `scripts/verify-release.mjs` để chạy regression tests, kiểm tra secret, ZIP integrity/layout, upgrade isolation và sinh `SHA256SUMS.txt`.
+## Workflow hotfix — 2026-08-26
+
+- GitHub Pages source verification now removes `public/config.js` before tests.
+- `npm test`, `npm run test:unit`, and `npm run typecheck` run before runtime browser config is generated.
+- `public/config.js` is generated from GitHub Secrets only after source verification and immediately before the production build.
+- Added regression coverage to prevent runtime config from being generated before source security checks.
+
+
+## 2026-08-26 · UI + historical statistics refinement
+
+- Moved **Đăng xuất** into the signed-in profile dropdown in the top bar; removed the redundant sidebar logout button.
+- Standardized sidebar/menu affordance on the hamburger `Menu` icon for desktop collapse and mobile navigation.
+- Restored the vanilla-style layered `school-pattern-bg.png` background so the school pattern is visibly present behind the main surface in both themes.
+- Promoted the selected **TUẦN** number and date range to the primary Dashboard heading.
+- Fixed Statistics for old weeks: the selected week and 12-week trend now load canonical week data with Vue Query before calculating rates or exporting CSV.
+- Added regression coverage for profile logout ownership, hamburger navigation, vanilla background layering, week-heading prominence, and historical week statistics.
