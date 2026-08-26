@@ -12,7 +12,7 @@ Lệnh:
 npm test
 ```
 
-Kết quả cuối sau role-aware UI + mandatory reminder refinement: **102/102 PASS, 0 fail**.
+Kết quả cuối sau warm flat sidebar + independent pattern refinement: **108/108 PASS, 0 fail**.
 
 Phạm vi gồm frontend V8.7.1 hiện có và contract mới cho:
 
@@ -30,14 +30,14 @@ Phạm vi gồm frontend V8.7.1 hiện có và contract mới cho:
 - Registration và Wise Owl dùng clock reactive 30 giây; Dashboard tách `revision_overdue` khỏi `needs_revision`;
 - shell có school-pattern background, logged-in profile chip và sidebar encouragement;
 - desktop sidebar dùng edge-chevron thay vì hamburger, mobile vẫn hamburger;
-- main background dùng `school-pattern-bg.png` với lớp theme `--bg` pha khoảng 78–82% để hoa văn nhìn thấy rõ hơn;
+- main dùng nền kem/đào ấm và một layer `main::before` riêng cho `school-pattern-bg.png`; pattern opacity 14% ở light và 2.5% ở dark;
 - sidebar items, edge toggle, icon buttons và profile chip có hover micro-interactions hiện đại; reduced-motion vẫn được tôn trọng.
-- navigation được chia nhóm theo vai trò; sidebar mở dùng compact soft groups và khi thu gọn chuyển thành icon rail 70px có tooltip;
+- navigation vẫn phân quyền theo vai trò nhưng hiển thị thành một danh sách phẳng compact; khi thu gọn chuyển thành icon rail 70px có tooltip;
 - HS/Cán sự truy cập tùy chọn cá nhân từ profile thay vì sidebar; HS/Cán sự có thống kê cá nhân, Cán sự có thêm khu vực Hỗ trợ lớp; GV/Admin giữ thống kê lớp và menu nghiệp vụ/quản trị;
 - cài đặt HS/Cán sự hiển thị ba cảnh báo học tập bắt buộc ở trạng thái hệ thống tự bật, không cung cấp toggle tắt;
 - Owl model thực thi nhắc chưa đăng ký, nhắc trước buổi tự học và nhắc yêu cầu chỉnh sửa cho learner; Cán sự có thêm cảnh báo lớp chưa đăng ký/cần sửa/gần buổi học chưa hoàn tất;
 - learner urgent reminder tự mở khi Owl đang hiển thị kể cả local preference auto-open cũ từng tắt;
-- school pattern dùng theme token thực `--bg` thay cho token không tồn tại `--background`, đồng thời content/card surfaces giữ độ trong để pattern có thể hiển thị.
+- school pattern dùng layer độc lập `main::before` với `--pattern-opacity`; light mode dùng nền kem/đào ấm và pattern rõ hơn, dark mode giảm pattern xuống 2.5% để không ảnh hưởng tương phản.
 
 ### 2. Release verifier
 
@@ -124,3 +124,14 @@ database/verify/VERIFY-V8.7.1.sql
 ```
 
 và chỉ tiếp tục khi `overall = true`.
+
+
+## UI verification bổ sung — warm flat 1+3
+
+- Sidebar mở không còn tiêu đề nhóm; `visibleNavigation()` trả một danh sách phẳng theo đúng thứ tự của từng vai trò.
+- Sidebar thu gọn vẫn là icon rail 70px có tooltip; desktop edge-chevron và mobile hamburger được giữ nguyên.
+- Light palette xác nhận `--bg:#fff9f4`, `--surface:#fffdfc`, primary `#6846dc`, cùng peach/coral/amber washes.
+- Dark palette xác nhận `--bg:#17151c`, `--surface:#211e29`, text ấm `#f7f2ee`; không dùng inversion.
+- `school-pattern-bg.png` nằm trong `main::before`, opacity light 14%, dark 2.5%, `mix-blend-mode:multiply`, `pointer-events:none`.
+- Body, shell, sidebar, main và topbar dùng `--theme-transition` 260ms để đổi theme đồng bộ.
+- Regression mới `tests/v871-warm-flat-sidebar.test.mjs` khóa các yêu cầu trên.

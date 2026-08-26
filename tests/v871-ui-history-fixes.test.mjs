@@ -30,11 +30,13 @@ test('desktop sidebar uses an edge chevron control while mobile keeps the hambur
   assert.match(top,/<Menu\s*\/?\s*>/)
 })
 
-test('main surface uses the vanilla layered school pattern instead of a hidden negative-z pseudo layer',()=>{
+test('main surface uses an independent vanilla school-pattern layer above the warm base',()=>{
   const shell=read('src/layouts/AppShell.vue')
-  assert.match(shell,/background-image:\s*linear-gradient\([^;]*var\(--bg\)[^;]*\),\s*var\(--school-pattern-image\)/s)
-  assert.match(shell,/background-size:\s*auto,\s*(?:920|1100)px\s+auto/)
-  assert.doesNotMatch(shell,/\.main::before/)
+  assert.match(shell,/\.main::before/)
+  assert.match(shell,/background-image:var\(--school-pattern-image\)/)
+  assert.match(shell,/background-size:(?:920|1100)px\s+auto/)
+  assert.match(shell,/opacity:var\(--pattern-opacity\)/)
+  assert.match(shell,/mix-blend-mode:multiply/)
 })
 
 
@@ -43,7 +45,7 @@ test('sidebar, icon buttons, and profile chip use modern hover micro-interaction
   const icon=read('src/components/ui/IconButton.vue')
   const top=read('src/components/layout/TopBar.vue')
   const shell=read('src/layouts/AppShell.vue')
-  assert.match(nav,/\.nav-item:hover\{[^}]*translateX\(4px\)[^}]*scale\(1\.01/s)
+  assert.match(nav,/\.nav-item:hover\{[^}]*translateX\(3px\)[^}]*scale\(1\.008/s)
   assert.match(nav,/\.nav-item:hover[^}]*[+~ ]?[^\n]*svg|\.nav-item:hover\s*:deep\(svg\)/s)
   assert.match(icon,/\.icon-button::before\{/)
   assert.match(icon,/\.icon-button:hover\{[^}]*scale\(1\.06\)/s)

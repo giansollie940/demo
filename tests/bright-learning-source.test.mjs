@@ -29,11 +29,12 @@ test('topbar class and week context use larger readable typography', async () =>
   assert.match(topbar, /font-weight:800/)
 })
 
-test('sidebar and dashboard use multiple semantic accent colors', async () => {
+test('sidebar and dashboard use multiple semantic accent colors with warm menu emphasis', async () => {
   const sidebar = await text('src/components/layout/SidebarNav.vue')
   const dashboard = await text('src/pages/DashboardPage.vue')
   assert.match(sidebar, /nth-child\(2\)/)
-  assert.match(sidebar, /--nav-accent:var\(--color-sky\)/)
+  assert.match(sidebar, /--nav-accent:var\(--color-coral\)/)
+  assert.match(sidebar, /--nav-accent:var\(--color-sun\)/)
   assert.match(sidebar, /--nav-accent:var\(--color-mint\)/)
   assert.match(dashboard, /nth-child\(1\).*--metric-accent:var\(--color-sky\)/s)
   assert.match(dashboard, /nth-child\(2\).*--metric-accent:var\(--color-mint\)/s)

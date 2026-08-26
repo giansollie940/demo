@@ -1,7 +1,6 @@
 import type { UserRole } from '../../types/legacy'
 
 export interface NavigationItem{label:string;to:string;icon:string;roles:UserRole[]}
-export interface NavigationGroup{label:string;items:NavigationItem[]}
 const all:UserRole[]=['student','monitor','teacher','admin']
 const learners:UserRole[]=['student','monitor']
 const managers:UserRole[]=['teacher','admin']
@@ -28,27 +27,16 @@ export const navigation:NavigationItem[]=[
   item('Cài đặt','/settings','Settings',managers),
 ]
 
-const pick=(role:UserRole,labels:string[])=>navigation.filter(entry=>entry.roles.includes(role)&&labels.includes(entry.label))
-
-export function visibleNavigationGroups(role:UserRole|null|undefined):NavigationGroup[]{
-  if(!role)return[]
-  if(role==='student')return[
-    {label:'HỌC TẬP',items:pick(role,['Tổng quan','Đăng ký tự học','Báo cáo lỗi','Lịch sử','Nhận xét GV'])},
-    {label:'CÁ NHÂN',items:pick(role,['Thống kê của tôi'])},
-  ]
-  if(role==='monitor')return[
-    {label:'HỌC TẬP',items:pick(role,['Tổng quan','Đăng ký tự học','Báo cáo lỗi','Lịch sử','Nhận xét GV'])},
-    {label:'HỖ TRỢ LỚP',items:pick(role,['Theo dõi lớp'])},
-    {label:'CÁ NHÂN',items:pick(role,['Thống kê của tôi'])},
-  ]
-  const groups:NavigationGroup[]=[
-    {label:'HỌC TẬP',items:pick(role,['Tổng quan','Duyệt đăng ký','Báo cáo lỗi','Theo dõi cả lớp'])},
-    {label:'QUẢN LÝ',items:pick(role,['Quản lý tuần','Thời khóa biểu','Học sinh'])},
-    {label:'PHÂN TÍCH',items:pick(role,['Thống kê'])},
-  ]
-  if(role==='admin')groups.push({label:'QUẢN TRỊ',items:pick(role,['Lớp học','Giáo viên','Phân quyền'])})
-  groups.push({label:'HỆ THỐNG',items:pick(role,['Cài đặt'])})
-  return groups.filter(group=>group.items.length)
+const orders:Record<UserRole,string[]>={
+  student:['Tổng quan','Đăng ký tự học','Báo cáo lỗi','Lịch sử','Nhận xét GV','Thống kê của tôi'],
+  monitor:['Tổng quan','Đăng ký tự học','Báo cáo lỗi','Theo dõi lớp','Lịch sử','Nhận xét GV','Thống kê của tôi'],
+  teacher:['Tổng quan','Duyệt đăng ký','Báo cáo lỗi','Theo dõi cả lớp','Quản lý tuần','Thời khóa biểu','Học sinh','Thống kê','Cài đặt'],
+  admin:['Tổng quan','Duyệt đăng ký','Báo cáo lỗi','Theo dõi cả lớp','Quản lý tuần','Thời khóa biểu','Học sinh','Thống kê','Lớp học','Giáo viên','Phân quyền','Cài đặt'],
 }
 
-export function visibleNavigation(role:UserRole|null|undefined){return visibleNavigationGroups(role).flatMap(group=>group.items)}
+export function visibleNavigation(role:UserRole|null|undefined):NavigationItem[]{
+  if(!role)return[]
+  const allowed=navigation.filter(entry=>entry.roles.includes(role))
+  const byLabel=new Map(allowed.map(entry=>[entry.label,entry]))
+  return orders[role].map(label=>byLabel.get(label)).filter((entry):entry is NavigationItem=>Boolean(entry))
+}

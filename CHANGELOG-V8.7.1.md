@@ -68,3 +68,14 @@
 - Monitor receives additional class-support reminders: learners still missing future registrations, learners needing revision, and an urgent warning when a self-study session is within 60 minutes and class registrations are still incomplete.
 - Fixed the school-pattern surface to use the actual theme token `--bg` (the previous `--background` token did not exist) and retained translucent content/card surfaces so `school-pattern-bg.png` can remain visible behind the UI.
 - Added global modern hover/micro-interactions for content actions and interactive cards while preserving `prefers-reduced-motion` and avoiding motion on passive KPI cards.
+
+## 2026-08-26 · Warm flat sidebar + independent pattern layer
+
+- Removed the visual navigation-group treatment introduced in the prior role-aware UI pass. Navigation remains role-aware but is now one compact flat list when expanded, matching the requested combination of compact sidebar + collapsed icon rail only.
+- Preserved the 70px collapsed icon rail with hover/focus tooltips and the desktop edge-chevron control; mobile continues to use the hamburger drawer trigger.
+- Rebalanced the light palette away from cool blue dominance toward vanilla-inspired warm cream, peach, coral, amber and violet while retaining mint/blue only where they provide useful semantic contrast.
+- Updated the primary gradient from violet/blue to violet/lilac/coral and warmed the topbar, sidebar header, profile surfaces and page-header washes.
+- Reimplemented `school-pattern-bg.png` as an independent `main::before` pattern layer. The light theme uses a visible 14% pattern opacity over a warm base with multiply blending, so card/content surfaces can no longer hide the image.
+- Dark mode now uses a warm charcoal-plum palette (`#17151c` / `#211e29`) and reduces the pattern to 2.5% with a darker filter so the texture remains subtle and cannot wash out dark surfaces.
+- Added a shared 260ms theme transition for body/shell/sidebar/main/topbar surfaces and pattern opacity/filter, producing a smoother light ↔ dark switch without a bright pattern flash.
+- Preserved modern hover micro-interactions for navigation, profile, icon buttons and content actions, including reduced-motion safeguards.

@@ -6,21 +6,13 @@ import path from 'node:path'
 const root=path.resolve(new URL('..',import.meta.url).pathname)
 const read=(file)=>fs.readFileSync(path.join(root,file),'utf8')
 
-test('navigation is grouped by role and learner settings live outside the sidebar',()=>{
+test('navigation is flat by role and learner settings live outside the sidebar',()=>{
   const nav=read('src/features/navigation/navigation.ts')
   const sidebar=read('src/components/layout/SidebarNav.vue')
-  assert.match(nav,/NavigationGroup/)
-  assert.match(nav,/HỌC TẬP/)
-  assert.match(nav,/HỖ TRỢ LỚP/)
-  assert.match(nav,/CÁ NHÂN/)
-  assert.match(nav,/QUẢN LÝ/)
-  assert.match(nav,/PHÂN TÍCH/)
-  assert.match(nav,/QUẢN TRỊ/)
-  assert.match(nav,/HỆ THỐNG/)
-  assert.match(nav,/visibleNavigationGroups/)
-  assert.match(sidebar,/v-for="group in groups"/)
-  assert.match(sidebar,/nav-group-label/)
-  assert.match(sidebar,/v-if="!collapsed"/)
+  assert.doesNotMatch(nav,/NavigationGroup|visibleNavigationGroups/)
+  assert.match(nav,/visibleNavigation/)
+  assert.match(sidebar,/v-for="item in items"/)
+  assert.doesNotMatch(sidebar,/nav-group-label|v-for="group in groups"/)
   assert.doesNotMatch(nav,/\{label:'Cài đặt'.*roles:all/)
   assert.match(nav,/item\('Cài đặt'.*managers\)/)
 })
@@ -77,11 +69,11 @@ test('dashboard has distinct learner monitor and manager summary modes',()=>{
   assert.match(page,/Cần GV xử lý|Đã đăng ký/)
 })
 
-test('sidebar supports compact soft groups and collapsed icon rail tooltips',()=>{
+test('sidebar supports compact soft flat navigation and collapsed icon rail tooltips',()=>{
   const nav=read('src/components/layout/SidebarNav.vue')
   const tokens=read('src/styles/tokens.css')
   assert.match(nav,/min-height:4[6-9]px/)
-  assert.match(nav,/nav-group/)
+  assert.doesNotMatch(nav,/nav-group/)
   assert.match(nav,/nav-tooltip/)
   assert.match(nav,/collapsed/)
   assert.match(nav,/box-shadow:inset 3px 0 0|box-shadow:inset 4px 0 0/)
@@ -101,12 +93,14 @@ test('global content controls receive modern hover motion without making passive
   assert.match(base,/prefers-reduced-motion/)
 })
 
-test('school pattern remains visible through translucent content surfaces',()=>{
+test('school pattern remains visible as an independent layer through translucent content surfaces',()=>{
   const shell=read('src/layouts/AppShell.vue')
   const themes=read('src/styles/themes.css')
   assert.match(shell,/--school-pattern-image/)
-  assert.match(shell,/var\(--school-pattern-image\)/)
-  assert.match(shell,/background-attachment:\s*scroll,\s*scroll/)
-  assert.match(shell,/color-mix\(in srgb,var\(--bg\) (?:76|78|80|82)%?,transparent\)|rgba\(/)
+  assert.match(shell,/\.main::before/)
+  assert.match(shell,/background-image:var\(--school-pattern-image\)/)
+  assert.match(shell,/opacity:var\(--pattern-opacity\)/)
+  assert.match(shell,/mix-blend-mode:multiply/)
   assert.match(themes,/--content-glass:/)
+  assert.match(themes,/--pattern-opacity:/)
 })

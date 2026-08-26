@@ -1,6 +1,6 @@
 *{box-sizing:border-box}
-html,body,#app{min-height:100%;margin:0;overflow-x:clip}
-body{min-width:0;background:radial-gradient(circle at 4% 6%,color-mix(in srgb,var(--color-lilac) 8%,transparent),transparent 24%),radial-gradient(circle at 94% 8%,color-mix(in srgb,var(--color-sky) 7%,transparent),transparent 23%),radial-gradient(circle at 78% 94%,color-mix(in srgb,var(--color-mint) 6%,transparent),transparent 22%),var(--bg);color:var(--text);font-family:var(--font-body);line-height:1.5}
+html,body,#app{min-height:100%;margin:0;overflow-x:clip;background:var(--bg)}
+body{min-width:0;background:radial-gradient(circle at 5% 7%,color-mix(in srgb,var(--color-coral) 8%,transparent),transparent 24%),radial-gradient(circle at 94% 9%,color-mix(in srgb,var(--color-sun) 8%,transparent),transparent 24%),radial-gradient(circle at 80% 95%,color-mix(in srgb,var(--color-lilac) 6%,transparent),transparent 22%),var(--bg);color:var(--text);font-family:var(--font-body);line-height:1.5;transition:background var(--theme-transition),color var(--theme-transition)}
 h1,h2,h3{min-width:0;overflow-wrap:anywhere;font-family:var(--font-display);font-style:normal;letter-spacing:-.015em}
 button,input,select,textarea{font:inherit}
 button{cursor:pointer;transition:filter var(--transition-fast)}
@@ -18,10 +18,10 @@ img{max-width:100%;display:block}
 .muted{color:var(--text-muted)}
 .sr-only{position:absolute!important;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
 /* Bright Learning page banners: same structure, different gentle washes by task. */
-.registration-header,.history-page>header,.comments-page>header{--page-wash-a:var(--wash-mint);--page-wash-b:var(--wash-sky)}
-.approval-header,.tracking-header,.weeks-header{--page-wash-a:var(--wash-sky);--page-wash-b:var(--wash-violet)}
-.students-header,.statistics-page>.page-header{--page-wash-a:var(--wash-sun);--page-wash-b:var(--wash-mint)}
-.admin-header,.settings-page>header{--page-wash-a:var(--wash-violet);--page-wash-b:var(--wash-pink)}
+.registration-header,.history-page>header,.comments-page>header{--page-wash-a:var(--wash-mint);--page-wash-b:var(--wash-peach)}
+.approval-header,.tracking-header,.weeks-header{--page-wash-a:var(--wash-peach);--page-wash-b:var(--wash-violet)}
+.students-header,.statistics-page>.page-header{--page-wash-a:var(--wash-sun);--page-wash-b:var(--wash-peach)}
+.admin-header,.settings-page>header{--page-wash-a:var(--wash-violet);--page-wash-b:var(--wash-coral)}
 .registration-header,.history-page>header,.comments-page>header,.approval-header,.tracking-header,.weeks-header,.students-header,.statistics-page>.page-header,.admin-header,.settings-page>header{padding:18px 20px;border:1px solid color-mix(in srgb,var(--color-primary) 9%,var(--border));border-radius:20px;background:linear-gradient(135deg,var(--page-wash-a),color-mix(in srgb,var(--page-wash-b) 72%,var(--surface)));box-shadow:0 8px 24px rgb(54 44 104 / .06)}
 /* Reusable multicolor summary cards across student, teacher and admin screens. */
 .metrics>.app-card:nth-child(1),.approval-summary>.app-card:nth-child(1),.week-summary>.app-card:nth-child(1),.summary>.app-card:nth-child(1),.metric-grid>.app-card:nth-child(1){--card-accent:var(--color-sky);--card-wash:var(--wash-sky)}
