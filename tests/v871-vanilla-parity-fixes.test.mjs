@@ -12,7 +12,10 @@ const read=(file)=>fs.readFileSync(path.join(root,file),'utf8')
 function typedOwlModuleUrl(){
   const source=read('src/features/owl/owl-model.ts')
   const registrationUrl=pathToFileURL(path.join(root,'src/features/registrations/registration-model.ts')).href
-  const patched=source.replace("from '../registrations/registration-model'",`from ${JSON.stringify(registrationUrl)}`)
+  const scheduleUrl=pathToFileURL(path.join(root,'src/features/schedule/schedule-model.ts')).href
+  const patched=source
+    .replace("from '../registrations/registration-model'",`from ${JSON.stringify(registrationUrl)}`)
+    .replace("from '../schedule/schedule-model'",`from ${JSON.stringify(scheduleUrl)}`)
   const temp=path.join(os.tmpdir(),`owl-model-${process.pid}-${Date.now()}-${Math.random().toString(16).slice(2)}.ts`)
   fs.writeFileSync(temp,patched)
   return pathToFileURL(temp).href
@@ -90,7 +93,7 @@ test('revision overdue has a dedicated issues route and page for learner and man
   const issues=read('src/pages/IssuesPage.vue')
   assert.match(routes,/IssuesPage/)
   assert.match(routes,/path:\s*['"]issues['"]/)
-  assert.match(navigation,/to:\s*['"]\/issues['"]/)
+  assert.match(navigation,/["']Báo cáo lỗi["'].*["']\/issues["']/)
   assert.match(sidebar,/TriangleAlert/)
   assert.match(issues,/isRevisionOverdue/)
   assert.match(issues,/studentId\s*===\s*auth\.currentUser\?\.id|studentId\s*===\s*auth\.currentUser\.id/)
@@ -110,6 +113,6 @@ test('dashboard separates overdue reports from active revision requests',()=>{
   const page=read('src/pages/DashboardPage.vue')
   assert.match(model,/issues:number/)
   assert.match(model,/isRevisionOverdue/)
-  assert.match(page,/metrics\.issues/)
+  assert.match(page,/(?:classMetrics|personalMetrics)\.issues/)
   assert.match(page,/Báo cáo lỗi/)
 })

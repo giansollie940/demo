@@ -32,8 +32,8 @@ test('desktop sidebar uses an edge chevron control while mobile keeps the hambur
 
 test('main surface uses the vanilla layered school pattern instead of a hidden negative-z pseudo layer',()=>{
   const shell=read('src/layouts/AppShell.vue')
-  assert.match(shell,/background:\s*linear-gradient\([^;]*84%[^;]*\),\s*var\(--school-pattern-image\)/s)
-  assert.match(shell,/background-size:\s*auto,\s*1100px\s+auto/)
+  assert.match(shell,/background-image:\s*linear-gradient\([^;]*var\(--bg\)[^;]*\),\s*var\(--school-pattern-image\)/s)
+  assert.match(shell,/background-size:\s*auto,\s*(?:920|1100)px\s+auto/)
   assert.doesNotMatch(shell,/\.main::before/)
 })
 
@@ -68,7 +68,7 @@ test('statistics loads selected and historical week data through Vue Query befor
   assert.match(page,/mergeWeekData/)
   assert.match(page,/selectedWeekQuery\.data\.value/)
   assert.match(page,/trendQuery\.data\.value/)
-  assert.match(page,/statisticsCsv\(selectedState\.value/)
+  assert.match(page,/statisticsCsv\(personalState\.value/)
 })
 
 test('statistics model can merge canonical week payload without losing other week data',()=>{

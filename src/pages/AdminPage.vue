@@ -1,8 +1,8 @@
 <script setup lang="ts">
-import { computed, reactive, ref } from 'vue'
+import { computed, reactive, ref, watch } from 'vue'
 import { Building2, Plus, RefreshCw, ShieldCheck, UserCog, UsersRound } from 'lucide-vue-next'
 import { useQueryClient } from '@tanstack/vue-query'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import AppButton from '../components/ui/AppButton.vue'
 import AppCard from '../components/ui/AppCard.vue'
 import AppTabs from '../components/ui/AppTabs.vue'
@@ -14,10 +14,13 @@ import { assignTeacher, createClass, createTeacher, deleteClass, deleteTeacher, 
 import { useAuthStore } from '../stores/auth'
 import { useContextStore } from '../stores/context'
 
-const auth=useAuthStore(),context=useContextStore(),queryClient=useQueryClient(),router=useRouter(),directory=useAdminDirectory()
+const auth=useAuthStore(),context=useContextStore(),queryClient=useQueryClient(),router=useRouter(),route=useRoute(),directory=useAdminDirectory()
 const tabs=[{id:'overview',label:'Tổng quan'},{id:'classes',label:'Lớp học'},{id:'teachers',label:'Giáo viên'},{id:'permissions',label:'Phân quyền'}]
-const tab=ref('overview'),busyKey=ref<string|null>(null),status=ref<InlineStatusState>('idle'),statusMessage=ref(''),showClassForm=ref(false),showTeacherForm=ref(false)
+const tab=ref(['classes','teachers','permissions'].includes(String(route.query.tab))?String(route.query.tab):'overview'),busyKey=ref<string|null>(null),status=ref<InlineStatusState>('idle'),statusMessage=ref(''),showClassForm=ref(false),showTeacherForm=ref(false)
 const classForm=reactive({code:'',name:''}),teacherForm=reactive({code:'',fullName:'',password:''})
+
+watch(()=>route.query.tab,value=>{const next=String(value??'');tab.value=['classes','teachers','permissions'].includes(next)?next:'overview'})
+watch(tab,value=>{const target=value==='overview'?{}:{tab:value};if(String(route.query.tab??'')!==(value==='overview'?'':value))void router.replace({path:'/admin',query:target})})
 const data=computed(()=>directory.data.value??{classes:[],teachers:[],assignments:[]})
 const activeClasses=computed(()=>data.value.classes.filter(item=>item.active)),activeTeachers=computed(()=>data.value.teachers.filter(item=>item.active)),activeAssignments=computed(()=>data.value.assignments.filter(item=>item.active))
 function assignedTeachers(classId:string){return data.value.teachers.filter(teacher=>data.value.assignments.some(row=>row.classId===classId&&row.teacherId===teacher.id&&row.active))}

@@ -1,5 +1,6 @@
 import type { CurrentUser, LegacyState, RegistrationRecord } from '../../types/legacy'
-import { isRevisionOverdue, needsTeacherAction } from '../registrations/registration-model'
+import { isRevisionOverdue, needsTeacherAction, sessionStartMs } from '../registrations/registration-model'
+import { effectiveScheduleForWeek } from '../schedule/schedule-model'
 
 export interface OwlQuote { id?: string; text: string; author: string; url?: string }
 export interface OwlMessage { kind: 'urgent' | 'page' | 'tip' | 'quote'; text: string; urgent?: boolean; quote?: OwlQuote }
@@ -66,6 +67,76 @@ function overdue(row: RegistrationRecord, state: LegacyState, nowMs: number): bo
   return isRevisionOverdue(row, { week, periods: state.periods, nowMs })
 }
 
+function slotKey(dow: number, period: number): string { return `${Number(dow)}-${Number(period)}` }
+function activeLearners(state: LegacyState): CurrentUser[] {
+  return state.users.filter(candidate => candidate.active !== false && ['student','monitor'].includes(candidate.role))
+}
+function dayLabel(dow: number): string { return `Thứ ${Number(dow) + 2}` }
+function minutesUntil(startMs: number, nowMs: number): number { return Math.max(1, Math.ceil((startMs - nowMs) / 60_000)) }
+
+function learnerScheduleMessages({ state, user, weekId, nowMs }: { state: LegacyState; user: CurrentUser; weekId: string | null | undefined; nowMs: number }): OwlMessage[] {
+  const targetWeekId = weekId || state.currentWeekId
+  const week = state.weeks.find(item => item.id === targetWeekId)
+  if (!targetWeekId || !week) return []
+  const schedule = effectiveScheduleForWeek(state, targetWeekId)
+  const own = mine(state, user, targetWeekId)
+  const ownBySlot = new Map(own.map(row => [slotKey(row.dow, row.period), row]))
+  const future = schedule
+    .map(slot => ({ ...slot, startMs: sessionStartMs({ week, dow: slot.dow, period: slot.period, periods: state.periods }) }))
+    .filter(slot => Number.isFinite(slot.startMs) && slot.startMs > nowMs)
+    .sort((a, b) => a.startMs - b.startMs)
+  const messages: OwlMessage[] = []
+  const missing = future.filter(slot => !ownBySlot.has(slotKey(slot.dow, slot.period)))
+  if (missing.length) {
+    const soonest = missing[0]
+    const within24Hours = soonest.startMs - nowMs <= 24 * 60 * 60 * 1000
+    messages.push({
+      kind: within24Hours ? 'urgent' : 'page',
+      urgent: within24Hours || undefined,
+      text: within24Hours
+        ? `Bạn còn ${missing.length} buổi tự học chưa đăng ký; buổi gần nhất ${dayLabel(soonest.dow)} · Tiết ${soonest.period} sẽ bắt đầu trong khoảng ${minutesUntil(soonest.startMs, nowMs)} phút.`
+        : `Bạn còn ${missing.length} buổi tự học chưa đăng ký trong Tuần ${week.number}.`,
+    })
+  }
+  const nextRegistered = future.find(slot => ownBySlot.has(slotKey(slot.dow, slot.period)))
+  if (nextRegistered && nextRegistered.startMs - nowMs <= 60 * 60 * 1000) {
+    messages.push({ kind:'urgent', urgent:true, text:`Buổi tự học ${dayLabel(nextRegistered.dow)} · Tiết ${nextRegistered.period} sắp bắt đầu sau khoảng ${minutesUntil(nextRegistered.startMs, nowMs)} phút.` })
+  }
+  return messages
+}
+
+function monitorClassSupportMessages({ state, weekId, nowMs }: { state: LegacyState; weekId: string | null | undefined; nowMs: number }): OwlMessage[] {
+  const targetWeekId = weekId || state.currentWeekId
+  const week = state.weeks.find(item => item.id === targetWeekId)
+  if (!targetWeekId || !week) return []
+  const learners = activeLearners(state)
+  const registrations = weekRegistrations(state, targetWeekId)
+  const byLearnerAndSlot = new Map(registrations.map(row => [`${row.studentId}:${slotKey(row.dow, row.period)}`, row]))
+  const future = effectiveScheduleForWeek(state, targetWeekId)
+    .map(slot => ({ ...slot, startMs: sessionStartMs({ week, dow: slot.dow, period: slot.period, periods: state.periods }) }))
+    .filter(slot => Number.isFinite(slot.startMs) && slot.startMs > nowMs)
+    .sort((a, b) => a.startMs - b.startMs)
+  const missingStudents = new Set<string>()
+  for (const learner of learners) {
+    if (future.some(slot => !byLearnerAndSlot.has(`${learner.id}:${slotKey(slot.dow, slot.period)}`))) missingStudents.add(learner.id)
+  }
+  const revisionStudents = new Set(registrations
+    .filter(row => row.status === 'needs_revision' && !overdue(row, state, nowMs))
+    .map(row => row.studentId))
+  const messages: OwlMessage[] = []
+  if (missingStudents.size) messages.push({ kind:'page', text:`Lớp còn ${missingStudents.size} học sinh/cán sự chưa đăng ký đủ các buổi tự học sắp tới.` })
+  if (revisionStudents.size) messages.push({ kind:'page', text:`Lớp có ${revisionStudents.size} học sinh/cán sự cần chỉnh sửa đăng ký.` })
+  const next = future[0]
+  if (next && next.startMs - nowMs <= 60 * 60 * 1000) {
+    const incomplete = learners.filter(learner => {
+      const row = byLearnerAndSlot.get(`${learner.id}:${slotKey(next.dow, next.period)}`)
+      return !row || row.status !== 'approved'
+    }).length
+    if (incomplete) messages.push({ kind:'urgent', urgent:true, text:`Lớp còn ${incomplete} học sinh/cán sự chưa hoàn tất đăng ký cho buổi tự học ${dayLabel(next.dow)} · Tiết ${next.period} sắp bắt đầu.` })
+  }
+  return messages
+}
+
 export function buildOwlContextMessages({ state, user, path, weekId = state.currentWeekId, nowMs = Date.now() }: { state: LegacyState; user: CurrentUser; path: string; weekId?: string | null; nowMs?: number }): OwlMessage[] {
   const route = routeName(path)
   const week = state.weeks.find(item => item.id === weekId) ?? state.weeks.find(item => item.id === state.currentWeekId)
@@ -92,6 +163,8 @@ export function buildOwlContextMessages({ state, user, path, weekId = state.curr
     else messages.push({ kind:'page', text:`Dashboard ${weekLabel}: ${learnerCount(state)} học sinh/cán sự hoạt động.` })
   } else {
     const own = mine(state, user, weekId)
+    messages.push(...learnerScheduleMessages({ state, user, weekId, nowMs }))
+    if (user.role === 'monitor') messages.push(...monitorClassSupportMessages({ state, weekId, nowMs }))
     const needs = own.filter(row => row.status === 'needs_revision' && !overdue(row, state, nowMs)).length
     const issues = own.filter(row => overdue(row, state, nowMs)).length
     const submitted = own.filter(row => row.status === 'submitted').length

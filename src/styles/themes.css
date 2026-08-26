@@ -10,6 +10,8 @@
   --input:#ffffff;
   --sidebar:#fbfbff;
   --overlay:rgb(22 24 39 / .48);
+  --content-glass:rgb(248 249 255 / .78);
+  --card-glass:rgb(255 255 255 / .94);
   --focus-ring:#5040c8;
   --focus-inner:#ffffff;
   --wash-violet:#f0edff;
@@ -31,6 +33,8 @@
   --input:#171a26;
   --sidebar:#151824;
   --overlay:rgb(0 0 0 / .64);
+  --content-glass:rgb(17 19 29 / .80);
+  --card-glass:rgb(26 29 42 / .94);
   --focus-ring:#b9adff;
   --focus-inner:#1a1d2a;
   --wash-violet:#2a2547;

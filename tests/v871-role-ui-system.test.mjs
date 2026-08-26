@@ -1,0 +1,112 @@
+import test from 'node:test'
+import assert from 'node:assert/strict'
+import fs from 'node:fs'
+import path from 'node:path'
+
+const root=path.resolve(new URL('..',import.meta.url).pathname)
+const read=(file)=>fs.readFileSync(path.join(root,file),'utf8')
+
+test('navigation is grouped by role and learner settings live outside the sidebar',()=>{
+  const nav=read('src/features/navigation/navigation.ts')
+  const sidebar=read('src/components/layout/SidebarNav.vue')
+  assert.match(nav,/NavigationGroup/)
+  assert.match(nav,/HỌC TẬP/)
+  assert.match(nav,/HỖ TRỢ LỚP/)
+  assert.match(nav,/CÁ NHÂN/)
+  assert.match(nav,/QUẢN LÝ/)
+  assert.match(nav,/PHÂN TÍCH/)
+  assert.match(nav,/QUẢN TRỊ/)
+  assert.match(nav,/HỆ THỐNG/)
+  assert.match(nav,/visibleNavigationGroups/)
+  assert.match(sidebar,/v-for="group in groups"/)
+  assert.match(sidebar,/nav-group-label/)
+  assert.match(sidebar,/v-if="!collapsed"/)
+  assert.doesNotMatch(nav,/\{label:'Cài đặt'.*roles:all/)
+  assert.match(nav,/item\('Cài đặt'.*managers\)/)
+})
+
+test('learner and monitor receive personal statistics while managers retain class statistics',()=>{
+  const routes=read('src/app/router/routes.ts')
+  const nav=read('src/features/navigation/navigation.ts')
+  const stats=read('src/pages/StatisticsPage.vue')
+  assert.match(routes,/path: 'statistics'.*roles: all/)
+  assert.match(nav,/Thống kê của tôi/)
+  assert.match(stats,/isLearner/)
+  assert.match(stats,/personalState/)
+  assert.match(stats,/THỐNG KÊ CÁ NHÂN/)
+  assert.match(stats,/THỐNG KÊ LỚP/)
+  assert.match(stats,/auth\.currentUser!?\.id/)
+})
+
+test('profile dropdown links to personal settings and keeps logout there',()=>{
+  const top=read('src/components/layout/TopBar.vue')
+  assert.match(top,/SlidersHorizontal|Settings/)
+  assert.match(top,/to="\/settings"/)
+  assert.match(top,/Tùy chọn cá nhân|Cài đặt/)
+  assert.match(top,/Đăng xuất/)
+})
+
+test('learner settings expose personal appearance and owl controls with mandatory alerts',()=>{
+  const settings=read('src/pages/SettingsPage.vue')
+  const prefs=read('src/stores/preferences.ts')
+  assert.match(settings,/isLearner/)
+  assert.match(settings,/TÙY CHỌN CÁ NHÂN/)
+  assert.match(settings,/Cỡ chữ/)
+  assert.match(settings,/Hiện Cú Thông Thái/)
+  assert.match(settings,/Chuyển động của Cú/)
+  assert.match(settings,/Nhắc chưa đăng ký/)
+  assert.match(settings,/Nhắc có yêu cầu chỉnh sửa/)
+  assert.match(settings,/Nhắc trước buổi tự học/)
+  assert.match(settings,/Được hệ thống bật tự động/)
+  assert.match(settings,/Lớp còn học sinh chưa đăng ký/)
+  assert.match(settings,/Gần đến buổi học nhưng còn đăng ký chưa hoàn tất/)
+  assert.doesNotMatch(settings,/Chọn mức hiển thị thông tin hỗ trợ lớp/)
+  assert.match(prefs,/fontScale/)
+  assert.match(prefs,/dataset\.fontScale/)
+  assert.match(prefs,/owlMotionEnabled/)
+})
+
+test('dashboard has distinct learner monitor and manager summary modes',()=>{
+  const page=read('src/pages/DashboardPage.vue')
+  assert.match(page,/isStudent/)
+  assert.match(page,/isMonitor/)
+  assert.match(page,/personalMetrics/)
+  assert.match(page,/CÁ NHÂN CỦA TÔI/)
+  assert.match(page,/Tình hình lớp/)
+  assert.match(page,/Đăng ký tuần này/)
+  assert.match(page,/Cần GV xử lý|Đã đăng ký/)
+})
+
+test('sidebar supports compact soft groups and collapsed icon rail tooltips',()=>{
+  const nav=read('src/components/layout/SidebarNav.vue')
+  const tokens=read('src/styles/tokens.css')
+  assert.match(nav,/min-height:4[6-9]px/)
+  assert.match(nav,/nav-group/)
+  assert.match(nav,/nav-tooltip/)
+  assert.match(nav,/collapsed/)
+  assert.match(nav,/box-shadow:inset 3px 0 0|box-shadow:inset 4px 0 0/)
+  assert.match(tokens,/--sidebar-collapsed:(?:68|70|72)px/)
+})
+
+test('global content controls receive modern hover motion without making passive KPI cards jump',()=>{
+  const base=read('src/styles/base.css')
+  const button=read('src/components/ui/AppButton.vue')
+  const icon=read('src/components/ui/IconButton.vue')
+  assert.match(button,/translateY\(-2px\)/)
+  assert.match(button,/scale\(\.9[78]\)|scale\(\.985\)/)
+  assert.match(icon,/radial-gradient/)
+  assert.match(base,/\.interactive-card:hover/)
+  assert.match(base,/\.interactive-link:hover/)
+  assert.match(base,/button:not\(\.app-button\):not\(\.icon-button\)/)
+  assert.match(base,/prefers-reduced-motion/)
+})
+
+test('school pattern remains visible through translucent content surfaces',()=>{
+  const shell=read('src/layouts/AppShell.vue')
+  const themes=read('src/styles/themes.css')
+  assert.match(shell,/--school-pattern-image/)
+  assert.match(shell,/var\(--school-pattern-image\)/)
+  assert.match(shell,/background-attachment:\s*scroll,\s*scroll/)
+  assert.match(shell,/color-mix\(in srgb,var\(--bg\) (?:76|78|80|82)%?,transparent\)|rgba\(/)
+  assert.match(themes,/--content-glass:/)
+})

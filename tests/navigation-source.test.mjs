@@ -23,9 +23,9 @@ test('router uses hash history for GitHub Pages',()=>{
 test('learner-only pages are hidden from teacher and admin navigation and protected at route level',()=>{
   const nav=read('src/features/navigation/navigation.ts');
   assert.match(nav,/const learners:UserRole\[]=/);
-  assert.match(nav,/Đăng ký tự học',to:'\/register'.*roles:learners/);
-  assert.match(nav,/Lịch sử',to:'\/history'.*roles:learners/);
-  assert.match(nav,/Nhận xét GV',to:'\/comments'.*roles:learners/);
+  assert.match(nav,/item\('Đăng ký tự học','\/register'.*learners\)/);
+  assert.match(nav,/item\('Lịch sử','\/history'.*learners\)/);
+  assert.match(nav,/item\('Nhận xét GV','\/comments'.*learners\)/);
   const routes=read('src/app/router/routes.ts');
   assert.match(routes,/const learners: UserRole\[] = \['student', 'monitor'\]/);
   assert.match(routes,/path: 'register'.*roles: learners/);

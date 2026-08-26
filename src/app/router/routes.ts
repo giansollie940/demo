@@ -18,6 +18,7 @@ import type { UserRole } from '../../types/legacy'
 
 const learners: UserRole[] = ['student', 'monitor']
 const managers: UserRole[] = ['teacher', 'admin']
+const all: UserRole[] = ['student', 'monitor', 'teacher', 'admin']
 
 export const routes: RouteRecordRaw[] = [
   { path: '/login', component: LoginPage, meta: { public: true, title: 'Đăng nhập' } },
@@ -34,7 +35,7 @@ export const routes: RouteRecordRaw[] = [
       { path: 'weeks', component: WeeksPage, meta: { title: 'Quản lý tuần', roles: managers } },
       { path: 'schedule', component: SchedulePage, meta: { title: 'Thời khóa biểu', roles: managers } },
       { path: 'students', component: StudentsPage, meta: { title: 'Học sinh', roles: managers } },
-      { path: 'statistics', component: StatisticsPage, meta: { title: 'Thống kê', roles: managers } },
+      { path: 'statistics', component: StatisticsPage, meta: { title: 'Thống kê', roles: all } },
       { path: 'history', component: HistoryPage, meta: { title: 'Lịch sử', roles: learners } },
       { path: 'comments', component: CommentsPage, meta: { title: 'Nhận xét GV', roles: learners } },
       { path: 'admin', component: AdminPage, meta: { title: 'Quản trị', roles: ['admin'] } },

@@ -27,6 +27,6 @@
   --dur-short:180ms;
   --ease-out:cubic-bezier(.2,.8,.2,1);
   --sidebar-expanded:248px;
-  --sidebar-collapsed:76px;
+  --sidebar-collapsed:70px;
   --transition-fast:var(--dur-short) var(--ease-out);
 }

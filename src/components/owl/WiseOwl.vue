@@ -19,6 +19,7 @@ let raf=0,currentX=0,currentY=0,targetX=0,targetY=0,currentTilt=0,targetTilt=0
 const assets=(name:string)=>`${import.meta.env.BASE_URL}assets/images/owl/${name}`
 const contextual=computed(()=>auth.legacyState&&auth.currentUser?buildOwlContextMessages({state:auth.legacyState,user:auth.currentUser,path:route.path,weekId:context.selectedWeekId,nowMs:nowMs.value}):[])
 const urgent=computed(()=>contextual.value.some(item=>item.urgent))
+const mandatoryLearnerAlerts=computed(()=>['student','monitor'].includes(auth.currentUser?.role??''))
 
 function reduceMotion(){return window.matchMedia?.('(prefers-reduced-motion: reduce)').matches===true}
 function apply(){if(!stage.value)return;stage.value.style.setProperty('--eye-x',`${currentX.toFixed(2)}px`);stage.value.style.setProperty('--eye-y',`${currentY.toFixed(2)}px`);stage.value.style.setProperty('--head-tilt',`${currentTilt.toFixed(2)}deg`)}
@@ -40,7 +41,7 @@ function nextMessage(){
   speechOpen.value=true
 }
 function close(){speechOpen.value=false}
-function resetContext(){cursor.value=0;message.value=contextual.value[0]??null;if(message.value?.urgent&&preferences.owlAutoOpenUrgent)speechOpen.value=true;else if(!message.value?.urgent)speechOpen.value=false}
+function resetContext(){cursor.value=0;message.value=contextual.value[0]??null;if(message.value?.urgent&&(mandatoryLearnerAlerts.value||preferences.owlAutoOpenUrgent))speechOpen.value=true;else if(!message.value?.urgent)speechOpen.value=false}
 watch([()=>route.path,()=>context.selectedClassId,()=>context.selectedWeekId,contextual],resetContext)
 watch(()=>preferences.owlEnabled,enabled=>{if(!enabled){speechOpen.value=false;reset()}})
 watch([()=>preferences.owlFollowPointer,()=>preferences.owlHeadTilt],reset)

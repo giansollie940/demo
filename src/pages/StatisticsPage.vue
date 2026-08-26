@@ -15,6 +15,7 @@ import type { WeekData } from '../types/legacy'
 const auth = useAuthStore()
 const context = useContextStore()
 const state = computed(() => auth.legacyState)
+const isLearner = computed(() => auth.currentUser?.role === 'student' || auth.currentUser?.role === 'monitor')
 const classId = computed(() => context.selectedClassId)
 const weekId = computed(() => context.selectedWeekId)
 const selectedWeekQuery = useWeekData(classId, weekId)
@@ -33,20 +34,27 @@ const selectedState = computed(() => {
   const data = selectedWeekQuery.data.value
   return data ? mergeWeekData(state.value, weekId.value, data) : null
 })
-const current = computed(() => selectedState.value && weekId.value ? statisticsForWeek(selectedState.value, weekId.value) : null)
+const personalState = computed(() => {
+  const source = selectedState.value
+  const user = auth.currentUser
+  if (!source || !user || !isLearner.value) return source
+  return { ...source, users: [user], registrations: source.registrations.filter(row => row.studentId === auth.currentUser!.id) }
+})
+const current = computed(() => personalState.value && weekId.value ? statisticsForWeek(personalState.value, weekId.value) : null)
 const rows = computed(() => {
   if (!state.value || !trendQuery.data.value) return []
   return trendWeeks.value.map(week => {
     const data = trendQuery.data.value?.[week.id]
     const merged = data ? mergeWeekData(state.value!, week.id, data) : state.value!
-    return { week, ...statisticsForWeek(merged, week.id) }
+    const scoped = isLearner.value && auth.currentUser ? { ...merged, users: [auth.currentUser], registrations: merged.registrations.filter(row => row.studentId === auth.currentUser!.id) } : merged
+    return { week, ...statisticsForWeek(scoped, week.id) }
   })
 })
 const isFetching = computed(() => selectedWeekQuery.isFetching.value || trendQuery.isFetching.value)
 
 function exportCsv() {
-  if (!selectedState.value || !context.selectedWeekId) return
-  const csv = statisticsCsv(selectedState.value, context.selectedWeekId)
+  if (!personalState.value || !context.selectedWeekId) return
+  const csv = statisticsCsv(personalState.value, context.selectedWeekId)
   const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' })
   const url = URL.createObjectURL(blob)
   const anchor = document.createElement('a')
@@ -59,7 +67,7 @@ function exportCsv() {
 
 <template>
   <div class="page-stack statistics-page">
-    <header class="page-header"><div><span>THỐNG KÊ LỚP</span><h1>Tỷ lệ hoàn thành</h1><p>Đăng ký hợp lệ, trường hợp cần xử lý và xu hướng theo 12 tuần.</p></div><div class="header-actions"><AppBadge :tone="isFetching?'info':'success'">{{ isFetching?'Đang tải tuần':'Dữ liệu tuần đã tải' }}</AppBadge><AppButton variant="secondary" :disabled="!selectedState" @click="exportCsv"><Download />Xuất CSV</AppButton></div></header>
+    <header class="page-header"><div><span>{{ isLearner?'THỐNG KÊ CÁ NHÂN':'THỐNG KÊ LỚP' }}</span><h1>{{ isLearner?'Tiến độ của tôi':'Tỷ lệ hoàn thành' }}</h1><p>{{ isLearner?'Đăng ký hợp lệ, mục cần xử lý và xu hướng cá nhân theo 12 tuần.':'Đăng ký hợp lệ, trường hợp cần xử lý và xu hướng theo 12 tuần.' }}</p></div><div class="header-actions"><AppBadge :tone="isFetching?'info':'success'">{{ isFetching?'Đang tải tuần':'Dữ liệu tuần đã tải' }}</AppBadge><AppButton variant="secondary" :disabled="!personalState" @click="exportCsv"><Download />Xuất CSV</AppButton></div></header>
     <section v-if="current" class="metric-grid">
       <AppCard class="metric success"><CheckCircle2/><span>Đăng ký hợp lệ</span><b>{{ current.valid }}</b></AppCard>
       <AppCard class="metric warning"><CircleAlert/><span>Cần xử lý</span><b>{{ current.issues }}</b></AppCard>

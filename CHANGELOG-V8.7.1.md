@@ -57,3 +57,14 @@
 - Promoted the selected **TUẦN** number and date range to the primary Dashboard heading.
 - Fixed Statistics for old weeks: the selected week and 12-week trend now load canonical week data with Vue Query before calculating rates or exporting CSV.
 - Added regression coverage for profile logout ownership, desktop edge-chevron/mobile hamburger navigation, visible vanilla background layering, hover micro-interactions, week-heading prominence, and historical week statistics.
+
+## 2026-08-26 · Role-aware UI system + mandatory learner reminders
+
+- Reworked navigation into a shared role-aware design system: compact grouped sidebar when expanded and a 70px icon rail with tooltips when collapsed.
+- Student navigation is simplified to learning + personal areas; monitor adds **Hỗ trợ lớp**; teacher keeps learning/management/analysis/system groups; admin adds direct **Quản trị** entries for classes, teachers and permissions.
+- Student/monitor **Cài đặt** moved out of the sidebar into the signed-in profile dropdown. Their personal settings contain appearance, font size, Owl visibility/motion and account/password controls; teacher/admin retain operational settings in the sidebar.
+- Student/monitor statistics are personal-scoped; teacher/admin statistics remain class-scoped. Monitor Dashboard combines **Cá nhân của tôi** with **Tình hình lớp** without exposing teacher/admin administration actions.
+- Mandatory learner reminders are real Owl context rules, not optional toggles: missing future registration, revision request, and pre-session reminder. Student/monitor urgent reminders auto-open while Owl is visible even if an older optional auto-open preference was stored locally.
+- Monitor receives additional class-support reminders: learners still missing future registrations, learners needing revision, and an urgent warning when a self-study session is within 60 minutes and class registrations are still incomplete.
+- Fixed the school-pattern surface to use the actual theme token `--bg` (the previous `--background` token did not exist) and retained translucent content/card surfaces so `school-pattern-bg.png` can remain visible behind the UI.
+- Added global modern hover/micro-interactions for content actions and interactive cards while preserving `prefers-reduced-motion` and avoiding motion on passive KPI cards.

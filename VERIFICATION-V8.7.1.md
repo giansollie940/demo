@@ -12,7 +12,7 @@ Lệnh:
 npm test
 ```
 
-Kết quả cuối sau UI polish: **90/90 PASS, 0 fail**.
+Kết quả cuối sau role-aware UI + mandatory reminder refinement: **102/102 PASS, 0 fail**.
 
 Phạm vi gồm frontend V8.7.1 hiện có và contract mới cho:
 
@@ -30,8 +30,14 @@ Phạm vi gồm frontend V8.7.1 hiện có và contract mới cho:
 - Registration và Wise Owl dùng clock reactive 30 giây; Dashboard tách `revision_overdue` khỏi `needs_revision`;
 - shell có school-pattern background, logged-in profile chip và sidebar encouragement;
 - desktop sidebar dùng edge-chevron thay vì hamburger, mobile vẫn hamburger;
-- main background dùng cùng `school-pattern-bg.png` nhưng overlay giảm từ 93% xuống 84% để hoa văn nhìn thấy rõ;
+- main background dùng `school-pattern-bg.png` với lớp theme `--bg` pha khoảng 78–82% để hoa văn nhìn thấy rõ hơn;
 - sidebar items, edge toggle, icon buttons và profile chip có hover micro-interactions hiện đại; reduced-motion vẫn được tôn trọng.
+- navigation được chia nhóm theo vai trò; sidebar mở dùng compact soft groups và khi thu gọn chuyển thành icon rail 70px có tooltip;
+- HS/Cán sự truy cập tùy chọn cá nhân từ profile thay vì sidebar; HS/Cán sự có thống kê cá nhân, Cán sự có thêm khu vực Hỗ trợ lớp; GV/Admin giữ thống kê lớp và menu nghiệp vụ/quản trị;
+- cài đặt HS/Cán sự hiển thị ba cảnh báo học tập bắt buộc ở trạng thái hệ thống tự bật, không cung cấp toggle tắt;
+- Owl model thực thi nhắc chưa đăng ký, nhắc trước buổi tự học và nhắc yêu cầu chỉnh sửa cho learner; Cán sự có thêm cảnh báo lớp chưa đăng ký/cần sửa/gần buổi học chưa hoàn tất;
+- learner urgent reminder tự mở khi Owl đang hiển thị kể cả local preference auto-open cũ từng tắt;
+- school pattern dùng theme token thực `--bg` thay cho token không tồn tại `--background`, đồng thời content/card surfaces giữ độ trong để pattern có thể hiển thị.
 
 ### 2. Release verifier
 

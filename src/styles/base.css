@@ -9,7 +9,7 @@ a{color:inherit;text-decoration:none}
 img{max-width:100%;display:block}
 ::selection{background:color-mix(in srgb,var(--color-primary) 24%,transparent)}
 :focus-visible{outline:3px solid var(--focus-ring);outline-offset:2px}
-.app-card{background:linear-gradient(145deg,var(--surface),color-mix(in srgb,var(--wash-violet) 18%,var(--surface)));border:1px solid color-mix(in srgb,var(--color-primary) 8%,var(--border));border-radius:var(--radius-lg);box-shadow:var(--shadow-sm);transition:border-color var(--transition-fast),box-shadow var(--transition-fast),transform var(--transition-fast)}
+.app-card{background:linear-gradient(145deg,var(--card-glass),color-mix(in srgb,var(--wash-violet) 16%,var(--card-glass)));border:1px solid color-mix(in srgb,var(--color-primary) 8%,var(--border));border-radius:var(--radius-lg);box-shadow:var(--shadow-sm);transition:border-color var(--transition-fast),box-shadow var(--transition-fast),transform var(--transition-fast)}
 .app-card:hover{border-color:color-mix(in srgb,var(--color-primary) 18%,var(--border));box-shadow:0 10px 28px rgb(54 44 104 / .11)}
 .page-stack{display:grid;gap:var(--space-6)}
 .page-stack>*{min-width:0}
@@ -39,3 +39,16 @@ img{max-width:100%;display:block}
 .skeleton-shimmer{position:relative;overflow:hidden;background:color-mix(in srgb,var(--surface-soft) 86%,var(--wash-sky));border-radius:12px;min-height:18px}.skeleton-shimmer::after{content:"";position:absolute;inset:0;transform:translateX(-110%);background:linear-gradient(90deg,transparent,color-mix(in srgb,#fff 48%,transparent),transparent);animation:skeletonShimmer 1.35s ease-in-out infinite}.syncing svg{animation:syncOrbit 1.1s linear infinite}
 @keyframes dataLoadingSweep{0%{transform:translateX(-110%)}100%{transform:translateX(300%)}}@keyframes skeletonShimmer{100%{transform:translateX(110%)}}@keyframes syncOrbit{to{transform:rotate(360deg)}}
 @media(prefers-reduced-motion:reduce){[data-loading="true"]::after,.skeleton-shimmer::after,.syncing svg{animation:none!important}}
+
+/* Role-aware UI polish: compact content controls, tactile links, optional interactive cards. */
+html[data-font-scale='large']{font-size:17px}
+button:not(.app-button):not(.icon-button):not(:disabled){transition:transform var(--transition-fast),box-shadow var(--transition-fast),border-color var(--transition-fast),background var(--transition-fast),color var(--transition-fast),filter var(--transition-fast)}
+.page-stack button:not(.app-button):not(.icon-button):not(:disabled):hover{transform:translateY(-1px);filter:saturate(1.06);box-shadow:0 7px 18px rgb(54 44 104 / .08)}
+.page-stack button:not(.app-button):not(.icon-button):not(:disabled):active{transform:translateY(0) scale(.98)}
+.interactive-card{position:relative;transition:transform var(--transition-fast),box-shadow var(--transition-fast),border-color var(--transition-fast)}
+.interactive-card:hover{transform:translateY(-3px);border-color:color-mix(in srgb,var(--color-primary) 28%,var(--border));box-shadow:0 15px 34px rgb(54 44 104 / .14)}
+.interactive-link{position:relative;transition:transform var(--transition-fast),color var(--transition-fast),filter var(--transition-fast)}
+.interactive-link:hover{transform:translateX(3px);filter:saturate(1.12)}
+.page-stack input,.page-stack select,.page-stack textarea{transition:border-color var(--transition-fast),box-shadow var(--transition-fast),background var(--transition-fast),transform var(--transition-fast)}
+.page-stack input:hover,.page-stack select:hover,.page-stack textarea:hover{border-color:color-mix(in srgb,var(--color-primary) 28%,var(--border))}
+@media(prefers-reduced-motion:reduce){button:not(.app-button):not(.icon-button),.interactive-card,.interactive-link,.page-stack input,.page-stack select,.page-stack textarea{transition:none!important}.page-stack button:not(.app-button):not(.icon-button):hover,.page-stack button:not(.app-button):not(.icon-button):active,.interactive-card:hover,.interactive-link:hover{transform:none!important}}
