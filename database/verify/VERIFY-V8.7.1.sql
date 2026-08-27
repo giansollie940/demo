@@ -40,6 +40,17 @@ checks AS (
        and position('week_schedule_overrides' in pg_get_functiondef(p.oid))>0
     FROM pg_proc p WHERE p.oid=to_regprocedure('public.class_week_effective_status(uuid,uuid)')
   ),false)
+  UNION ALL SELECT 'school_year_periods_table',to_regclass('public.school_year_periods') IS NOT NULL
+  UNION ALL SELECT 'school_year_periods_seeded',to_regclass('public.school_year_periods') IS NOT NULL and not exists(
+    SELECT 1 FROM public.school_years y
+    WHERE NOT EXISTS(SELECT 1 FROM public.school_year_periods p WHERE p.school_year_id=y.id)
+  )
+  UNION ALL SELECT 'study_session_start_year_periods',coalesce((
+    SELECT position('school_year_periods' in pg_get_functiondef(p.oid))>0
+    FROM pg_proc p WHERE p.oid=to_regprocedure('public.study_session_start(uuid,integer,integer)')
+  ),false)
+  UNION ALL SELECT 'school_year_period_replace_rpc',to_regprocedure('public.admin_replace_school_year_periods(uuid,uuid,jsonb)') IS NOT NULL
+  UNION ALL SELECT 'school_year_period_replace_rpc_security_definer',coalesce((select prosecdef from pg_proc where oid=to_regprocedure('public.admin_replace_school_year_periods(uuid,uuid,jsonb)')),false)
   UNION ALL SELECT 'daily_quotes_table',to_regclass('public.daily_quotes') IS NOT NULL
   UNION ALL SELECT 'root_admin_exactly_one',(SELECT total=1 FROM root_admin)
   UNION ALL SELECT 'root_admin_active',(SELECT active_total=1 FROM root_admin)

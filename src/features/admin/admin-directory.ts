@@ -19,6 +19,13 @@ export interface AdminCalendarWeekRecord {
   status:string
 }
 
+export interface AdminSchoolYearPeriodRecord {
+  schoolYearId:string
+  number:number
+  start:string
+  end:string
+}
+
 export interface AdminClassRecord {
   id:string
   schoolYearId:string
@@ -45,6 +52,7 @@ export interface AdminAssignmentRecord {
 export interface AdminDirectory {
   schoolYears:AdminSchoolYearRecord[]
   weeks:AdminCalendarWeekRecord[]
+  periods:AdminSchoolYearPeriodRecord[]
   classes:AdminClassRecord[]
   teachers:AdminTeacherRecord[]
   assignments:AdminAssignmentRecord[]
@@ -63,6 +71,10 @@ export function normalizeAdminDirectory(raw:Record<string,unknown>):AdminDirecto
     const row=item as Record<string,unknown>
     return {id:text(row.id),schoolYearId:text(row.school_year_id??row.schoolYearId),number:num(row.week_number??row.number),startDate:text(row.start_date??row.startDate),endDate:text(row.end_date??row.endDate),status:text(row.status||'upcoming')}
   }).filter(row=>row.id&&row.schoolYearId)
+  const periods=(Array.isArray(raw.periods)?raw.periods:Array.isArray(raw.schoolYearPeriods)?raw.schoolYearPeriods:[]).map(item=>{
+    const row=item as Record<string,unknown>
+    return {schoolYearId:text(row.school_year_id??row.schoolYearId),number:num(row.period_number??row.number),start:text(row.start_time??row.start).slice(0,5),end:text(row.end_time??row.end).slice(0,5)}
+  }).filter(row=>row.schoolYearId&&row.number>0)
   const classes=(Array.isArray(raw.classes)?raw.classes:[]).map(item=>{
     const row=item as Record<string,unknown>
     return {
@@ -80,7 +92,7 @@ export function normalizeAdminDirectory(raw:Record<string,unknown>):AdminDirecto
     const row=item as Record<string,unknown>
     return {classId:text(row.class_id??row.classId),teacherId:text(row.teacher_id??row.teacherId),active:on(row.active)}
   }).filter(row=>row.classId&&row.teacherId)
-  return {schoolYears,weeks,classes,teachers,assignments}
+  return {schoolYears,weeks,periods,classes,teachers,assignments}
 }
 
 export const adminDirectoryKey=['admin-directory'] as const
@@ -99,3 +111,5 @@ export async function deleteTeacher(runtime:AdminMutationRuntime,userId:string,c
 export async function createSchoolYear(runtime:AdminMutationRuntime,input:{name:string;startDate:string;endDate:string;setActive:boolean}){const result=await legacyApi.adminManageClasses('create_school_year',input);await refresh(runtime);return result}
 export async function setActiveSchoolYear(runtime:AdminMutationRuntime,schoolYearId:string){const result=await legacyApi.adminManageClasses('set_active_school_year',{schoolYearId});await refresh(runtime);return result}
 export async function updateSchoolYearWeek(runtime:AdminMutationRuntime,input:{weekId:string;startDate:string;endDate:string}){const result=await legacyApi.adminManageClasses('update_school_year_week',input);await refresh(runtime);return result}
+
+export async function updateSchoolYearPeriods(runtime:AdminMutationRuntime,input:{schoolYearId:string;periods:Array<{number:number;start:string;end:string}>}){const result=await legacyApi.adminManageClasses('update_school_year_periods',input);await refresh(runtime);return result}

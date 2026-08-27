@@ -735,6 +735,12 @@
       availableYears=selectedYear?[selectedYear]:[];
     }
 
+    const yearPeriodsRes=selectedYear
+      ?await sb.from("school_year_periods").select("school_year_id,period_number,start_time,end_time").eq("school_year_id",selectedYear.id).order("period_number")
+      :{data:[],error:null};
+    if(yearPeriodsRes.error)throw yearPeriodsRes.error;
+    const effectivePeriods=(yearPeriodsRes.data&&yearPeriodsRes.data.length)?yearPeriodsRes.data:(periodsRes.data||[]);
+
     const visibleClasses=allClasses.filter(c=>!selectedYear||c.school_year_id===selectedYear.id);
     let activeClassId=profile.class_id||null;
     if(isManager){
@@ -813,7 +819,7 @@
         registrationDeadlineTime:/^([01]\d|2[0-3]):[0-5]\d$/.test(String(cs.per_session_deadline_time||""))?String(cs.per_session_deadline_time).slice(0,5):"20:00"
       },
       users,weeks,
-      periods:(periodsRes.data||[]).map(p=>({n:p.period_number,start:String(p.start_time).slice(0,5),end:String(p.end_time).slice(0,5)})),
+      periods:effectivePeriods.map(p=>({n:p.period_number,start:String(p.start_time).slice(0,5),end:String(p.end_time).slice(0,5)})),
       schedule:(scheduleRes.data||[]).map(x=>({dow:Number(x.weekday)-1,period:x.period_number})),
       overrides:weekData.overrides,registrations,aiFeedbackMemoryStats:memory,
       notifications:(notificationsRes.data||[]).map(n=>({id:n.id,classId:n.class_id,registrationId:n.registration_id,studentId:n.student_id,weekId:n.week_id,type:n.notification_type,title:n.title,message:n.message||"",isRead:n.is_read===true,createdAt:n.created_at})),

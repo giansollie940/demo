@@ -1,10 +1,20 @@
+## Period theo năm học + Week master-detail + Dock displacement — 2026-08-27
+
+- Bubble Năm học chỉ hiển thị chấm xanh 7px khi năm đang chọn là active; bỏ chuỗi `· Đang hoạt động` khỏi selector.
+- `WeeksPage.vue` chuyển sang master–detail: danh sách tuần bên trái và đúng một editor tuần bên phải, không mở đồng thời hàng chục form.
+- Thêm `public.school_year_periods` để giữ khung giờ tiết riêng theo từng năm học; migration seed từ `public.periods` cho toàn bộ năm hiện có và năm mới tự nhận baseline.
+- `study_session_start()` và `class_week_effective_status()` ưu tiên `school_year_periods`, fallback `periods`, nên deadline/revision/lifecycle dùng đúng giờ của năm học lịch sử.
+- Admin tab Năm học có editor khung giờ từng tiết và action root-admin `update_school_year_periods` → RPC `admin_replace_school_year_periods`.
+- Sidebar Dock bổ sung displacement: icon liền kề tách 5–7px, icon cách 2 tách 2–3px, các icon xa nhỏ nhẹ ở collapsed mode; có safe-zone dưới logo và reduced-motion reset.
+- Static regression cuối: **136/136 PASS**; frontend syntax 81/81; Edge TS 17/17; release verifier PASS với 10/10 Edge ZIP.
+
 ## Role / year / macOS Dock verification — 2026-08-27
 
-- Static regression hiện tại: **131/131 PASS**.
+- Static regression hiện tại: **136/136 PASS**.
 - Contract mới `tests/v871-role-year-macos-final.test.mjs`: **8/8 PASS**.
 - Frontend `.ts` + Vue `<script setup>` syntax transpile bằng TypeScript 5.8.3: **81 scripts, 0 syntax errors**.
 - Edge TypeScript syntax/transpile: **17 files, 0 syntax errors**.
-- `npm run verify:release`: **PASS**; 10/10 Edge ZIP import-resolvable, không phát hiện secret; lần chạy trước khi đóng artifact đã hash **195 files**.
+- `npm run verify:release`: **PASS**; 10/10 Edge ZIP import-resolvable, không phát hiện secret; lần chạy trước khi đóng artifact đã hash **196 files**.
 - Admin route/navigation đã tách khỏi nghiệp vụ GV; Admin chỉ có `/admin`, còn teacher giữ review/tracking/weeks/schedule/students/statistics/settings.
 - Admin year count hợp nhất directory + legacy context; tab Năm học có action root-admin sửa ngày tuần chuẩn.
 - `class_weeks.manual_status` và `class_week_effective_status` có contract cho manual override + automatic last-self-study-session lifecycle.
@@ -26,7 +36,7 @@ Lệnh:
 npm test
 ```
 
-Kết quả cuối của source hiện tại: **131/131 PASS, 0 fail**.
+Kết quả cuối của source hiện tại: **136/136 PASS, 0 fail**.
 
 Phạm vi gồm frontend V8.7.1 hiện có và contract mới cho:
 

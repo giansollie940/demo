@@ -11,7 +11,7 @@ import AdminClassCard from '../components/admin/AdminClassCard.vue'
 import AdminTeacherCard from '../components/admin/AdminTeacherCard.vue'
 import AdminSchoolYearCard from '../components/admin/AdminSchoolYearCard.vue'
 import PermissionMatrix from '../components/admin/PermissionMatrix.vue'
-import { assignTeacher, createClass, createSchoolYear, createTeacher, deleteClass, deleteTeacher, setActiveSchoolYear, updateClass, updateSchoolYearWeek, updateTeacher, useAdminDirectory, type AdminMutationRuntime } from '../features/admin/admin-directory'
+import { assignTeacher, createClass, createSchoolYear, createTeacher, deleteClass, deleteTeacher, setActiveSchoolYear, updateClass, updateSchoolYearPeriods, updateSchoolYearWeek, updateTeacher, useAdminDirectory, type AdminMutationRuntime } from '../features/admin/admin-directory'
 import { useAuthStore } from '../stores/auth'
 import { useContextStore } from '../stores/context'
 
@@ -23,7 +23,7 @@ const yearForm=reactive({name:'',startDate:'',endDate:'',setActive:true}),classF
 
 watch(()=>route.query.tab,value=>{const next=String(value??'');tab.value=validTabs.includes(next)?next:'overview'})
 watch(tab,value=>{const target=value==='overview'?{}:{tab:value};if(String(route.query.tab??'')!==(value==='overview'?'':value))void router.replace({path:'/admin',query:target})})
-const data=computed(()=>directory.data.value??{schoolYears:[],weeks:[],classes:[],teachers:[],assignments:[]})
+const data=computed(()=>directory.data.value??{schoolYears:[],weeks:[],periods:[],classes:[],teachers:[],assignments:[]})
 const mergedSchoolYears=computed(()=>{const schoolYearsById=new Map(context.schoolYears.map(item=>[item.id,{...item}]));for(const item of data.value.schoolYears){schoolYearsById.set(item.id,{...(schoolYearsById.get(item.id)??{}),...item})}return [...schoolYearsById.values()].sort((a,b)=>String(b.startDate).localeCompare(String(a.startDate)))})
 const schoolYearCount=computed(()=>mergedSchoolYears.value.length)
 const selectedYearId=computed(()=>context.selectedSchoolYearId||auth.legacyState?.selectedSchoolYearId||auth.legacyState?.activeSchoolYearId||null)
@@ -37,7 +37,9 @@ async function run(key:string,task:()=>Promise<unknown>,message:string){busyKey.
 async function submitYear(){const name=yearForm.name.trim();if(!name||!yearForm.startDate||!yearForm.endDate)return;if(yearForm.endDate<yearForm.startDate){status.value='error';statusMessage.value='Ngày kết thúc năm học phải sau ngày bắt đầu tuần 1.';return}let createdId='';await run('create-year',async()=>{const result=await createSchoolYear(runtime(),{name,startDate:yearForm.startDate,endDate:yearForm.endDate,setActive:yearForm.setActive});createdId=String((result as {schoolYearId?:unknown})?.schoolYearId??'')},'Đã tạo năm học và các tuần cơ sở.');if(createdId&&yearForm.setActive){context.selectSchoolYear(createdId);await auth.reload(null,createdId);context.hydrate(auth.legacyState)}if(status.value==='success'){yearForm.name='';yearForm.startDate='';yearForm.endDate='';yearForm.setActive=true;showYearForm.value=false}}
 async function activateYear(id:string){if(!window.confirm('Đặt năm học này thành năm học đang hoạt động?'))return;await run(`year:${id}`,()=>setActiveSchoolYear(runtime(),id),'Đã chuyển năm học đang hoạt động.');if(status.value==='success'){context.selectSchoolYear(id);await auth.reload(null,id);context.hydrate(auth.legacyState)}}
 function yearWeeks(yearId:string){return data.value.weeks.filter(item=>item.schoolYearId===yearId).sort((a,b)=>a.number-b.number)}
-async function saveYearWeek(input:{weekId:string;startDate:string;endDate:string}){await run(`week:${input.weekId}`,()=>updateSchoolYearWeek(runtime(),input),'Đã cập nhật lịch tuần chuẩn.')} 
+function yearPeriods(yearId:string){return data.value.periods.filter(item=>item.schoolYearId===yearId).sort((a,b)=>a.number-b.number)}
+async function saveYearWeek(input:{weekId:string;startDate:string;endDate:string}){await run(`week:${input.weekId}`,()=>updateSchoolYearWeek(runtime(),input),'Đã cập nhật lịch tuần chuẩn.')}
+async function saveYearPeriods(input:{schoolYearId:string;periods:Array<{number:number;start:string;end:string}>}){await run(`periods:${input.schoolYearId}`,()=>updateSchoolYearPeriods(runtime(),input),'Đã cập nhật khung giờ tiết học của năm học.')} 
 async function submitClass(){const code=classForm.code.trim().toUpperCase(),name=classForm.name.trim();if(!code||!name||!selectedYearId.value)return;await run('create-class',()=>createClass(runtime(),{code,name,schoolYearId:selectedYearId.value}),'Đã tạo lớp.');classForm.code='';classForm.name='';showClassForm.value=false}
 async function editClass(id:string){const item=data.value.classes.find(row=>row.id===id);if(!item)return;const code=window.prompt('Mã lớp:',item.code)?.trim().toUpperCase();if(!code)return;const name=window.prompt('Tên lớp:',item.name)?.trim();if(!name)return;await run(`class:${id}`,()=>updateClass(runtime(),id,{code,name}),'Đã cập nhật lớp.')}
 async function toggleClass(id:string){const item=data.value.classes.find(row=>row.id===id);if(!item)return;if(item.active&&!window.confirm('Khóa lớp này? Backend chỉ cho phép khi trạng thái hợp lệ.'))return;await run(`class:${id}`,()=>updateClass(runtime(),id,{active:!item.active}),item.active?'Đã khóa lớp.':'Đã kích hoạt lớp.')}
@@ -61,7 +63,7 @@ async function permission(payload:{classId:string;teacherId:string;enabled:boole
     <template v-else-if="tab==='years'">
       <div class="section-actions"><div><h2>Năm học</h2><p>{{ schoolYearCount }} năm học. Chỉ một năm được đặt là đang hoạt động.</p></div><AppButton @click="showYearForm=!showYearForm"><Plus/>Tạo năm học</AppButton></div>
       <AppCard v-if="showYearForm" padding="md"><form class="quick-form year-form" @submit.prevent="submitYear"><label>Tên năm học<input v-model="yearForm.name" required maxlength="40" placeholder="2027–2028"></label><label>Ngày bắt đầu tuần 1<input v-model="yearForm.startDate" type="date" required></label><label>Ngày kết thúc năm học<input v-model="yearForm.endDate" type="date" required></label><label class="check-field"><input v-model="yearForm.setActive" type="checkbox">Đặt là năm học đang hoạt động</label><AppButton type="submit" :loading="busyKey==='create-year'">Tạo năm học</AppButton></form></AppCard>
-      <section class="year-grid"><AdminSchoolYearCard v-for="item in mergedSchoolYears" :key="item.id" :item="item" :weeks="yearWeeks(item.id)" :busy="busyKey===`year:${item.id}`" :busy-week-id="busyKey?.startsWith('week:')?busyKey.slice(5):null" @activate="activateYear" @save-week="saveYearWeek"/></section>
+      <section class="year-grid"><AdminSchoolYearCard v-for="item in mergedSchoolYears" :key="item.id" :item="item" :weeks="yearWeeks(item.id)" :periods="yearPeriods(item.id)" :busy="busyKey===`year:${item.id}`" :busy-week-id="busyKey?.startsWith('week:')?busyKey.slice(5):null" :busy-periods="busyKey===`periods:${item.id}`" @activate="activateYear" @save-week="saveYearWeek" @save-periods="saveYearPeriods"/></section>
     </template>
 
     <template v-else-if="tab==='classes'">

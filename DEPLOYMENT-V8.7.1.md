@@ -8,7 +8,7 @@
 
 ## Thứ tự bắt buộc cho bản có Quản lý Năm học
 
-Bản frontend/Edge Function này phụ thuộc vào RPC quản lý năm học và patch vận hành tuần mới (`class_weeks.manual_status` + `class_week_effective_status`). Với database đang chạy, triển khai theo đúng thứ tự:
+Bản frontend/Edge Function này phụ thuộc vào RPC quản lý năm học, patch vận hành tuần (`class_weeks.manual_status` + `class_week_effective_status`) và bảng khung giờ theo năm học `school_year_periods`. Với database đang chạy, triển khai theo đúng thứ tự:
 
 ```text
 Backup database
@@ -72,7 +72,7 @@ Chạy:
 database/verify/VERIFY-V8.7.1.sql
 ```
 
-Yêu cầu `overall = true`. Verifier bản này còn phải báo PASS cho `class_week_manual_status_column` và `class_week_effective_status_manual_override`.
+Yêu cầu `overall = true`. Verifier bản này còn phải báo PASS cho `class_week_manual_status_column`, `class_week_effective_status_manual_override`, `school_year_periods_table`, `school_year_periods_seeded`, `study_session_start_year_periods` và `school_year_period_replace_rpc`.
 
 Khi kiểm tra riêng routing AI đã completed, chạy thêm:
 
@@ -135,18 +135,19 @@ Kiểm tra tối thiểu theo vai trò:
 2. Admin tab **Năm học** thấy `2026–2027` đang hoạt động; KPI số năm học không được bằng 0 khi context đã có năm active.
 3. Admin tạo/kích hoạt một năm học thử; kiểm tra chỉ một năm có `is_active = true`.
 4. Admin sửa ngày bắt đầu/kết thúc một **tuần chuẩn** trong tab Năm học; reload lại và xác nhận ngày được giữ.
-5. Admin tạo/sửa lớp, phân công GV, quản lý GV/phân quyền; không có các màn Duyệt đăng ký, Quản lý tuần, TKB, Thống kê lớp của GV.
-6. **GV** đăng nhập thấy Năm học + Lớp + Tuần; không thể mở trang Admin và không có action sửa tên lớp/năm học hoặc ngày chuẩn của tuần.
-7. GV `Quản lý tuần`: thử `Tự động → Mở thủ công → Đóng thủ công → Tự động`, lưu/reload và xác nhận `manual_status` lần lượt `null/open/locked/null`.
-8. Ở chế độ **Tự động**, xác nhận thời điểm hiển thị “Tự động đóng sau buổi tự học cuối” khớp buổi cuối của TKB tuần; sau boundary, tuần cũ khóa và lifecycle chuyển sang tuần kế tiếp.
-9. GV thay deadline/tuần nghỉ/ghi chú/TKB tuần và xác nhận chỉ ảnh hưởng lớp đang chọn.
-10. GV duyệt/yêu cầu sửa đăng ký; Wise Owl hết chấm đỏ sau khi xử lý xong nếu không còn registration thực sự cần GV.
-11. **Cán sự** chỉ có chức năng cá nhân + Theo dõi lớp giới hạn; không có Duyệt, Quản lý tuần, TKB hay cấu hình AI.
-12. **HS** chỉ có chức năng cá nhân; yêu cầu sửa không hoàn tất trước giờ bắt đầu chuyển sang **Báo cáo lỗi**.
-13. Statistics của GV ở tuần cũ phải tải đúng dữ liệu tuần đã chọn; HS/Cán sự chỉ thấy thống kê cá nhân.
-14. Đổi light/dark mode: nền warm pattern chuyển mượt; dark mode không bị ảnh nền làm bạc/chớp.
-15. Sidebar macOS Dock: mục hover nổi/phóng, hai mục lân cận phóng nhẹ, vòng gradient chỉ xoay một lần; reduced-motion không magnify/rotate.
-16. Realtime không tạo subscription trùng khi đổi trang/lớp/tuần.
+5. Admin sửa **Khung giờ tiết học** của năm đang chọn, lưu/reload và xác nhận giờ được giữ; kiểm tra một năm học khác vẫn giữ giờ riêng.
+6. Admin tạo/sửa lớp, phân công GV, quản lý GV/phân quyền; không có các màn Duyệt đăng ký, Quản lý tuần, TKB, Thống kê lớp của GV.
+7. **GV** đăng nhập thấy Năm học + Lớp + Tuần; không thể mở trang Admin và không có action sửa tên lớp/năm học hoặc ngày chuẩn của tuần.
+8. GV `Quản lý tuần`: thử `Tự động → Mở thủ công → Đóng thủ công → Tự động`, lưu/reload và xác nhận `manual_status` lần lượt `null/open/locked/null`.
+9. Ở chế độ **Tự động**, xác nhận thời điểm hiển thị “Tự động đóng sau buổi tự học cuối” khớp buổi cuối của TKB tuần; sau boundary, tuần cũ khóa và lifecycle chuyển sang tuần kế tiếp.
+10. GV thay deadline/tuần nghỉ/ghi chú/TKB tuần và xác nhận chỉ ảnh hưởng lớp đang chọn.
+11. GV duyệt/yêu cầu sửa đăng ký; Wise Owl hết chấm đỏ sau khi xử lý xong nếu không còn registration thực sự cần GV.
+12. **Cán sự** chỉ có chức năng cá nhân + Theo dõi lớp giới hạn; không có Duyệt, Quản lý tuần, TKB hay cấu hình AI.
+13. **HS** chỉ có chức năng cá nhân; yêu cầu sửa không hoàn tất trước giờ bắt đầu chuyển sang **Báo cáo lỗi**.
+14. Statistics của GV ở tuần cũ phải tải đúng dữ liệu tuần đã chọn; HS/Cán sự chỉ thấy thống kê cá nhân.
+15. Đổi light/dark mode: nền warm pattern chuyển mượt; dark mode không bị ảnh nền làm bạc/chớp.
+16. Sidebar macOS Dock: mục hover nổi/phóng, hai mục lân cận phóng nhẹ, vòng gradient chỉ xoay một lần; reduced-motion không magnify/rotate.
+17. Realtime không tạo subscription trùng khi đổi trang/lớp/tuần.
 
 ## 8. Rollback
 

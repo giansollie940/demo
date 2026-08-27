@@ -121,3 +121,12 @@
 - Hovering a navigation icon runs one short warm violet/coral/amber `conic-gradient` ring rotation; the active item does not spin continuously, and `prefers-reduced-motion` disables the animation.
 - Added regression coverage for school-year state/selector behavior, Admin create/activate contracts, selected-year week rebasing, duplicate-class removal, bubble navigation and hover-ring motion.
 
+
+## 2026-08-27 · Period theo năm học + Week master-detail + macOS Dock displacement
+
+- School-year bubble no longer appends `· Đang hoạt động`; a small green status dot indicates the active year.
+- Teacher `Quản lý tuần` now uses a master–detail layout: searchable/filterable week list on the left, one editable week on the right.
+- Added `school_year_periods` so Admin can define period start/end times per school year without rewriting historical years. Existing years are seeded from the legacy global `periods` table.
+- Added root-admin action `update_school_year_periods` backed by SECURITY DEFINER RPC `admin_replace_school_year_periods`; overlap and invalid time ranges are rejected.
+- `study_session_start()` and automatic class-week lifecycle now resolve period times from the week's school year first, with the global period table as compatibility fallback.
+- Sidebar Dock now combines magnification with neighbor displacement/shrink and a fixed navigation safe zone below the brand, preventing enlarged icons from colliding with each other or the app logo. The one-shot rotating warm gradient ring remains.
