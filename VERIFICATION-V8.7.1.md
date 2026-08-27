@@ -1,6 +1,6 @@
 # Verification — SỔ TỰ HỌC V8.7.1 Full Stack
 
-Ngày kiểm tra: 2026-08-26
+Ngày kiểm tra: 2026-08-27
 
 ## Kết quả đã xác minh trong workspace này
 
@@ -12,7 +12,7 @@ Lệnh:
 npm test
 ```
 
-Kết quả cuối sau warm flat sidebar + independent pattern refinement: **108/108 PASS, 0 fail**.
+Kết quả cuối sau soft floating topbar bubble refinement: **112/112 PASS, 0 fail**.
 
 Phạm vi gồm frontend V8.7.1 hiện có và contract mới cho:
 
@@ -38,6 +38,8 @@ Phạm vi gồm frontend V8.7.1 hiện có và contract mới cho:
 - Owl model thực thi nhắc chưa đăng ký, nhắc trước buổi tự học và nhắc yêu cầu chỉnh sửa cho learner; Cán sự có thêm cảnh báo lớp chưa đăng ký/cần sửa/gần buổi học chưa hoàn tất;
 - learner urgent reminder tự mở khi Owl đang hiển thị kể cả local preference auto-open cũ từng tắt;
 - school pattern dùng layer độc lập `main::before` với `--pattern-opacity`; light mode dùng nền kem/đào ấm và pattern rõ hơn, dark mode giảm pattern xuống 2.5% để không ảnh hưởng tương phản.
+- topbar dùng các bubble/pill nổi riêng cho class/year, class, week, theme và profile; không còn full-width bottom divider. Sidebar cũng bỏ các divider cứng và dùng shadow mềm.
+- GV/Admin không còn mục `Cài đặt` trùng lặp trong profile dropdown; HS/Cán sự vẫn có `Tùy chọn cá nhân` trong profile.
 
 ### 2. Release verifier
 

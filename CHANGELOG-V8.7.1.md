@@ -79,3 +79,12 @@
 - Dark mode now uses a warm charcoal-plum palette (`#17151c` / `#211e29`) and reduces the pattern to 2.5% with a darker filter so the texture remains subtle and cannot wash out dark surfaces.
 - Added a shared 260ms theme transition for body/shell/sidebar/main/topbar surfaces and pattern opacity/filter, producing a smoother light ↔ dark switch without a bright pattern flash.
 - Preserved modern hover micro-interactions for navigation, profile, icon buttons and content actions, including reduced-motion safeguards.
+
+## 2026-08-27 · Soft floating topbar bubbles
+
+- Replaced the full-width topbar divider treatment with separate floating bubble surfaces for class/year identity, class selector, week selector, theme action and signed-in profile.
+- Removed the hard topbar bottom rule plus sidebar right/header divider rules; subtle elevation now separates navigation/header from the warm patterned canvas.
+- Refined context selectors into pill controls with warm translucent surfaces, rounded 999px geometry and hover lift instead of boxed toolbar segments.
+- Restyled the profile dropdown as a softer rounded popover card with warm peach/violet surfaces and no internal divider lines.
+- Removed duplicated **Cài đặt** from teacher/admin profile dropdowns. Teacher/admin continue to use the sidebar Settings entry; student/monitor retain **Tùy chọn cá nhân** in their profile menu.
+- Added regression coverage for floating bubble composition, soft hover elevation, role-aware profile settings visibility and removal of hard shell divider lines.
