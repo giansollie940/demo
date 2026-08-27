@@ -22,8 +22,9 @@
   --wash-pink:#fff0f6;
   --wash-peach:#fff0e4;
   --wash-cream:#fff8e9;
-  --pattern-opacity:.14;
-  --pattern-filter:saturate(.96) contrast(.98);
+  --pattern-opacity:1;
+  --pattern-filter:none;
+  --pattern-dark-overlay:transparent;
 }
 [data-theme='dark'] {
   color-scheme:dark;
@@ -49,6 +50,7 @@
   --wash-pink:#3d2735;
   --wash-peach:#392a29;
   --wash-cream:#352f26;
-  --pattern-opacity:.025;
-  --pattern-filter:saturate(.62) brightness(.72) contrast(.9);
+  --pattern-opacity:1;
+  --pattern-filter:saturate(.72) brightness(.78) contrast(.92);
+  --pattern-dark-overlay:linear-gradient(rgb(23 21 28 / .84),rgb(23 21 28 / .88));
 }

@@ -35,8 +35,9 @@ test('main surface uses an independent vanilla school-pattern layer above the wa
   assert.match(shell,/\.main::before/)
   assert.match(shell,/background-image:var\(--school-pattern-image\)/)
   assert.match(shell,/background-size:(?:920|1100)px\s+auto/)
-  assert.match(shell,/opacity:var\(--pattern-opacity\)/)
-  assert.match(shell,/mix-blend-mode:multiply/)
+  assert.match(shell,/opacity:1/)
+  assert.doesNotMatch(shell,/mix-blend-mode:multiply/)
+  assert.match(shell,/\.main::after[\s\S]*--pattern-dark-overlay/)
 })
 
 
@@ -47,7 +48,7 @@ test('sidebar, icon buttons, and profile chip use modern hover micro-interaction
   const shell=read('src/layouts/AppShell.vue')
   assert.match(nav,/hoveredIndex/)
   assert.match(nav,/dockScale/)
-  assert.match(nav,/\.nav-item:hover[^}]*scale\(var\(--dock-scale\)/s)
+  assert.match(nav,/transform:translateY\(var\(--dock-shift-y\)\) translateX\(var\(--dock-lift-x\)\) scale\(var\(--dock-scale\)\)/)
   assert.match(nav,/\.nav-item:hover[^}]*[+~ ]?[^\n]*svg|\.nav-item:hover\s*:deep\(svg\)/s)
   assert.match(icon,/\.icon-button::before\{/)
   assert.match(icon,/\.icon-button:hover\{[^}]*scale\(1\.06\)/s)

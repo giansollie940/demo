@@ -130,3 +130,14 @@
 - Added root-admin action `update_school_year_periods` backed by SECURITY DEFINER RPC `admin_replace_school_year_periods`; overlap and invalid time ranges are rejected.
 - `study_session_start()` and automatic class-week lifecycle now resolve period times from the week's school year first, with the global period table as compatibility fallback.
 - Sidebar Dock now combines magnification with neighbor displacement/shrink and a fixed navigation safe zone below the brand, preventing enlarged icons from colliding with each other or the app logo. The one-shot rotating warm gradient ring remains.
+
+## 2026-08-27 — Admin hard-delete + audit + vertical Dock + vanilla background
+
+- Admin sidebar now exposes seven direct system areas: Tổng quan, Năm học, Lớp học, Học sinh, Giáo viên, Phân quyền, Nhật ký hệ thống.
+- Admin can manage all learner/monitor accounts system-wide and permanently delete learner/monitor accounts after code + `XÓA VĨNH VIỄN` confirmation.
+- Admin can permanently delete teacher accounts only after all active class assignments are removed. Root Admin and the currently signed-in Admin cannot be hard-deleted.
+- Teacher account deletion remains soft-delete/class-scoped; teacher workflows were not upgraded to hard-delete.
+- `audit-log` now has a root-admin-only read mode with bounded filtering; Admin receives a system audit table and before/after detail drawer.
+- Admin teacher management adds edit/reset-password/hard-delete controls. Learner management adds create/edit/transfer/role/lock-restore/reset-password/hard-delete controls.
+- Vertical macOS Dock now lifts the hovered item to the right, shrinks/displaces neighboring items vertically, opens real layout gaps, and reserves a larger brand safe zone so the first item cannot overlap the favicon.
+- Light mode renders the vanilla `school-pattern-bg.png` at full visibility without multiply/color overlay. Dark mode keeps the same image and fades a charcoal-plum overlay above it.

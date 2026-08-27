@@ -11,7 +11,7 @@ test('admin navigation and routes are system-only while teacher retains class op
   const nav=read('src/features/navigation/navigation.ts')
   const routes=read('src/app/router/routes.ts')
   const guard=read('src/app/router/index.ts')
-  assert.match(nav,/admin:\s*\['Quản trị hệ thống'\]/)
+  assert.match(nav,/admin:\s*\['Tổng quan','Năm học','Lớp học','Học sinh','Giáo viên','Phân quyền','Nhật ký hệ thống'\]/)
   assert.match(nav,/teacher:\s*\[[^\]]*'Duyệt đăng ký'[^\]]*'Quản lý tuần'[^\]]*'Cài đặt'/s)
   assert.doesNotMatch(routes,/const managers: UserRole\[\] = \['teacher', 'admin'\]/)
   for(const pathName of ['review','weeks','schedule','students']){
@@ -38,7 +38,8 @@ test('admin year overview merges directory and legacy context so an active year 
   assert.match(page,/context\.schoolYears/)
   assert.match(page,/schoolYearsById|new Map/)
   assert.match(page,/mergedSchoolYears\.value\.length/)
-  assert.match(page,/Đang hoạt động/)
+  assert.match(page,/mergedSchoolYears\.value\.length/)
+  assert.doesNotMatch(page,/overview-copy[\s\S]*Đang hoạt động/)
 })
 
 

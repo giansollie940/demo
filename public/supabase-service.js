@@ -198,8 +198,30 @@
   async function teacherDeleteUser(userId,confirmCode){
     return invokeEdgeFunction(
       "admin-delete-user",
-      {userId,confirmCode:String(confirmCode||"").trim().toUpperCase()},
+      {userId,confirmCode:String(confirmCode||"").trim().toUpperCase(),mode:"soft"},
       "Không xóa được tài khoản."
+    );
+  }
+
+  async function adminHardDeleteUser(userId,confirmCode,confirmPhrase){
+    return invokeEdgeFunction(
+      "admin-delete-user",
+      {
+        userId,
+        confirmCode:String(confirmCode||"").trim().toUpperCase(),
+        confirmPhrase:String(confirmPhrase||"").trim().toUpperCase(),
+        mode:"hard"
+      },
+      "Không xóa vĩnh viễn được tài khoản."
+    );
+  }
+
+
+  async function adminListAudit(filters={}){
+    return invokeEdgeFunction(
+      "audit-log",
+      {action:"list",...filters},
+      "Không tải được nhật ký hệ thống."
     );
   }
 
@@ -1069,6 +1091,8 @@
     teacherResetPassword,
     teacherUpdateUser,
     teacherDeleteUser,
+    adminHardDeleteUser,
+    adminListAudit,
     teacherCreateUser,
     teacherListUsers,
     adminManageClasses,

@@ -4,22 +4,17 @@ import fs from 'node:fs'
 
 const read=(path)=>fs.readFileSync(new URL(`../${path}`,import.meta.url),'utf8')
 
-test('admin navigation consolidates system management into one sidebar item',()=>{
+test('admin navigation exposes seven direct system destinations',()=>{
   const source=read('src/features/navigation/navigation.ts')
-  assert.match(source,/item\('Quản trị hệ thống','\/admin','ShieldCheck',\['admin'\]\)/)
-  assert.doesNotMatch(source,/item\('Năm học','\/admin\?tab=years'/)
-  assert.doesNotMatch(source,/item\('Lớp học','\/admin\?tab=classes'/)
-  assert.doesNotMatch(source,/item\('Giáo viên','\/admin\?tab=teachers'/)
-  assert.doesNotMatch(source,/item\('Phân quyền','\/admin\?tab=permissions'/)
-  assert.match(source,/admin:\['Quản trị hệ thống'\]/)
-  assert.doesNotMatch(source,/admin:\[[^\]]*'Cài đặt'/s)
+  for(const label of ['Tổng quan','Năm học','Lớp học','Học sinh','Giáo viên','Phân quyền','Nhật ký hệ thống']) assert.match(source,new RegExp(`item\\('${label}'`))
+  assert.match(source,/admin:\['Tổng quan','Năm học','Lớp học','Học sinh','Giáo viên','Phân quyền','Nhật ký hệ thống'\]/)
+  assert.doesNotMatch(source,/item\('Quản trị hệ thống'/)
 })
 
-test('admin page keeps the management areas as internal tabs',()=>{
+test('admin page resolves seven direct query areas without an internal AppTabs layer',()=>{
   const source=read('src/pages/AdminPage.vue')
-  for(const id of ['overview','years','classes','teachers','permissions']){
-    assert.match(source,new RegExp(`id:'${id}'`))
-  }
+  assert.match(source,/validTabs=\['overview','years','classes','students','teachers','permissions','audit'\]/)
+  assert.doesNotMatch(source,/AppTabs/)
 })
 
 test('desktop sidebar is a floating iPad-like panel instead of an edge-attached rail',()=>{

@@ -3,7 +3,7 @@ import type { UserRole } from '../../types/legacy'
 export interface NavigationItem{label:string;to:string;icon:string;roles:UserRole[]}
 const learners:UserRole[]=['student','monitor']
 const teachers:UserRole[]=['teacher']
-
+const admins:UserRole[]=['admin']
 const item=(label:string,to:string,icon:string,roles:UserRole[]):NavigationItem=>({label,to,icon,roles})
 
 export const navigation:NavigationItem[]=[
@@ -20,7 +20,13 @@ export const navigation:NavigationItem[]=[
   item('Thống kê của tôi','/statistics','ChartNoAxesCombined',learners),
   item('Lịch sử','/history','History',learners),
   item('Nhận xét GV','/comments','MessagesSquare',learners),
-  item('Quản trị hệ thống','/admin','ShieldCheck',['admin']),
+  item('Tổng quan','/admin','LayoutDashboard',admins),
+  item('Năm học','/admin?tab=years','CalendarRange',admins),
+  item('Lớp học','/admin?tab=classes','Building2',admins),
+  item('Học sinh','/admin?tab=students','GraduationCap',admins),
+  item('Giáo viên','/admin?tab=teachers','UsersRound',admins),
+  item('Phân quyền','/admin?tab=permissions','ShieldCheck',admins),
+  item('Nhật ký hệ thống','/admin?tab=audit','History',admins),
   item('Cài đặt','/settings','Settings',teachers),
 ]
 
@@ -28,12 +34,13 @@ const orders:Record<UserRole,string[]>={
   student:['Tổng quan','Đăng ký tự học','Báo cáo lỗi','Lịch sử','Nhận xét GV','Thống kê của tôi'],
   monitor:['Tổng quan','Đăng ký tự học','Báo cáo lỗi','Theo dõi lớp','Lịch sử','Nhận xét GV','Thống kê của tôi'],
   teacher:['Tổng quan','Duyệt đăng ký','Báo cáo lỗi','Theo dõi cả lớp','Quản lý tuần','Thời khóa biểu','Học sinh','Thống kê','Cài đặt'],
-  admin:['Quản trị hệ thống'],
+  admin:['Tổng quan','Năm học','Lớp học','Học sinh','Giáo viên','Phân quyền','Nhật ký hệ thống'],
 }
 
 export function visibleNavigation(role:UserRole|null|undefined):NavigationItem[]{
   if(!role)return[]
   const allowed=navigation.filter(entry=>entry.roles.includes(role))
-  const byLabel=new Map(allowed.map(entry=>[entry.label,entry]))
-  return orders[role].map(label=>byLabel.get(label)).filter((entry):entry is NavigationItem=>Boolean(entry))
+  const queues=new Map<string,NavigationItem[]>()
+  for(const entry of allowed){const list=queues.get(entry.label)??[];list.push(entry);queues.set(entry.label,list)}
+  return orders[role].map(label=>queues.get(label)?.shift()).filter((entry):entry is NavigationItem=>Boolean(entry))
 }

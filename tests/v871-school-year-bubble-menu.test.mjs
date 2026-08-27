@@ -64,7 +64,8 @@ test('database provides atomic root-admin school year creation activation and we
 
 test('admin page has a Năm học tab with create and activate controls and no year deletion',()=>{
   const page=read('src/pages/AdminPage.vue')
-  assert.match(page,/id:'years',label:'Năm học'/)
+  const nav=read('src/features/navigation/navigation.ts')
+  assert.match(nav,/item\('Năm học','\/admin\?tab=years'/)
   assert.match(page,/tab==='years'/)
   assert.match(page,/Tạo năm học/)
   assert.match(page,/Ngày bắt đầu tuần 1/)

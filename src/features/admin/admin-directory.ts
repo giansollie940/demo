@@ -1,6 +1,6 @@
 import { useQuery, type QueryClient } from '@tanstack/vue-query'
 import { legacyApi } from '../../services/legacy-supabase'
-import type { LegacyState, TeacherUserChanges } from '../../types/legacy'
+import type { DirectoryUser, LegacyState, TeacherUserChanges } from '../../types/legacy'
 
 export interface AdminSchoolYearRecord {
   id:string
@@ -56,6 +56,7 @@ export interface AdminDirectory {
   classes:AdminClassRecord[]
   teachers:AdminTeacherRecord[]
   assignments:AdminAssignmentRecord[]
+  users:DirectoryUser[]
 }
 
 const text=(value:unknown)=>String(value??'').trim()
@@ -92,11 +93,22 @@ export function normalizeAdminDirectory(raw:Record<string,unknown>):AdminDirecto
     const row=item as Record<string,unknown>
     return {classId:text(row.class_id??row.classId),teacherId:text(row.teacher_id??row.teacherId),active:on(row.active)}
   }).filter(row=>row.classId&&row.teacherId)
-  return {schoolYears,weeks,periods,classes,teachers,assignments}
+  const users=(Array.isArray(raw.users)?raw.users:[]).map(item=>{
+    const row=item as Record<string,unknown>
+    return {
+      id:text(row.id),code:text(row.code??row.student_code).toUpperCase(),fullName:text(row.fullName??row.full_name??row.name),
+      role:String(row.role??'student') as DirectoryUser['role'],classId:(row.classId??row.class_id??null) as string|null,
+      active:on(row.active),deletedAt:(row.deletedAt??row.deleted_at??null) as string|null
+    }
+  }).filter(row=>row.id)
+  return {schoolYears,weeks,periods,classes,teachers,assignments,users}
 }
 
 export const adminDirectoryKey=['admin-directory'] as const
-export function useAdminDirectory(){return useQuery({queryKey:adminDirectoryKey,queryFn:async()=>normalizeAdminDirectory(await legacyApi.adminManageClasses('list')),staleTime:30_000})}
+export function useAdminDirectory(){return useQuery({queryKey:adminDirectoryKey,queryFn:async()=>{
+  const [directory,userResponse]=await Promise.all([legacyApi.adminManageClasses('list'),legacyApi.teacherListUsers(null)])
+  return normalizeAdminDirectory({...directory,users:Array.isArray(userResponse.users)?userResponse.users:[]})
+},staleTime:30_000})}
 
 export interface AdminMutationRuntime{queryClient:QueryClient;reload():Promise<LegacyState|null>}
 async function refresh(runtime:AdminMutationRuntime){await runtime.reload();await runtime.queryClient.invalidateQueries({queryKey:adminDirectoryKey})}
@@ -107,6 +119,10 @@ export async function deleteClass(runtime:AdminMutationRuntime,classId:string){a
 export async function createTeacher(runtime:AdminMutationRuntime,input:TeacherUserChanges){const result=await legacyApi.teacherCreateUser(input);await refresh(runtime);return result}
 export async function updateTeacher(runtime:AdminMutationRuntime,userId:string,input:TeacherUserChanges){await legacyApi.teacherUpdateUser(userId,input);await refresh(runtime)}
 export async function deleteTeacher(runtime:AdminMutationRuntime,userId:string,confirmCode:string){await legacyApi.teacherDeleteUser(userId,confirmCode);await refresh(runtime)}
+export async function hardDeleteUser(runtime:AdminMutationRuntime,userId:string,confirmCode:string,confirmPhrase:string){await legacyApi.adminHardDeleteUser(userId,confirmCode,confirmPhrase);await refresh(runtime)}
+export async function resetManagedPassword(userId:string,password:string){return legacyApi.teacherResetPassword(userId,password)}
+export async function createManagedUser(runtime:AdminMutationRuntime,input:TeacherUserChanges){const result=await legacyApi.teacherCreateUser(input);await refresh(runtime);return result}
+export async function updateManagedUser(runtime:AdminMutationRuntime,userId:string,input:TeacherUserChanges){await legacyApi.teacherUpdateUser(userId,input);await refresh(runtime)}
 
 export async function createSchoolYear(runtime:AdminMutationRuntime,input:{name:string;startDate:string;endDate:string;setActive:boolean}){const result=await legacyApi.adminManageClasses('create_school_year',input);await refresh(runtime);return result}
 export async function setActiveSchoolYear(runtime:AdminMutationRuntime,schoolYearId:string){const result=await legacyApi.adminManageClasses('set_active_school_year',{schoolYearId});await refresh(runtime);return result}

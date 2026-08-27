@@ -15,7 +15,7 @@ test('navigation is flat by role and learner settings live outside the sidebar',
   assert.doesNotMatch(sidebar,/nav-group-label|v-for="group in groups"/)
   assert.doesNotMatch(nav,/\{label:'Cài đặt'.*roles:all/)
   assert.match(nav,/item\('Cài đặt'.*teachers\)/)
-  assert.match(nav,/admin:\['Quản trị hệ thống'\]/)
+  assert.match(nav,/admin:\['Tổng quan','Năm học','Lớp học','Học sinh','Giáo viên','Phân quyền','Nhật ký hệ thống'\]/)
 })
 
 test('learner and monitor receive personal statistics while teacher retains class statistics and admin stays system-only',()=>{
@@ -103,8 +103,9 @@ test('school pattern remains visible as an independent layer through translucent
   assert.match(shell,/--school-pattern-image/)
   assert.match(shell,/\.main::before/)
   assert.match(shell,/background-image:var\(--school-pattern-image\)/)
-  assert.match(shell,/opacity:var\(--pattern-opacity\)/)
-  assert.match(shell,/mix-blend-mode:multiply/)
+  assert.match(shell,/opacity:1/)
+  assert.doesNotMatch(shell,/mix-blend-mode:multiply/)
+  assert.match(shell,/\.main::after[\s\S]*--pattern-dark-overlay/)
   assert.match(themes,/--content-glass:/)
   assert.match(themes,/--pattern-opacity:/)
 })

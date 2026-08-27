@@ -154,3 +154,16 @@ Kiểm tra tối thiểu theo vai trò:
 Frontend: redeploy artifact frontend trước đó.
 
 Database/backend: rollback phải dựa trên backup đã tạo ở bước 0; không chạy ngược các SQL bằng suy đoán.
+
+## Admin hard-delete / audit / Dock / background update
+
+This update changes Edge Function behavior and frontend UI, but adds no new database table or column beyond the current V8.7.1 PERIOD/WEEK schema. The existing database verifier must still report `overall=true`, especially the `audit_actor_fk_set_null` and `audit_actor_nullable` checks before permanent deletion is enabled.
+
+Deployment order for an installation already on the latest V8.7.1 PERIOD/WEEK database:
+
+1. Run `database/verify/VERIFY-V8.7.1.sql`; require `overall=true`.
+2. Deploy all 10 Edge ZIPs (at minimum `admin-delete-user.zip` and `audit-log.zip`; full redeploy recommended).
+3. Deploy the ROOT-FLAT frontend through GitHub Pages.
+4. Smoke-test Admin → Học sinh, Giáo viên, Nhật ký hệ thống.
+
+Permanent deletion is irreversible. Learner/monitor hard-delete can remove dependent study records via existing database cascades and therefore can change historical statistics. Teacher hard-delete is rejected while any active `class_teachers` assignment remains. Root Admin cannot delete itself or another root admin directly.
