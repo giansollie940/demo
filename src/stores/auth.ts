@@ -14,7 +14,7 @@ export const useAuthStore=defineStore('auth',()=>{
   const isAuthenticated=computed(()=>Boolean(currentUser.value))
   const role=computed(()=>currentUser.value?.role??null)
 
-  async function bootstrap(preferredClassId:string|null=null){
+  async function bootstrap(preferredClassId:string|null=null,preferredSchoolYearId:string|null=null){
     if(loading.value)return
     loading.value=true;error.value=''
     try{
@@ -22,7 +22,7 @@ export const useAuthStore=defineStore('auth',()=>{
         currentUser.value=null;legacyState.value=null;return
       }
       await legacyApi.init()
-      const result=await legacyApi.loadState(preferredClassId)
+      const result=await legacyApi.loadState(preferredClassId,preferredSchoolYearId)
       currentUser.value=result.currentUser
       legacyState.value=result.state
     }catch(err){
@@ -45,11 +45,11 @@ export const useAuthStore=defineStore('auth',()=>{
     }finally{loading.value=false;ready.value=true}
   }
 
-  async function reload(preferredClassId:string|null=null){
+  async function reload(preferredClassId:string|null=null,preferredSchoolYearId:string|null=null){
     if(!currentUser.value)return
     loading.value=true;error.value=''
     try{
-      const result=await legacyApi.loadState(preferredClassId)
+      const result=await legacyApi.loadState(preferredClassId,preferredSchoolYearId)
       currentUser.value=result.currentUser
       legacyState.value=result.state
     }catch(err){error.value=messageOf(err);throw err}
