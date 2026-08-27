@@ -10,6 +10,15 @@ export interface CurrentUser {
   deletedAt?: string | null
 }
 
+
+export interface SchoolYearRecord {
+  id: string
+  name: string
+  startDate: string
+  endDate: string
+  active: boolean
+}
+
 export interface SchoolClass {
   id: string
   schoolYearId?: string | null
@@ -143,6 +152,8 @@ export interface TeacherNotificationRecord {
 export interface LegacyState {
   version: number
   activeSchoolYearId: string | null
+  selectedSchoolYearId: string | null
+  availableSchoolYears: SchoolYearRecord[]
   activeClassId: string | null
   availableClasses: SchoolClass[]
   settings: Record<string, unknown> & {
@@ -183,10 +194,10 @@ export interface LegacySupabaseService {
   init(): Promise<unknown>
   signInCode(code: string, password: string): Promise<unknown>
   signOut(): Promise<void>
-  loadState(preferredClassId?: string | null): Promise<LoadStateResult>
+  loadState(preferredClassId?: string | null, preferredSchoolYearId?: string | null): Promise<LoadStateResult>
   loadWeekData(weekId: string, classId?: string | null): Promise<WeekData>
   syncState(state: LegacyState, currentUser: CurrentUser): Promise<void>
-  teacherRebaseWeeks(firstWeekStart: string, deadlineTime?: string): Promise<unknown>
+  teacherRebaseWeeks(firstWeekStart: string, deadlineTime?: string, schoolYearId?: string | null): Promise<unknown>
   changeOwnPassword(currentPassword: string, newPassword: string): Promise<unknown>
   teacherResetPassword(userId: string, newPassword: string): Promise<unknown>
   teacherUpdateUser(userId: string, changes: TeacherUserChanges): Promise<unknown>
