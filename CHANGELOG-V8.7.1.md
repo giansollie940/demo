@@ -1,3 +1,12 @@
+
+## Admin consolidated navigation + floating iPad sidebar
+
+- Gộp các mục Admin `Năm học`, `Lớp học`, `Giáo viên`, `Phân quyền` thành một mục sidebar duy nhất: `Quản trị hệ thống`.
+- Giữ đầy đủ các khu vực trên dưới dạng tab nội bộ của `AdminPage`.
+- Chuyển sidebar desktop thành floating panel kiểu iPad: tách khỏi mép màn hình 12px, bo tròn 26px, blur/saturation và shadow nhiều lớp.
+- Giữ compact bubble navigation, icon rail khi thu gọn và vòng gradient xoay ngắn khi hover.
+- Mobile drawer vẫn dùng cùng panel nổi nhưng trượt từ cạnh trái.
+
 # Changelog — SỔ TỰ HỌC V8.7.1 Full Stack
 
 ## Hợp nhất source

@@ -1,11 +1,11 @@
 <script setup lang="ts">
 import { computed, type Component } from 'vue'
 import { useRoute } from 'vue-router'
-import { Building2, CalendarClock, CalendarDays, CalendarRange, ChartNoAxesCombined, ClipboardCheck, GraduationCap, History, LayoutDashboard, MessagesSquare, NotebookPen, Settings, ShieldCheck, TriangleAlert, UserCog, UsersRound } from 'lucide-vue-next'
+import { CalendarClock, CalendarRange, ChartNoAxesCombined, ClipboardCheck, GraduationCap, History, LayoutDashboard, MessagesSquare, NotebookPen, Settings, ShieldCheck, TriangleAlert, UsersRound } from 'lucide-vue-next'
 import { useAuthStore } from '../../stores/auth'
 import { visibleNavigation } from '../../features/navigation/navigation'
 const props=defineProps<{collapsed:boolean}>();const route=useRoute();const auth=useAuthStore()
-const icons:Record<string,Component>={LayoutDashboard,NotebookPen,ClipboardCheck,UsersRound,CalendarRange,CalendarClock,CalendarDays,GraduationCap,ChartNoAxesCombined,History,MessagesSquare,ShieldCheck,TriangleAlert,Settings,Building2,UserCog}
+const icons:Record<string,Component>={LayoutDashboard,NotebookPen,ClipboardCheck,UsersRound,CalendarRange,CalendarClock,GraduationCap,ChartNoAxesCombined,History,MessagesSquare,ShieldCheck,TriangleAlert,Settings}
 const items=computed(()=>visibleNavigation(auth.currentUser?.role))
 </script>
 <template>

@@ -21,10 +21,7 @@ export const navigation:NavigationItem[]=[
   item('Thống kê của tôi','/statistics','ChartNoAxesCombined',learners),
   item('Lịch sử','/history','History',learners),
   item('Nhận xét GV','/comments','MessagesSquare',learners),
-  item('Năm học','/admin?tab=years','CalendarDays',['admin']),
-  item('Lớp học','/admin?tab=classes','Building2',['admin']),
-  item('Giáo viên','/admin?tab=teachers','UserCog',['admin']),
-  item('Phân quyền','/admin?tab=permissions','ShieldCheck',['admin']),
+  item('Quản trị hệ thống','/admin','ShieldCheck',['admin']),
   item('Cài đặt','/settings','Settings',managers),
 ]
 
@@ -32,7 +29,7 @@ const orders:Record<UserRole,string[]>={
   student:['Tổng quan','Đăng ký tự học','Báo cáo lỗi','Lịch sử','Nhận xét GV','Thống kê của tôi'],
   monitor:['Tổng quan','Đăng ký tự học','Báo cáo lỗi','Theo dõi lớp','Lịch sử','Nhận xét GV','Thống kê của tôi'],
   teacher:['Tổng quan','Duyệt đăng ký','Báo cáo lỗi','Theo dõi cả lớp','Quản lý tuần','Thời khóa biểu','Học sinh','Thống kê','Cài đặt'],
-  admin:['Tổng quan','Duyệt đăng ký','Báo cáo lỗi','Theo dõi cả lớp','Quản lý tuần','Thời khóa biểu','Học sinh','Thống kê','Năm học','Lớp học','Giáo viên','Phân quyền','Cài đặt'],
+  admin:['Tổng quan','Duyệt đăng ký','Báo cáo lỗi','Theo dõi cả lớp','Quản lý tuần','Thời khóa biểu','Học sinh','Thống kê','Quản trị hệ thống','Cài đặt'],
 }
 
 export function visibleNavigation(role:UserRole|null|undefined):NavigationItem[]{
