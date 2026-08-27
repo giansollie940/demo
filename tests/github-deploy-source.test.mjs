@@ -14,9 +14,10 @@ test('GitHub Pages workflow builds and deploys dist', () => {
   assert.match(yml, /npm test/)
   assert.match(yml, /npm run test:unit/)
   assert.match(yml, /npm run build/)
-  assert.match(yml, /actions\/upload-pages-artifact@v3/)
+  assert.match(yml, /actions\/configure-pages@v6/)
+  assert.match(yml, /actions\/upload-pages-artifact@v5/)
   assert.match(yml, /path:\s*\.\/dist/)
-  assert.match(yml, /actions\/deploy-pages@v4/)
+  assert.match(yml, /actions\/deploy-pages@v5/)
 })
 
 test('workflow generates browser-only Supabase config from repository secrets', () => {
