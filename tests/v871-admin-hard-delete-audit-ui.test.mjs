@@ -91,3 +91,9 @@ test('light mode shows vanilla school image without overlay while dark mode fade
   assert.match(themes,/\[data-theme='dark'\][\s\S]*--pattern-dark-overlay:/)
   assert.match(tokens,/--theme-transition:\s*2(?:5|6|7|8|9)0ms|--theme-transition:\s*\.2[5-9]s/)
 })
+
+test('AppCard supports zero padding for edge-to-edge audit tables',()=>{
+  const card=read('src/components/ui/AppCard.vue')
+  assert.match(card,/padding\?:\s*['"]none['"]\|['"]sm['"]\|['"]md['"]\|['"]lg['"]|padding\?:\s*['"]sm['"]\|['"]md['"]\|['"]lg['"]\|['"]none['"]/)
+  assert.match(card,/\.pad-none\s*\{\s*padding:\s*0/)
+})

@@ -34,3 +34,7 @@ Release scope: year/period/week lifecycle, role separation, Admin system managem
 ## Environment limitation
 
 The workspace does not contain a complete local `node_modules`, so `vue-tsc`/Vitest/Vite production build are not claimed as locally verified. GitHub Actions remains the authoritative gate for `npm ci`, `npm run test:unit`, `npm run typecheck`, and `npm run build`.
+
+### Typecheck hotfix note
+
+GitHub Actions previously reported `TS2322` because `AdminAuditLog.vue` used `AppCard padding="none"` while `AppCard` only declared `sm | md | lg`. The shared card contract now includes `none` and a regression test locks this behavior.

@@ -1,3 +1,10 @@
+
+## Typecheck hotfix — AdminAuditLog AppCard padding
+
+- Fix `vue-tsc` TS2322 in `AdminAuditLog.vue`: the audit table intentionally uses `padding="none"`, so `AppCard` now explicitly supports the `none` padding variant.
+- Add `.pad-none{padding:0}` to preserve the edge-to-edge audit table design.
+- Add regression coverage for the zero-padding AppCard contract.
+
 ## 2026-08-27 · Role boundary + year/week lifecycle + macOS Dock
 
 - Tách quyền cuối theo nghiệp vụ: **Admin chỉ quản trị hệ thống**, **GV vận hành lớp**, **Cán sự hỗ trợ lớp**, **HS quản lý cá nhân**. Admin route/sidebar không còn Dashboard/Duyệt/Tracking/Weeks/TKB/Học sinh/Thống kê/Cài đặt của GV.
