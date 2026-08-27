@@ -33,6 +33,10 @@ checks AS (
   UNION ALL SELECT 'daily_quotes_table',to_regclass('public.daily_quotes') IS NOT NULL
   UNION ALL SELECT 'root_admin_exactly_one',(SELECT total=1 FROM root_admin)
   UNION ALL SELECT 'root_admin_active',(SELECT active_total=1 FROM root_admin)
+  UNION ALL SELECT 'school_year_create_rpc_exists',to_regprocedure('public.admin_create_school_year(uuid,text,date,date,boolean)') IS NOT NULL
+  UNION ALL SELECT 'school_year_create_rpc_security_definer',coalesce((select prosecdef from pg_proc where oid=to_regprocedure('public.admin_create_school_year(uuid,text,date,date,boolean)')),false)
+  UNION ALL SELECT 'school_year_activate_rpc_exists',to_regprocedure('public.admin_set_active_school_year(uuid,uuid)') IS NOT NULL
+  UNION ALL SELECT 'school_year_activate_rpc_security_definer',coalesce((select prosecdef from pg_proc where oid=to_regprocedure('public.admin_set_active_school_year(uuid,uuid)')),false)
   UNION ALL SELECT 'revision_rpc_exists',to_regprocedure('public.request_registration_revision(uuid,text)') IS NOT NULL
   UNION ALL SELECT 'revision_rpc_security_definer',coalesce((SELECT prosecdef FROM revision_proc),false)
   UNION ALL SELECT 'revision_rpc_manager_guard',coalesce((SELECT position('can_manage_class' in def)>0 FROM revision_proc),false)

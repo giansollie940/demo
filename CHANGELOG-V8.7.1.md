@@ -88,3 +88,16 @@
 - Restyled the profile dropdown as a softer rounded popover card with warm peach/violet surfaces and no internal divider lines.
 - Removed duplicated **Cài đặt** from teacher/admin profile dropdowns. Teacher/admin continue to use the sidebar Settings entry; student/monitor retain **Tùy chọn cá nhân** in their profile menu.
 - Added regression coverage for floating bubble composition, soft hover elevation, role-aware profile settings visibility and removal of hard shell divider lines.
+
+## 2026-08-27 · School-year context + Admin year management + bubble navigation
+
+- Replaced the duplicated class/year identity bubble at the left of the topbar with a dedicated **Năm học** context bubble. The class selector remains only in the right context controls, so `7A9` is no longer repeated.
+- Added role-aware year context: Admin can browse every school year; teachers see years represented by classes they are allowed to access; students/monitors remain fixed to the school year of their own class.
+- Selecting a year now reloads the dependent **Lớp → Tuần → Dashboard/Tracking/Statistics** context instead of changing display text only. Selected-year context is preserved across manager reloads.
+- Added Admin tab **Năm học** with create and activate actions. New years are created through the root-admin Edge Function and PostgreSQL RPC, automatically generating base week rows. Exactly one year can be activated atomically; no delete-year action is exposed.
+- Added `admin_create_school_year(uuid,text,date,date,boolean)` and `admin_set_active_school_year(uuid,uuid)` SECURITY DEFINER RPCs with explicit active root-admin validation. Both fresh-install and current-upgrade SQL include the reusable year-management block, and the database verifier checks both RPCs.
+- Class creation now uses the **selected** school year rather than silently using the globally active year. Week rebasing also receives the selected school-year id, preventing historical-year views from editing the wrong year's weeks.
+- Reworked the flat sidebar into warm **bubble navigation** without reintroducing visual group headings. Expanded mode uses compact soft pills; collapsed mode is an icon-bubble rail with tooltips.
+- Hovering a navigation icon runs one short warm violet/coral/amber `conic-gradient` ring rotation; the active item does not spin continuously, and `prefers-reduced-motion` disables the animation.
+- Added regression coverage for school-year state/selector behavior, Admin create/activate contracts, selected-year week rebasing, duplicate-class removal, bubble navigation and hover-ring motion.
+

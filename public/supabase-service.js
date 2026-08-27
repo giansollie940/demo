@@ -263,13 +263,13 @@
     return data===true;
   }
 
-  async function teacherRebaseWeeks(firstWeekStart, deadlineTime="20:00"){
+  async function teacherRebaseWeeks(firstWeekStart, deadlineTime="20:00", schoolYearId=null){
     const sb=requireClient();
     if(!/^\d{4}-\d{2}-\d{2}$/.test(String(firstWeekStart||""))) throw new Error("Ngày bắt đầu tuần 1 không hợp lệ.");
     if(!/^\d{2}:\d{2}$/.test(String(deadlineTime||""))) throw new Error("Giờ deadline không hợp lệ.");
 
-    const {data:years,error:yearErr}=await sb.from("school_years")
-      .select("id,name,start_date,end_date,is_active").eq("is_active",true).limit(1);
+    const yearQuery=schoolYearId?sb.from("school_years").select("id,name,start_date,end_date,is_active").eq("id",schoolYearId):sb.from("school_years").select("id,name,start_date,end_date,is_active").eq("is_active",true);
+    const {data:years,error:yearErr}=await yearQuery.limit(1);
     if(yearErr) throw yearErr;
     const year=years?.[0];
     if(!year) throw new Error("Chưa có năm học đang hoạt động.");
@@ -659,6 +659,7 @@
 
   function managerRole(role){return role==="teacher"||role==="admin";}
   const classStorageKey=userId=>`so-tu-hoc:active-class:${userId}`;
+  const schoolYearStorageKey=userId=>`so-tu-hoc:selected-school-year:${userId}`;
 
   async function loadWeekData(weekId,classId=null){
     if(!weekId) return {overrides:[],registrations:[]};
@@ -691,7 +692,7 @@
 
   function emptyMemoryStats(){return {totalFeedback:0,revisionAfterAiApprove:0,approveAfterAiManual:0,approveAfterAiRevision:0,lastFeedbackAt:null,memoryEnabled:true,candidateLimit:80,selectedLimit:25};}
 
-  async function loadState(preferredClassId=null){
+  async function loadState(preferredClassId=null,preferredSchoolYearId=null){
     const sb=requireClient();
     const user=await authUser();
     if(!user)return {currentUser:null,state:null};
@@ -709,14 +710,37 @@
       sb.from("classes").select("id,school_year_id,code,name,active").eq("active",true).order("code")
     ]);
     for(const r of [yearsRes,periodsRes,classesRes])if(r.error)throw r.error;
-    const activeYear=yearsRes.data?.find(y=>y.is_active)||yearsRes.data?.[0]||null;
-    const visibleClasses=(classesRes.data||[]).filter(c=>!activeYear||c.school_year_id===activeYear.id);
 
+    const allYears=yearsRes.data||[];
+    const allClasses=classesRes.data||[];
+    const activeYear=allYears.find(y=>y.is_active)||allYears[0]||null;
+    const visibleYearIds=new Set(allClasses.map(c=>c.school_year_id).filter(Boolean));
+    let availableYears=[];
+    let selectedYear=null;
+
+    if(isManager){
+      availableYears=profile.role==="admin"?allYears:allYears.filter(y=>visibleYearIds.has(y.id));
+      const storedYear=preferredSchoolYearId||sessionStorage.getItem(schoolYearStorageKey(user.id));
+      selectedYear=availableYears.find(y=>y.id===storedYear)
+        || availableYears.find(y=>y.id===activeYear?.id)
+        || availableYears[0]
+        || activeYear;
+      if(selectedYear?.id)sessionStorage.setItem(schoolYearStorageKey(user.id),selectedYear.id);
+    }else{
+      const learnerClass=allClasses.find(c=>c.id===profile.class_id)||null;
+      const learnerYearId=learnerClass?.school_year_id||activeYear?.id||null;
+      selectedYear=allYears.find(y=>y.id===learnerYearId)||activeYear;
+      availableYears=selectedYear?[selectedYear]:[];
+    }
+
+    const visibleClasses=allClasses.filter(c=>!selectedYear||c.school_year_id===selectedYear.id);
     let activeClassId=profile.class_id||null;
     if(isManager){
       const stored=preferredClassId||sessionStorage.getItem(classStorageKey(user.id));
       activeClassId=visibleClasses.some(c=>c.id===stored)?stored:(visibleClasses[0]?.id||null);
       if(activeClassId)sessionStorage.setItem(classStorageKey(user.id),activeClassId);
+    }else if(!visibleClasses.some(c=>c.id===activeClassId)){
+      activeClassId=visibleClasses[0]?.id||profile.class_id||null;
     }
     const activeClass=visibleClasses.find(c=>c.id===activeClassId)||null;
 
@@ -732,9 +756,9 @@
     }else users=[mapProfile(profile)];
 
     let weeks=[];
-    if(activeYear){
+    if(selectedYear){
       const [baseWeeksRes,classWeeksRes]=await Promise.all([
-        sb.from("weeks").select("id,week_number,start_date,end_date,status,deadline_mode,registration_deadline,note").eq("school_year_id",activeYear.id).order("week_number"),
+        sb.from("weeks").select("id,week_number,start_date,end_date,status,deadline_mode,registration_deadline,note").eq("school_year_id",selectedYear.id).order("week_number"),
         activeClassId?sb.from("class_weeks").select("class_id,week_id,status,deadline_mode,registration_deadline,note").eq("class_id",activeClassId):Promise.resolve({data:[],error:null})
       ]);
       if(baseWeeksRes.error)throw baseWeeksRes.error;if(classWeeksRes.error)throw classWeeksRes.error;
@@ -752,7 +776,7 @@
     for(const r of [scheduleRes,settingsRes,notificationsRes])if(r.error)throw r.error;
     if(memoryStatsRes.error)console.warn("Không tải được thống kê bộ nhớ AI.",memoryStatsRes.error);
 
-    const weekData=await loadWeekData(currentWeek?.id,activeClassId);
+    const weekData=isManager&&!activeClassId?{overrides:[],registrations:[]}:await loadWeekData(currentWeek?.id,activeClassId);
     let registrations=weekData.registrations;
     if(["student","monitor"].includes(profile.role)){
       const {data,error}=await sb.from("registrations").select(REGISTRATION_COLUMNS).eq("student_id",user.id).eq("is_deleted",false);
@@ -769,11 +793,13 @@
     const state={
       version:3,
       activeSchoolYearId:activeYear?.id||null,
+      selectedSchoolYearId:selectedYear?.id||null,
+      availableSchoolYears:availableYears.map(y=>({id:y.id,name:y.name,startDate:y.start_date,endDate:y.end_date,active:y.is_active===true})),
       activeClassId,
       availableClasses:visibleClasses.map(c=>({id:c.id,schoolYearId:c.school_year_id,code:c.code,name:c.name,active:c.active!==false})),
       settings:{
         className:activeClass?.name||activeClass?.code||"",
-        schoolYear:activeYear?.name||"",
+        schoolYear:selectedYear?.name||"",
         announcement:cs.announcement||"Chuẩn bị nội dung tự học trước hạn.",
         teacherName:profile.full_name||"",
         aiAutomationEnabled,

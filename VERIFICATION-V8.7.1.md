@@ -90,7 +90,7 @@ Kiểm tra relative imports riêng: **0 missing relative imports**.
 
 Do workspace không có `node_modules`, dùng TypeScript compiler có sẵn để `transpileModule` toàn bộ `src/**/*.ts` và `<script setup lang="ts">` trong `.vue`.
 
-Kết quả: **80 scripts checked, 0 syntax diagnostics**. `node --check public/supabase-service.js` cũng PASS.
+Kết quả: **81 scripts checked, 0 syntax diagnostics**. `node --check public/supabase-service.js` cũng PASS.
 
 Lưu ý: đây là kiểm tra syntax/transpile, không thay thế semantic `vue-tsc` hoặc production Vite build.
 
@@ -137,3 +137,18 @@ và chỉ tiếp tục khi `overall = true`.
 - `school-pattern-bg.png` nằm trong `main::before`, opacity light 14%, dark 2.5%, `mix-blend-mode:multiply`, `pointer-events:none`.
 - Body, shell, sidebar, main và topbar dùng `--theme-transition` 260ms để đổi theme đồng bộ.
 - Regression mới `tests/v871-warm-flat-sidebar.test.mjs` khóa các yêu cầu trên.
+
+## School-year + bubble-menu verification — 2026-08-27
+
+- Release snapshot: **119/119 static regression/contract tests PASS**; frontend syntax/transpile **81/81**; Edge TypeScript syntax/transpile **17/17**.
+
+- Regression contract `tests/v871-school-year-bubble-menu.test.mjs` covers year state, topbar year selector, Admin year actions, SQL RPC presence/security, selected-year week rebasing and bubble navigation motion.
+- `AdminPage.vue` exposes tab **Năm học** with create/activate actions; no delete-year action is exposed.
+- `admin-manage-classes` exposes `schoolYears`, `create_school_year` and `set_active_school_year`; the RPC calls pass the authenticated root-admin actor id explicitly.
+- Both install/upgrade SQL contain `admin_create_school_year` and `admin_set_active_school_year`; `VERIFY-V8.7.1.sql` checks their existence and SECURITY DEFINER status.
+- Manager year selection reloads year-scoped classes/weeks; student/monitor year scope remains derived from their class.
+- `teacherRebaseWeeks(..., schoolYearId)` uses the selected year when supplied, avoiding accidental edits to the globally active year while browsing history.
+- Topbar no longer repeats the selected class at the left; the left context bubble is **Năm học**.
+- Sidebar remains a flat role-aware list, rendered as warm soft bubbles; collapsed mode uses icon bubbles and a one-shot hover ring with reduced-motion fallback.
+- No live Supabase database was available in this environment, so runtime execution of the new RPCs must be verified after database upgrade using `database/verify/VERIFY-V8.7.1.sql` before Edge/frontend cutover.
+

@@ -31,6 +31,6 @@ export async function rebaseWeekCalendarMutation(
   if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(deadlineTime)) {
     throw new Error('Giờ deadline không hợp lệ.')
   }
-  await runtime.service.teacherRebaseWeeks(firstWeekStart, deadlineTime)
+  await runtime.service.teacherRebaseWeeks(firstWeekStart, deadlineTime, runtime.getState().selectedSchoolYearId)
   return refreshMutationRuntime(runtime, classId)
 }

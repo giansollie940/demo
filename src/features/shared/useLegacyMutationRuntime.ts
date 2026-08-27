@@ -21,7 +21,7 @@ export function useLegacyMutationRuntime() {
         return auth.legacyState
       },
       async reload(classId) {
-        await auth.reload(classId)
+        await auth.reload(classId,context.selectedSchoolYearId)
         if (!auth.legacyState) throw new Error('Không tải lại được dữ liệu sau khi lưu.')
         return auth.legacyState
       },

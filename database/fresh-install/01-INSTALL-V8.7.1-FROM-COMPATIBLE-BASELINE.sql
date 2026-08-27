@@ -3130,3 +3130,107 @@ alter table public.audit_logs
 
 notify pgrst, 'reload schema';
 commit;
+
+-- V8.7.1 school-year administration -------------------------------------------------
+begin;
+
+create or replace function public.admin_set_active_school_year(
+  p_actor_id uuid,
+  p_school_year_id uuid
+)
+returns void
+language plpgsql
+security definer
+set search_path=public,pg_temp
+as $admin_set_active_school_year$
+declare
+  v_actor_role text;
+  v_actor_active boolean;
+begin
+  select role::text,active into v_actor_role,v_actor_active
+  from public.profiles where id=p_actor_id;
+  if v_actor_role is distinct from 'admin' or v_actor_active is distinct from true then
+    raise exception 'ROOT_ADMIN_REQUIRED' using errcode='42501';
+  end if;
+  if not exists(select 1 from public.school_years where id=p_school_year_id) then
+    raise exception 'SCHOOL_YEAR_NOT_FOUND' using errcode='22023';
+  end if;
+
+  update public.school_years set is_active=false where is_active=true and id<>p_school_year_id;
+  update public.school_years set is_active=true where id=p_school_year_id;
+end;
+$admin_set_active_school_year$;
+
+create or replace function public.admin_create_school_year(
+  p_actor_id uuid,
+  p_name text,
+  p_start_date date,
+  p_end_date date,
+  p_set_active boolean default false
+)
+returns uuid
+language plpgsql
+security definer
+set search_path=public,pg_temp
+as $admin_create_school_year$
+declare
+  v_actor_role text;
+  v_actor_active boolean;
+  v_name text:=btrim(coalesce(p_name,''));
+  v_year_id uuid;
+  v_today date:=(now() at time zone 'Asia/Ho_Chi_Minh')::date;
+begin
+  select role::text,active into v_actor_role,v_actor_active
+  from public.profiles where id=p_actor_id;
+  if v_actor_role is distinct from 'admin' or v_actor_active is distinct from true then
+    raise exception 'ROOT_ADMIN_REQUIRED' using errcode='42501';
+  end if;
+  if length(v_name)<4 or length(v_name)>40 then
+    raise exception 'SCHOOL_YEAR_NAME_INVALID' using errcode='22023';
+  end if;
+  if p_start_date is null or p_end_date is null or p_end_date<p_start_date then
+    raise exception 'SCHOOL_YEAR_DATES_INVALID' using errcode='22023';
+  end if;
+  if exists(select 1 from public.school_years where lower(name)=lower(v_name)) then
+    raise exception 'SCHOOL_YEAR_ALREADY_EXISTS' using errcode='23505';
+  end if;
+
+  insert into public.school_years(name,start_date,end_date,is_active)
+  values(v_name,p_start_date,p_end_date,false)
+  returning id into v_year_id;
+
+  insert into public.weeks(
+    school_year_id,week_number,start_date,end_date,status,
+    deadline_mode,registration_deadline,note
+  )
+  select
+    v_year_id,
+    g.i+1,
+    p_start_date+(g.i*7),
+    least(p_start_date+(g.i*7)+4,p_end_date),
+    case
+      when p_start_date+(g.i*7)+6 < v_today then 'locked'::public.week_status
+      when v_today between p_start_date+(g.i*7) and p_start_date+(g.i*7)+6 then 'open'::public.week_status
+      else 'upcoming'::public.week_status
+    end,
+    'per_session_20',
+    null,
+    null
+  from generate_series(0,greatest(0,floor((p_end_date-p_start_date)/7.0)::int)) as g(i)
+  where p_start_date+(g.i*7)<=p_end_date;
+
+  if coalesce(p_set_active,false) then
+    perform public.admin_set_active_school_year(p_actor_id,v_year_id);
+  end if;
+
+  return v_year_id;
+end;
+$admin_create_school_year$;
+
+revoke all on function public.admin_create_school_year(uuid,text,date,date,boolean) from public,anon,authenticated;
+revoke all on function public.admin_set_active_school_year(uuid,uuid) from public,anon,authenticated;
+grant execute on function public.admin_create_school_year(uuid,text,date,date,boolean) to service_role;
+grant execute on function public.admin_set_active_school_year(uuid,uuid) to service_role;
+
+notify pgrst,'reload schema';
+commit;

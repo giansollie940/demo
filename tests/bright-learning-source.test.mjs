@@ -23,7 +23,7 @@ test('light and dark themes expose colorful soft surfaces without neon inversion
 
 test('topbar class and week context use larger readable typography', async () => {
   const topbar = await text('src/components/layout/TopBar.vue')
-  assert.match(topbar, /\.left b\{[^}]*font-size:1\.05rem/)
+  assert.match(topbar, /\.school-year-bubble select\{[^}]*font-size:\.95rem/)
   assert.match(topbar, /\.compact\{[^}]*font-size:\.86rem/)
   assert.match(topbar, /\.compact select\{[^}]*font-size:\.95rem/)
   assert.match(topbar, /font-weight:800/)

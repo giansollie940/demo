@@ -76,7 +76,8 @@ test('sidebar supports compact soft flat navigation and collapsed icon rail tool
   assert.doesNotMatch(nav,/nav-group/)
   assert.match(nav,/nav-tooltip/)
   assert.match(nav,/collapsed/)
-  assert.match(nav,/box-shadow:inset 3px 0 0|box-shadow:inset 4px 0 0/)
+  assert.match(nav,/nav-icon-bubble/)
+  assert.match(nav,/conic-gradient/)
   assert.match(tokens,/--sidebar-collapsed:(?:68|70|72)px/)
 })
 

@@ -6,7 +6,7 @@ const read = (path) => readFile(new URL(`../${path}`, import.meta.url), 'utf8')
 
 test('topbar is a floating bubble toolbar instead of a full-width divider bar', async () => {
   const source = await read('src/components/layout/TopBar.vue')
-  assert.match(source, /class="identity-bubble"/)
+  assert.match(source, /class="school-year-bubble"/)
   assert.match(source, /class="compact control-bubble"/)
   assert.match(source, /class="theme-bubble"/)
   assert.match(source, /\.topbar\{[^}]*background:transparent/)
@@ -15,7 +15,7 @@ test('topbar is a floating bubble toolbar instead of a full-width divider bar', 
 
 test('topbar bubbles use soft rounded surfaces and hover lift', async () => {
   const source = await read('src/components/layout/TopBar.vue')
-  assert.match(source, /\.identity-bubble,\.control-bubble,\.theme-bubble\{[^}]*border-radius:999px/)
+  assert.match(source, /\.school-year-bubble,\.control-bubble,\.theme-bubble\{[^}]*border-radius:999px/)
   assert.match(source, /\.control-bubble:hover\{[^}]*translateY\(-2px\)/)
   assert.match(source, /\.profile-chip:hover\{[^}]*translateY\(-2px\)/)
 })

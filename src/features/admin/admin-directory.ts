@@ -2,8 +2,17 @@ import { useQuery, type QueryClient } from '@tanstack/vue-query'
 import { legacyApi } from '../../services/legacy-supabase'
 import type { LegacyState, TeacherUserChanges } from '../../types/legacy'
 
+export interface AdminSchoolYearRecord {
+  id:string
+  name:string
+  startDate:string
+  endDate:string
+  active:boolean
+}
+
 export interface AdminClassRecord {
   id:string
+  schoolYearId:string
   code:string
   name:string
   active:boolean
@@ -25,6 +34,7 @@ export interface AdminAssignmentRecord {
   active:boolean
 }
 export interface AdminDirectory {
+  schoolYears:AdminSchoolYearRecord[]
   classes:AdminClassRecord[]
   teachers:AdminTeacherRecord[]
   assignments:AdminAssignmentRecord[]
@@ -35,10 +45,14 @@ const num=(value:unknown)=>Number(value??0)||0
 const on=(value:unknown)=>value!==false
 
 export function normalizeAdminDirectory(raw:Record<string,unknown>):AdminDirectory{
+  const schoolYears=(Array.isArray(raw.schoolYears)?raw.schoolYears:Array.isArray(raw.school_years)?raw.school_years:[]).map(item=>{
+    const row=item as Record<string,unknown>
+    return {id:text(row.id),name:text(row.name),startDate:text(row.start_date??row.startDate),endDate:text(row.end_date??row.endDate),active:row.is_active===true||row.active===true}
+  }).filter(row=>row.id)
   const classes=(Array.isArray(raw.classes)?raw.classes:[]).map(item=>{
     const row=item as Record<string,unknown>
     return {
-      id:text(row.id),code:text(row.code),name:text(row.name??row.code),active:on(row.active),
+      id:text(row.id),schoolYearId:text(row.school_year_id??row.schoolYearId),code:text(row.code),name:text(row.name??row.code),active:on(row.active),
       learnerCount:num(row.learnerCount??row.learner_count),profileCount:num(row.profileCount??row.profile_count),registrationCount:num(row.registrationCount??row.registration_count),
       canDelete:row.canDelete===true||row.can_delete===true,
       deleteBlockers:(Array.isArray(row.deleteBlockers)?row.deleteBlockers:Array.isArray(row.delete_blockers)?row.delete_blockers:[]) as Array<{code?:string;message?:string}>,
@@ -52,7 +66,7 @@ export function normalizeAdminDirectory(raw:Record<string,unknown>):AdminDirecto
     const row=item as Record<string,unknown>
     return {classId:text(row.class_id??row.classId),teacherId:text(row.teacher_id??row.teacherId),active:on(row.active)}
   }).filter(row=>row.classId&&row.teacherId)
-  return {classes,teachers,assignments}
+  return {schoolYears,classes,teachers,assignments}
 }
 
 export const adminDirectoryKey=['admin-directory'] as const
@@ -67,3 +81,6 @@ export async function deleteClass(runtime:AdminMutationRuntime,classId:string){a
 export async function createTeacher(runtime:AdminMutationRuntime,input:TeacherUserChanges){const result=await legacyApi.teacherCreateUser(input);await refresh(runtime);return result}
 export async function updateTeacher(runtime:AdminMutationRuntime,userId:string,input:TeacherUserChanges){await legacyApi.teacherUpdateUser(userId,input);await refresh(runtime)}
 export async function deleteTeacher(runtime:AdminMutationRuntime,userId:string,confirmCode:string){await legacyApi.teacherDeleteUser(userId,confirmCode);await refresh(runtime)}
+
+export async function createSchoolYear(runtime:AdminMutationRuntime,input:{name:string;startDate:string;endDate:string;setActive:boolean}){const result=await legacyApi.adminManageClasses('create_school_year',input);await refresh(runtime);return result}
+export async function setActiveSchoolYear(runtime:AdminMutationRuntime,schoolYearId:string){const result=await legacyApi.adminManageClasses('set_active_school_year',{schoolYearId});await refresh(runtime);return result}

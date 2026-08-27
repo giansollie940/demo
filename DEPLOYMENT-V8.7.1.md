@@ -6,6 +6,20 @@
 2. Giữ lại ZIP/source frontend đang chạy để rollback.
 3. Không xóa `config.js` của site đang chạy trước khi bản mới build thành công.
 
+## Thứ tự bắt buộc cho bản có Quản lý Năm học
+
+Bản frontend/Edge Function này phụ thuộc vào hai RPC mới `admin_create_school_year` và `admin_set_active_school_year`. Với database đang chạy, triển khai theo đúng thứ tự:
+
+```text
+Backup database
+→ chạy database/upgrade/01-UPGRADE-CURRENT-TO-V8.7.1.sql
+→ chạy database/verify/VERIFY-V8.7.1.sql và yêu cầu overall = true
+→ deploy Edge Functions (ít nhất admin-manage-classes; khuyến nghị đủ 10 ZIP cùng release)
+→ deploy frontend GitHub Pages
+```
+
+Không deploy frontend/`admin-manage-classes` mới trước khi database upgrade hoàn tất, nếu không thao tác tạo/kích hoạt năm học sẽ lỗi vì RPC chưa tồn tại.
+
 ## 1. Database — chọn đúng một nhánh
 
 ### A. Database hiện tại đã có V8.4.x / cấu trúc multiclass
@@ -127,6 +141,11 @@ Kiểm tra tối thiểu:
 8. Sau khi GV duyệt registration, Wise Owl không còn chấm đỏ/cảnh báo "cần xử lý" nếu không còn registration cần xử lý thật sự.
 9. Nếu registration đang `needs_revision` mà HS không sửa trước giờ bắt đầu tiết, `/issues` hiển thị **Báo cáo lỗi** và Dashboard không còn tính nó trong **Cần chỉnh sửa**.
 10. Dark/light mode, mobile, school-pattern background, profile chip và Wise Owl hoạt động bình thường.
+11. Admin mở tab **Năm học**, tạo một năm học thử với ngày bắt đầu/kết thúc hợp lệ; kiểm tra các tuần cơ sở được tạo và năm mới xuất hiện trong selector.
+12. Kích hoạt năm học mới; kiểm tra chỉ một năm có `is_active = true`.
+13. Admin/GV đổi bong bóng **Năm học**; danh sách Lớp và Tuần phải đổi theo năm đó, Dashboard/Tracking/Statistics không dùng dữ liệu của năm trước.
+14. HS/Cán sự không được tự do chuyển sang năm học khác lớp của mình.
+15. Sidebar bubble chỉ xoay vòng gradient khi hover/focus; active không quay liên tục và reduced-motion không chạy animation.
 
 ## 8. Rollback
 

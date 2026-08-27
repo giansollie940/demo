@@ -78,17 +78,46 @@ Deno.serve(async(req:Request)=>{
     const action=String(body?.action||"list");
 
     if(action==="list"){
-      const [classes,teachers,assignments]=await Promise.all([
+      const [classes,teachers,assignments,schoolYears]=await Promise.all([
         admin.from("classes").select("id,school_year_id,code,name,active,created_at,updated_at").order("code"),
         admin.from("profiles").select("id,student_code,full_name,active").eq("role","teacher").order("full_name"),
-        admin.from("class_teachers").select("class_id,teacher_id,active,assigned_at")
+        admin.from("class_teachers").select("class_id,teacher_id,active,assigned_at"),
+        admin.from("school_years").select("id,name,start_date,end_date,is_active").order("start_date",{ascending:false})
       ]);
-      for(const result of [classes,teachers,assignments])if(result.error)throw result.error;
+      for(const result of [classes,teachers,assignments,schoolYears])if(result.error)throw result.error;
       const enriched=await Promise.all((classes.data||[]).map(async(row:any)=>({
         ...row,
         ...(await classUsage(admin,row.id))
       })));
-      return json(req,200,{ok:true,classes:enriched,teachers:teachers.data||[],assignments:assignments.data||[]});
+      return json(req,200,{ok:true,classes:enriched,teachers:teachers.data||[],assignments:assignments.data||[],schoolYears:schoolYears.data||[]});
+    }
+
+    if(action==="create_school_year"){
+      const name=clean(body?.name,40);
+      const startDate=String(body?.startDate||"");
+      const endDate=String(body?.endDate||"");
+      const setActive=body?.setActive===true;
+      if(!name||!/^\d{4}-\d{2}-\d{2}$/.test(startDate)||!/^\d{4}-\d{2}-\d{2}$/.test(endDate)){
+        throw Object.assign(new Error("Thông tin năm học không hợp lệ"),{status:400,code:"INVALID_SCHOOL_YEAR"});
+      }
+      const {data,error}=await admin.rpc("admin_create_school_year",{
+        p_actor_id:actor.id,p_name:name,p_start_date:startDate,p_end_date:endDate,p_set_active:setActive
+      });
+      if(error)throw error;
+      const schoolYearId=String(data||"");
+      await writeAudit(admin,{actorId:actor.id,action:"ADMIN_CREATE_SCHOOL_YEAR",entityType:"school_year",entityId:schoolYearId,newData:{name,startDate,endDate,setActive}});
+      return json(req,200,{ok:true,schoolYearId});
+    }
+
+    if(action==="set_active_school_year"){
+      const schoolYearId=assertUuid(body?.schoolYearId,"schoolYearId");
+      const {data:before,error:beforeError}=await admin.from("school_years").select("id,name,is_active").eq("id",schoolYearId).maybeSingle();
+      if(beforeError)throw beforeError;
+      if(!before)throw Object.assign(new Error("Không tìm thấy năm học"),{status:404,code:"SCHOOL_YEAR_NOT_FOUND"});
+      const {error}=await admin.rpc("admin_set_active_school_year",{p_actor_id:actor.id,p_school_year_id:schoolYearId});
+      if(error)throw error;
+      await writeAudit(admin,{actorId:actor.id,action:"ADMIN_SET_ACTIVE_SCHOOL_YEAR",entityType:"school_year",entityId:schoolYearId,oldData:{active:before.is_active},newData:{active:true,name:before.name}});
+      return json(req,200,{ok:true,schoolYearId});
     }
 
     if(action==="create_class"){
