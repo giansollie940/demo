@@ -148,3 +148,14 @@
 - Admin teacher management adds edit/reset-password/hard-delete controls. Learner management adds create/edit/transfer/role/lock-restore/reset-password/hard-delete controls.
 - Vertical macOS Dock now lifts the hovered item to the right, shrinks/displaces neighboring items vertically, opens real layout gaps, and reserves a larger brand safe zone so the first item cannot overlap the favicon.
 - Light mode renders the vanilla `school-pattern-bg.png` at full visibility without multiply/color overlay. Dark mode keeps the same image and fades a charcoal-plum overlay above it.
+
+## 2026-08-28 — Layer / Dock overflow / Audit reliability hotfix
+
+- Removed the broad `AppShell .main > *` stacking rule that was overriding child component layers. `TopBar` now owns z-index 60, the profile dropdown z-index 100, main content z-index 10, and Wise Owl remains viewport-fixed at z-index 80.
+- Restored Wise Owl to the bottom-right viewport position and prevented the signed-in profile dropdown from being covered by page cards.
+- Desktop `SidebarNav` now uses `overflow: visible`, allowing the vertical macOS Dock magnification to render outside the sidebar panel instead of being clipped by a scroll container. Short viewports switch to a compact scroll fallback with magnification disabled.
+- Current-upgrade SQL now idempotently guarantees `audit_logs.class_id`, `audit_logs.source`, their constraints/FKs, and inserts one `AUDIT_SCHEMA_READY` system marker.
+- Database verifier now checks Audit `class_id`, `source`, source constraint, class FK `ON DELETE SET NULL`, actor FK, and actor nullability.
+- Root-admin Audit UI now distinguishes loading, backend/schema error, truly empty audit history, and filtered-empty results. Invalid Edge responses no longer silently become an empty array.
+- `audit-log` returns a dedicated `AUDIT_SCHEMA_NOT_READY` error when the current database is missing the required Audit schema and labels system-origin rows as `Hệ thống`.
+- Preserved the GitHub Pages Node 24 workflow and `cancel-in-progress: false` deployment concurrency setting.

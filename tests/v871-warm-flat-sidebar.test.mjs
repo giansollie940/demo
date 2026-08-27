@@ -39,7 +39,7 @@ test('school pattern is an independent layer so content surfaces cannot hide it'
   assert.match(shell,/background-image:\s*var\(--school-pattern-image\)/)
   assert.match(shell,/opacity:\s*1/)
   assert.match(shell,/pointer-events:none/)
-  assert.match(shell,/\.content\{[^}]*z-index:2/s)
+  assert.match(shell,/\.content\{[^}]*z-index:10/s)
   assert.doesNotMatch(shell,/background-blend-mode:\s*normal,multiply/)
 })
 

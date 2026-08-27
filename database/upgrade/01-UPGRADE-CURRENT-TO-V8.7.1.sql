@@ -253,6 +253,60 @@ execute function public.sync_teacher_review_notification();
 notify pgrst, 'reload schema';
 commit;
 
+-- V8.7.1 audit directory compatibility -----------------------------------------
+-- Current databases upgraded from older releases may not yet have the fields
+-- used by the root-admin audit viewer. This block is idempotent.
+begin;
+
+do $audit_preflight$
+begin
+  if to_regclass('public.audit_logs') is null
+     or to_regclass('public.classes') is null then
+    raise exception 'Thiếu public.audit_logs hoặc public.classes.';
+  end if;
+end
+$audit_preflight$;
+
+alter table public.audit_logs
+  add column if not exists class_id uuid,
+  add column if not exists source text;
+
+update public.audit_logs
+set source='server'
+where source is null or source not in ('server','client','system');
+
+alter table public.audit_logs
+  alter column source set default 'server',
+  alter column source set not null;
+
+alter table public.audit_logs
+  drop constraint if exists audit_logs_source_check;
+
+alter table public.audit_logs
+  add constraint audit_logs_source_check
+  check (source in ('server','client','system'));
+
+alter table public.audit_logs
+  drop constraint if exists audit_logs_class_id_fkey;
+
+alter table public.audit_logs
+  add constraint audit_logs_class_id_fkey
+  foreign key (class_id)
+  references public.classes(id)
+  on delete set null;
+
+insert into public.audit_logs(actor_id,class_id,action,entity_type,entity_id,old_data,new_data,source,created_at)
+select null,null,'AUDIT_SCHEMA_READY','system',null,null,
+       jsonb_build_object('version','8.7.1','message','Nhật ký hệ thống đã sẵn sàng'),
+       'system',now()
+where not exists (
+  select 1 from public.audit_logs
+  where action='AUDIT_SCHEMA_READY' and source='system'
+);
+
+notify pgrst, 'reload schema';
+commit;
+
 -- SỔ TỰ HỌC V8.4.2c HOTFIX
 -- Giữ audit log khi hard-delete một tài khoản/profile.
 -- audit_logs.actor_id đã nullable; chuyển FK từ NO ACTION sang ON DELETE SET NULL.

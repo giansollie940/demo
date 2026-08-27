@@ -5,6 +5,15 @@ WITH root_admin AS (
   FROM public.profiles
   WHERE role::text='admin'
 ),
+audit_class_fk AS (
+  SELECT c.confdeltype
+  FROM pg_constraint c
+  JOIN pg_class t ON t.oid=c.conrelid
+  JOIN pg_namespace n ON n.oid=t.relnamespace
+  WHERE n.nspname='public'
+    AND t.relname='audit_logs'
+    AND c.conname='audit_logs_class_id_fkey'
+),
 audit_fk AS (
   SELECT c.confdeltype
   FROM pg_constraint c
@@ -64,6 +73,21 @@ checks AS (
   UNION ALL SELECT 'revision_rpc_session_guard',coalesce((SELECT position('study_session_start' in def)>0 FROM revision_proc),false)
   UNION ALL SELECT 'notification_function_exists',to_regprocedure('public.sync_teacher_review_notification()') IS NOT NULL
   UNION ALL SELECT 'notification_revision_overdue_safe',coalesce((SELECT position('revision_overdue_at' in def)>0 FROM notification_proc),false)
+  UNION ALL SELECT 'audit_class_id_column',exists(
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema='public' AND table_name='audit_logs' AND column_name='class_id' AND udt_name='uuid'
+  )
+  UNION ALL SELECT 'audit_class_fk_set_null',coalesce((SELECT confdeltype='n' FROM audit_class_fk),false)
+  UNION ALL SELECT 'audit_source_column',exists(
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema='public' AND table_name='audit_logs' AND column_name='source' AND is_nullable='NO'
+  )
+  UNION ALL SELECT 'audit_source_constraint',exists(
+    SELECT 1 FROM pg_constraint c
+    JOIN pg_class t ON t.oid=c.conrelid
+    JOIN pg_namespace n ON n.oid=t.relnamespace
+    WHERE n.nspname='public' AND t.relname='audit_logs' AND c.conname='audit_logs_source_check'
+  )
   UNION ALL SELECT 'audit_actor_fk_set_null',coalesce((SELECT confdeltype='n' FROM audit_fk),false)
   UNION ALL SELECT 'audit_actor_nullable',exists(
     SELECT 1 FROM information_schema.columns

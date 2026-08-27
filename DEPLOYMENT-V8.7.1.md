@@ -114,7 +114,7 @@ Mỗi ZIP chứa `source/index.ts` và thư mục `_shared/*` **ở cấp ZIP ro
 
 ## 6. GitHub Pages frontend
 
-Workflow `.github/workflows/deploy-pages.yml` dùng Node 24, chạy `npm ci`, typecheck, static tests, unit tests và build trước khi deploy.
+Workflow `.github/workflows/deploy-pages.yml` dùng Node 24, chạy `npm ci`, typecheck, static tests, unit tests và build trước khi deploy. Pages dùng `cancel-in-progress: false` để không hủy deployment production đang ở trạng thái `updating_pages`.
 
 Trong GitHub repository, thiết lập:
 
@@ -131,7 +131,7 @@ Workflow tự tạo `public/config.js` khi build. Chỉ public project URL/publi
 
 Kiểm tra tối thiểu theo vai trò:
 
-1. **Admin** đăng nhập phải được đưa về `/admin`; sidebar chỉ có **Quản trị hệ thống** và topbar không có bộ chọn Lớp/Tuần.
+1. **Admin** đăng nhập phải được đưa về `/admin`; sidebar có 7 mục trực tiếp **Tổng quan / Năm học / Lớp học / Học sinh / Giáo viên / Phân quyền / Nhật ký hệ thống** và topbar không có bộ chọn Lớp/Tuần.
 2. Admin tab **Năm học** thấy `2026–2027` đang hoạt động; KPI số năm học không được bằng 0 khi context đã có năm active.
 3. Admin tạo/kích hoạt một năm học thử; kiểm tra chỉ một năm có `is_active = true`.
 4. Admin sửa ngày bắt đầu/kết thúc một **tuần chuẩn** trong tab Năm học; reload lại và xác nhận ngày được giữ.
@@ -155,15 +155,18 @@ Frontend: redeploy artifact frontend trước đó.
 
 Database/backend: rollback phải dựa trên backup đã tạo ở bước 0; không chạy ngược các SQL bằng suy đoán.
 
-## Admin hard-delete / audit / Dock / background update
+## Admin hard-delete / Audit / Dock / layering update
 
-This update changes Edge Function behavior and frontend UI, but adds no new database table or column beyond the current V8.7.1 PERIOD/WEEK schema. The existing database verifier must still report `overall=true`, especially the `audit_actor_fk_set_null` and `audit_actor_nullable` checks before permanent deletion is enabled.
+This hotfix makes the current-upgrade path explicitly guarantee the Audit schema used by the Admin viewer (`audit_logs.class_id` and `audit_logs.source`) and adds an idempotent `AUDIT_SCHEMA_READY` marker. **Run the current upgrade again even if the PERIOD/WEEK migration was already applied**; the script is designed to be rerunnable.
 
-Deployment order for an installation already on the latest V8.7.1 PERIOD/WEEK database:
+Deployment order for the latest release:
 
-1. Run `database/verify/VERIFY-V8.7.1.sql`; require `overall=true`.
-2. Deploy all 10 Edge ZIPs (at minimum `admin-delete-user.zip` and `audit-log.zip`; full redeploy recommended).
-3. Deploy the ROOT-FLAT frontend through GitHub Pages.
-4. Smoke-test Admin → Học sinh, Giáo viên, Nhật ký hệ thống.
+1. Backup the database.
+2. Run `database/upgrade/01-UPGRADE-CURRENT-TO-V8.7.1.sql`.
+3. Run `database/verify/VERIFY-V8.7.1.sql`; require `overall=true`, including `audit_class_id_column`, `audit_class_fk_set_null`, `audit_source_column`, `audit_source_constraint`, `audit_actor_fk_set_null`, and `audit_actor_nullable`.
+4. Deploy all 10 Edge ZIPs; `audit-log.zip` is mandatory for this hotfix.
+5. Deploy the ROOT-FLAT frontend through GitHub Pages.
+6. Smoke-test Admin → Nhật ký hệ thống. A successful upgraded database should expose the `AUDIT_SCHEMA_READY` system row even before another Admin mutation is performed.
+7. Verify Wise Owl is fixed at the bottom-right, the profile dropdown stays above page cards, and the desktop Dock can magnify beyond the sidebar frame.
 
 Permanent deletion is irreversible. Learner/monitor hard-delete can remove dependent study records via existing database cascades and therefore can change historical statistics. Teacher hard-delete is rejected while any active `class_teachers` assignment remains. Root Admin cannot delete itself or another root admin directly.

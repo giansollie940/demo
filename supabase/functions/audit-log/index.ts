@@ -10,6 +10,19 @@ function safeIso(value: unknown) {
   return Number.isFinite(date.getTime()) ? date.toISOString() : new Date().toISOString();
 }
 
+
+function auditSchemaFailure(error: any) {
+  const code = String(error?.code || "");
+  const message = String(error?.message || "");
+  if (code === "42703" || code === "PGRST204" || /audit_logs|class_id|source/i.test(message)) {
+    return Object.assign(
+      new Error("Schema Nhật ký hệ thống chưa sẵn sàng. Hãy chạy database/upgrade/01-UPGRADE-CURRENT-TO-V8.7.1.sql rồi VERIFY-V8.7.1.sql."),
+      { status: 503, code: "AUDIT_SCHEMA_NOT_READY" },
+    );
+  }
+  return error;
+}
+
 function boundedLimit(value:unknown){
   const n=Number(value||100);
   if(!Number.isFinite(n))return 100;
@@ -51,7 +64,7 @@ Deno.serve(async (req: Request) => {
       if(until)query=query.lte("created_at",safeIso(until));
 
       const {data,error}=await query;
-      if(error)throw error;
+      if(error)throw auditSchemaFailure(error);
       const rows=data||[];
       const actorIds=[...new Set(rows.map((row:any)=>row.actor_id).filter(Boolean))];
       const classIds=[...new Set(rows.map((row:any)=>row.class_id).filter(Boolean))];
@@ -66,7 +79,7 @@ Deno.serve(async (req: Request) => {
       const logs=rows.map((row:any)=>({
         id:row.id,
         actorId:row.actor_id,
-        actorName:actorMap.get(row.actor_id)?.full_name||actorMap.get(row.actor_id)?.student_code||"Tài khoản đã xóa",
+        actorName:row.actor_id?(actorMap.get(row.actor_id)?.full_name||actorMap.get(row.actor_id)?.student_code||"Tài khoản đã xóa"):(row.source==="system"?"Hệ thống":"Tài khoản đã xóa"),
         classId:row.class_id,
         classCode:classMap.get(row.class_id)?.code||null,
         action:row.action,

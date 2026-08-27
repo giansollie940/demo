@@ -18,6 +18,7 @@ test('GitHub Pages workflow builds and deploys dist', () => {
   assert.match(yml, /actions\/upload-pages-artifact@v5/)
   assert.match(yml, /path:\s*\.\/dist/)
   assert.match(yml, /actions\/deploy-pages@v5/)
+  assert.match(yml, /cancel-in-progress:\s*false/)
 })
 
 test('workflow generates browser-only Supabase config from repository secrets', () => {
