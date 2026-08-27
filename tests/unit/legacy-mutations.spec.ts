@@ -19,6 +19,8 @@ function stateFixture(): LegacyState {
   return {
     version: 1,
     activeSchoolYearId: 'year-1',
+    selectedSchoolYearId: 'year-1',
+    availableSchoolYears: [{ id: 'year-1', name: '2026–2027', startDate: '2026-08-24', endDate: '2027-05-30', active: true }],
     activeClassId: 'class-1',
     availableClasses: [{ id: 'class-1', code: '7A1', name: '7A1', active: true }],
     settings: { registrationDeadlineTime: '20:00' },

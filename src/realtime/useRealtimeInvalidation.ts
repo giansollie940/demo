@@ -26,7 +26,7 @@ export function useRealtimeInvalidation(){
       }
       if(change.structural||structuralTables.includes(String(change.table||''))){
         dirtyRegistry.notifyServerChange()
-        await auth.reload(context.selectedClassId)
+        await auth.reload(context.selectedClassId,context.selectedSchoolYearId)
         context.hydrate(auth.legacyState)
         await queryClient.invalidateQueries()
       }

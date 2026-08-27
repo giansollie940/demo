@@ -19,7 +19,7 @@ const users=computed(()=>directory.data.value??[])
 const visible=computed(()=>{const q=query.value.trim().toLocaleLowerCase('vi');return users.value.filter(user=>(!q||`${user.code} ${user.fullName}`.toLocaleLowerCase('vi').includes(q))&&(role.value==='all'||user.role===role.value)&&(stateFilter.value==='all'||(stateFilter.value==='active'?user.active:!user.active)))})
 const counts=computed(()=>({student:users.value.filter(u=>u.role==='student').length,monitor:users.value.filter(u=>u.role==='monitor').length,active:users.value.filter(u=>u.active).length,deleted:users.value.filter(u=>!u.active).length}))
 const classes=computed(()=>auth.legacyState?.availableClasses.map(item=>({id:item.id,code:item.code,name:item.name}))??[])
-function runtime():StudentMutationRuntime{if(!classId.value)throw new Error('Chưa chọn lớp.');return{classId:classId.value,queryClient,reload:async()=>{await auth.reload(classId.value);context.hydrate(auth.legacyState)}}}
+function runtime():StudentMutationRuntime{if(!classId.value)throw new Error('Chưa chọn lớp.');return{classId:classId.value,queryClient,reload:async()=>{await auth.reload(classId.value,context.selectedSchoolYearId);context.hydrate(auth.legacyState)}}}
 function notify(state:InlineStatusState,message:string){status.value=state;statusMessage.value=message}
 function openCreate(){editing.value=null;error.value='';dialogOpen.value=true}
 function openEdit(user:DirectoryUser){editing.value=user;error.value='';dialogOpen.value=true}

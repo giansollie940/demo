@@ -11,7 +11,8 @@ test('admin navigation consolidates system management into one sidebar item',()=
   assert.doesNotMatch(source,/item\('Lớp học','\/admin\?tab=classes'/)
   assert.doesNotMatch(source,/item\('Giáo viên','\/admin\?tab=teachers'/)
   assert.doesNotMatch(source,/item\('Phân quyền','\/admin\?tab=permissions'/)
-  assert.match(source,/admin:\[[^\]]*'Quản trị hệ thống'[^\]]*'Cài đặt'/s)
+  assert.match(source,/admin:\['Quản trị hệ thống'\]/)
+  assert.doesNotMatch(source,/admin:\[[^\]]*'Cài đặt'/s)
 })
 
 test('admin page keeps the management areas as internal tabs',()=>{

@@ -33,6 +33,7 @@ export interface WeekRecord {
   startDate: string
   endDate: string
   status?: string
+  manualStatus?: 'open' | 'locked' | null
   deadlineMode?: 'per_session_20' | 'specific' | string
   deadline?: string
   note?: string

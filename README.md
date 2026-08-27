@@ -10,6 +10,15 @@ Bản này hợp nhất **frontend Vue 3/TypeScript V8.7.1** và **backend Supab
 - AI review: `ai-review-registration` V8.7.1, với routing cuối cùng `auto_approve → approved`, `request_revision → needs_revision`, `manual_review → submitted`.
 - Deployment: 10 ZIP độc lập trong `deploy/edge-functions/` và workflow GitHub Pages ở `.github/workflows/deploy-pages.yml`.
 
+
+## Quyền và vận hành tuần ở bản hiện tại
+
+- **Admin:** chỉ quản trị hệ thống (`Năm học / Lớp học / Giáo viên / Phân quyền`). Admin quản lý lịch chuẩn của năm học và có thể sửa ngày bắt đầu/kết thúc từng tuần.
+- **Giáo viên:** vận hành lớp (`Duyệt / Theo dõi / Quản lý tuần / TKB / Học sinh / Thống kê / Cài đặt`). GV không sửa tên lớp, năm học hoặc ngày chuẩn của tuần.
+- **Cán sự:** chức năng cá nhân + hỗ trợ theo dõi lớp trong phạm vi cho phép.
+- **Học sinh:** chức năng cá nhân.
+- `class_weeks.manual_status = null` giữ lifecycle tự động; `open/locked` là override của GV. Tự động vẫn dựa trên buổi tự học cuối cùng của tuần.
+
 ## Database: chỉ chọn MỘT đường
 
 ### Hệ thống hiện tại đã ở V8.4.x trở lên

@@ -10,6 +10,15 @@ export interface AdminSchoolYearRecord {
   active:boolean
 }
 
+export interface AdminCalendarWeekRecord {
+  id:string
+  schoolYearId:string
+  number:number
+  startDate:string
+  endDate:string
+  status:string
+}
+
 export interface AdminClassRecord {
   id:string
   schoolYearId:string
@@ -35,6 +44,7 @@ export interface AdminAssignmentRecord {
 }
 export interface AdminDirectory {
   schoolYears:AdminSchoolYearRecord[]
+  weeks:AdminCalendarWeekRecord[]
   classes:AdminClassRecord[]
   teachers:AdminTeacherRecord[]
   assignments:AdminAssignmentRecord[]
@@ -49,6 +59,10 @@ export function normalizeAdminDirectory(raw:Record<string,unknown>):AdminDirecto
     const row=item as Record<string,unknown>
     return {id:text(row.id),name:text(row.name),startDate:text(row.start_date??row.startDate),endDate:text(row.end_date??row.endDate),active:row.is_active===true||row.active===true}
   }).filter(row=>row.id)
+  const weeks=(Array.isArray(raw.weeks)?raw.weeks:[]).map(item=>{
+    const row=item as Record<string,unknown>
+    return {id:text(row.id),schoolYearId:text(row.school_year_id??row.schoolYearId),number:num(row.week_number??row.number),startDate:text(row.start_date??row.startDate),endDate:text(row.end_date??row.endDate),status:text(row.status||'upcoming')}
+  }).filter(row=>row.id&&row.schoolYearId)
   const classes=(Array.isArray(raw.classes)?raw.classes:[]).map(item=>{
     const row=item as Record<string,unknown>
     return {
@@ -66,11 +80,11 @@ export function normalizeAdminDirectory(raw:Record<string,unknown>):AdminDirecto
     const row=item as Record<string,unknown>
     return {classId:text(row.class_id??row.classId),teacherId:text(row.teacher_id??row.teacherId),active:on(row.active)}
   }).filter(row=>row.classId&&row.teacherId)
-  return {schoolYears,classes,teachers,assignments}
+  return {schoolYears,weeks,classes,teachers,assignments}
 }
 
 export const adminDirectoryKey=['admin-directory'] as const
-export function useAdminDirectory(){return useQuery({queryKey:adminDirectoryKey,queryFn:async()=>normalizeAdminDirectory(await legacyApi.adminManageClasses('list')),staleTime:180_000})}
+export function useAdminDirectory(){return useQuery({queryKey:adminDirectoryKey,queryFn:async()=>normalizeAdminDirectory(await legacyApi.adminManageClasses('list')),staleTime:30_000})}
 
 export interface AdminMutationRuntime{queryClient:QueryClient;reload():Promise<LegacyState|null>}
 async function refresh(runtime:AdminMutationRuntime){await runtime.reload();await runtime.queryClient.invalidateQueries({queryKey:adminDirectoryKey})}
@@ -84,3 +98,4 @@ export async function deleteTeacher(runtime:AdminMutationRuntime,userId:string,c
 
 export async function createSchoolYear(runtime:AdminMutationRuntime,input:{name:string;startDate:string;endDate:string;setActive:boolean}){const result=await legacyApi.adminManageClasses('create_school_year',input);await refresh(runtime);return result}
 export async function setActiveSchoolYear(runtime:AdminMutationRuntime,schoolYearId:string){const result=await legacyApi.adminManageClasses('set_active_school_year',{schoolYearId});await refresh(runtime);return result}
+export async function updateSchoolYearWeek(runtime:AdminMutationRuntime,input:{weekId:string;startDate:string;endDate:string}){const result=await legacyApi.adminManageClasses('update_school_year_week',input);await refresh(runtime);return result}

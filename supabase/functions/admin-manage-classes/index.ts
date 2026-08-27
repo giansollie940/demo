@@ -78,18 +78,19 @@ Deno.serve(async(req:Request)=>{
     const action=String(body?.action||"list");
 
     if(action==="list"){
-      const [classes,teachers,assignments,schoolYears]=await Promise.all([
+      const [classes,teachers,assignments,schoolYears,weeks]=await Promise.all([
         admin.from("classes").select("id,school_year_id,code,name,active,created_at,updated_at").order("code"),
         admin.from("profiles").select("id,student_code,full_name,active").eq("role","teacher").order("full_name"),
         admin.from("class_teachers").select("class_id,teacher_id,active,assigned_at"),
-        admin.from("school_years").select("id,name,start_date,end_date,is_active").order("start_date",{ascending:false})
+        admin.from("school_years").select("id,name,start_date,end_date,is_active").order("start_date",{ascending:false}),
+        admin.from("weeks").select("id,school_year_id,week_number,start_date,end_date,status").order("week_number")
       ]);
-      for(const result of [classes,teachers,assignments,schoolYears])if(result.error)throw result.error;
+      for(const result of [classes,teachers,assignments,schoolYears,weeks])if(result.error)throw result.error;
       const enriched=await Promise.all((classes.data||[]).map(async(row:any)=>({
         ...row,
         ...(await classUsage(admin,row.id))
       })));
-      return json(req,200,{ok:true,classes:enriched,teachers:teachers.data||[],assignments:assignments.data||[],schoolYears:schoolYears.data||[]});
+      return json(req,200,{ok:true,classes:enriched,teachers:teachers.data||[],assignments:assignments.data||[],schoolYears:schoolYears.data||[],weeks:weeks.data||[]});
     }
 
     if(action==="create_school_year"){
@@ -118,6 +119,23 @@ Deno.serve(async(req:Request)=>{
       if(error)throw error;
       await writeAudit(admin,{actorId:actor.id,action:"ADMIN_SET_ACTIVE_SCHOOL_YEAR",entityType:"school_year",entityId:schoolYearId,oldData:{active:before.is_active},newData:{active:true,name:before.name}});
       return json(req,200,{ok:true,schoolYearId});
+    }
+
+
+    if(action==="update_school_year_week"){
+      const weekId=assertUuid(body?.weekId,"weekId");
+      const startDate=String(body?.startDate||"");
+      const endDate=String(body?.endDate||"");
+      if(!/^\d{4}-\d{2}-\d{2}$/.test(startDate)||!/^\d{4}-\d{2}-\d{2}$/.test(endDate)||endDate<startDate){
+        throw Object.assign(new Error("Khoảng ngày của tuần không hợp lệ"),{status:400,code:"INVALID_WEEK_RANGE"});
+      }
+      const {data:before,error:beforeError}=await admin.from("weeks").select("id,school_year_id,week_number,start_date,end_date").eq("id",weekId).maybeSingle();
+      if(beforeError)throw beforeError;
+      if(!before)throw Object.assign(new Error("Không tìm thấy tuần"),{status:404,code:"WEEK_NOT_FOUND"});
+      const {data,error}=await admin.from("weeks").update({start_date:startDate,end_date:endDate}).eq("id",weekId).select("id,school_year_id,week_number,start_date,end_date,status").single();
+      if(error)throw error;
+      await writeAudit(admin,{actorId:actor.id,action:"ADMIN_UPDATE_SCHOOL_YEAR_WEEK",entityType:"week",entityId:weekId,oldData:{startDate:before.start_date,endDate:before.end_date},newData:{startDate,endDate,weekNumber:before.week_number}});
+      return json(req,200,{ok:true,week:data});
     }
 
     if(action==="create_class"){

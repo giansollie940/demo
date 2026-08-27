@@ -22,10 +22,12 @@ const emit = defineEmits<{
 
 const deadlineInvalid = computed(() => props.modelValue.deadlineMode === 'specific' && !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(props.modelValue.deadline))
 const deadlineHelpId = computed(() => `week-${props.modelValue.id}-deadline-help`)
+const operationMode = computed(() => props.modelValue.manualStatus ?? 'auto')
 
 function update(patch: Partial<WeekEditorDraft>) {
   emit('update:modelValue', { ...props.modelValue, ...patch })
 }
+function updateOperationMode(value:string){update({manualStatus:value==='open'||value==='locked'?value:null})}
 
 function formatDate(value: string) {
   const [year, month, day] = value.split('-')
@@ -57,6 +59,16 @@ function formatDate(value: string) {
         />
         <Palmtree aria-hidden="true" />
         <span><b>Tuần nghỉ</b><small>Không dùng TKB riêng rỗng để biểu thị nghỉ học.</small></span>
+      </label>
+
+      <label class="field-control operation-control">
+        <span>Chế độ vận hành</span>
+        <select :value="operationMode" :disabled="disabled||modelValue.holiday" @change="updateOperationMode(($event.target as HTMLSelectElement).value)">
+          <option value="auto">Tự động</option>
+          <option value="open">Mở thủ công</option>
+          <option value="locked">Đóng thủ công</option>
+        </select>
+        <small class="field-helper">Tự động sẽ đóng sau buổi tự học cuối và chuyển sang tuần kế tiếp.</small>
       </label>
 
       <label class="field-control">

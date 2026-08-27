@@ -34,6 +34,8 @@ function stateFixture(): LegacyState {
   return {
     version: 1,
     activeSchoolYearId: 'year-1',
+    selectedSchoolYearId: 'year-1',
+    availableSchoolYears: [{ id: 'year-1', name: '2026–2027', startDate: '2026-08-24', endDate: '2027-05-30', active: true }],
     activeClassId: 'class-1',
     availableClasses: [],
     settings: {},
@@ -53,11 +55,11 @@ describe('week editor drafts', () => {
     expect(buildWeekDrafts(weeks)).toEqual([
       {
         id: 'week-1', number: 1, startDate: '2026-08-24', endDate: '2026-08-30',
-        holiday: false, deadlineMode: 'per_session_20', deadline: '', note: 'Tuần đầu',
+        holiday: false, manualStatus: null, deadlineMode: 'per_session_20', deadline: '', note: 'Tuần đầu',
       },
       {
         id: 'week-2', number: 2, startDate: '2026-08-31', endDate: '2026-09-06',
-        holiday: true, deadlineMode: 'specific', deadline: '2026-08-29T19:30', note: '',
+        holiday: true, manualStatus: null, deadlineMode: 'specific', deadline: '2026-08-29T19:30', note: '',
       },
     ])
   })

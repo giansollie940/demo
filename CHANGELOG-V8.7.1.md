@@ -1,3 +1,14 @@
+## 2026-08-27 · Role boundary + year/week lifecycle + macOS Dock
+
+- Tách quyền cuối theo nghiệp vụ: **Admin chỉ quản trị hệ thống**, **GV vận hành lớp**, **Cán sự hỗ trợ lớp**, **HS quản lý cá nhân**. Admin route/sidebar không còn Dashboard/Duyệt/Tracking/Weeks/TKB/Học sinh/Thống kê/Cài đặt của GV.
+- Admin topbar chỉ giữ **Năm học + theme + profile**; GV giữ **Năm học + Lớp + Tuần**. HS/Cán sự tiếp tục theo context lớp của tài khoản.
+- Sửa KPI `Năm học = 0`: Admin overview hợp nhất directory Edge với `context.schoolYears`, nên năm học active đã tải trong legacy state không bị biến thành 0 khi directory cache/response thiếu.
+- Tab **Năm học** của Admin hiển thị lịch tuần chuẩn và cho root admin sửa `start_date/end_date` từng tuần qua action `update_school_year_week`; GV không được sửa lịch chuẩn toàn trường.
+- GV vẫn có **Quản lý tuần** ở tầng lớp: deadline, tuần nghỉ, ghi chú, TKB tuần và `Tự động / Mở thủ công / Đóng thủ công`. Lớp mới có `class_weeks.manual_status`; `null` nghĩa là quay lại tự động.
+- `class_week_effective_status` ưu tiên manual override, sau đó tự tính lifecycle dựa trên **buổi tự học cuối cùng** của từng tuần (week override → default study schedule → period end time); qua boundary thì tuần trước khóa và tuần vận hành kế tiếp tự mở như phiên bản cũ.
+- Cài đặt GV hiển thị **Lớp/Năm học** dưới dạng metadata chỉ đọc thay vì input, tránh ngộ nhận GV có thể sửa cấu trúc hệ thống.
+- Sidebar giữ floating panel + vòng gradient xoay một lần khi hover, đồng thời thêm **macOS Dock magnification**: mục hover phóng/nổi rõ, hai mục lân cận phóng nhẹ, collapsed icon rail có hiệu ứng mạnh hơn; `prefers-reduced-motion` đưa scale về 1.
+
 
 ## Admin consolidated navigation + floating iPad sidebar
 

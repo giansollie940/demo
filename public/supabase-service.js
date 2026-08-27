@@ -575,6 +575,7 @@
     return {
       id:w.id, number:w.week_number, startDate:w.start_date, endDate:w.end_date,
       status:w.status,
+      manualStatus:w.manual_status||null,
       deadlineMode:w.deadline_mode || "per_session_20",
       deadline:toLocalInput(w.registration_deadline),
       note:w.note || ""
@@ -684,6 +685,7 @@
     return mapWeek({
       ...base,
       status:row?.status??base.status,
+      manual_status:row?.manual_status??null,
       deadline_mode:explicitSpecific?"specific":"per_session_20",
       registration_deadline:explicitSpecific?(row?.registration_deadline||null):null,
       note:row?.note??base.note
@@ -759,7 +761,7 @@
     if(selectedYear){
       const [baseWeeksRes,classWeeksRes]=await Promise.all([
         sb.from("weeks").select("id,week_number,start_date,end_date,status,deadline_mode,registration_deadline,note").eq("school_year_id",selectedYear.id).order("week_number"),
-        activeClassId?sb.from("class_weeks").select("class_id,week_id,status,deadline_mode,registration_deadline,note").eq("class_id",activeClassId):Promise.resolve({data:[],error:null})
+        activeClassId?sb.from("class_weeks").select("class_id,week_id,status,manual_status,deadline_mode,registration_deadline,note").eq("class_id",activeClassId):Promise.resolve({data:[],error:null})
       ]);
       if(baseWeeksRes.error)throw baseWeeksRes.error;if(classWeeksRes.error)throw classWeeksRes.error;
       const cw=new Map((classWeeksRes.data||[]).map(x=>[x.week_id,x]));
@@ -881,7 +883,7 @@
       }
       const oldWeeks=new Map((before.weeks||[]).map(w=>[w.id,w]));
       for(const w of state.weeks||[]){const old=oldWeeks.get(w.id);if(old&&stable(w)!==stable(old)){
-        const {error}=await sb.from("class_weeks").upsert({class_id:classId,week_id:w.id,status:w.status,deadline_mode:w.deadlineMode||"per_session_20",registration_deadline:w.deadline?new Date(w.deadline).toISOString():null,note:w.note||null,updated_by:currentUser.id,updated_at:new Date().toISOString()},{onConflict:"class_id,week_id"});if(error)throw error;
+        const {error}=await sb.from("class_weeks").upsert({class_id:classId,week_id:w.id,status:w.status,manual_status:w.manualStatus||null,deadline_mode:w.deadlineMode||"per_session_20",registration_deadline:w.deadline?new Date(w.deadline).toISOString():null,note:w.note||null,updated_by:currentUser.id,updated_at:new Date().toISOString()},{onConflict:"class_id,week_id"});if(error)throw error;
       }}
       if(stable(state.settings||{})!==stable(before.settings||{})){
         const {error}=await sb.from("class_settings").update({

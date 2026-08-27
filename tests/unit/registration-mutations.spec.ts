@@ -11,7 +11,7 @@ import type { CurrentUser, LegacyState, RegistrationRecord } from '../../src/typ
 function stateFixture(): LegacyState {
   return {
     version: 1,
-    activeSchoolYearId: 'year-1', activeClassId: 'class-1', availableClasses: [], settings: {}, users: [],
+    activeSchoolYearId: 'year-1', selectedSchoolYearId: 'year-1', availableSchoolYears: [{ id: 'year-1', name: '2026–2027', startDate: '2026-08-24', endDate: '2027-05-30', active: true }], activeClassId: 'class-1', availableClasses: [], settings: {}, users: [],
     weeks: [{ id: 'week-1', number: 1, startDate: '2026-08-24', endDate: '2026-08-30' }],
     periods: [{ n: 1, start: '07:00', end: '07:40' }], schedule: [{ dow: 0, period: 1 }], overrides: [],
     registrations: [], notifications: [], currentWeekId: 'week-1',

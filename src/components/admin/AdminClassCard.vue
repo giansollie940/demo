@@ -1,9 +1,9 @@
 <script setup lang="ts">
-import { Edit3, LockKeyhole, RotateCcw, Trash2, UsersRound } from 'lucide-vue-next'
+import { Edit3, LockKeyhole, RotateCcw, Trash2 } from 'lucide-vue-next'
 import AppButton from '../ui/AppButton.vue'
 import type { AdminClassRecord, AdminTeacherRecord } from '../../features/admin/admin-directory'
 defineProps<{item:AdminClassRecord;teachers:AdminTeacherRecord[]}>()
-const emit=defineEmits<{open:[];edit:[];toggle:[];delete:[]}>()
+const emit=defineEmits<{edit:[];toggle:[];delete:[]}>()
 </script>
 <template>
   <article class="class-card" :class="{inactive:!item.active}">
@@ -11,7 +11,7 @@ const emit=defineEmits<{open:[];edit:[];toggle:[];delete:[]}>()
     <div class="metrics"><span><small>HS/cán sự</small><b>{{ item.learnerCount }}</b></span><span><small>Hồ sơ</small><b>{{ item.profileCount }}</b></span><span><small>Đăng ký</small><b>{{ item.registrationCount }}</b></span><span><small>GV phụ trách</small><b>{{ teachers.length }}</b></span></div>
     <div class="teacher-chips"><span v-for="teacher in teachers" :key="teacher.id">{{ teacher.fullName || teacher.code }}</span><small v-if="!teachers.length">Chưa có giáo viên phụ trách.</small></div>
     <div v-if="!item.canDelete&&item.deleteBlockers.length" class="blockers"><b>Chưa thể xóa:</b><span v-for="(blocker,index) in item.deleteBlockers" :key="index">{{ blocker.message || blocker.code }}</span></div>
-    <footer><AppButton v-if="item.active" variant="info" @click="emit('open')"><UsersRound/>Mở lớp</AppButton><AppButton variant="warning" @click="emit('edit')"><Edit3/>Sửa</AppButton><AppButton :variant="item.active?'secondary':'success'" @click="emit('toggle')"><LockKeyhole v-if="item.active"/><RotateCcw v-else/>{{ item.active?'Khóa':'Kích hoạt' }}</AppButton><AppButton variant="danger" :disabled="!item.canDelete" @click="emit('delete')"><Trash2/>Xóa</AppButton></footer>
+    <footer><AppButton variant="warning" @click="emit('edit')"><Edit3/>Sửa</AppButton><AppButton :variant="item.active?'secondary':'success'" @click="emit('toggle')"><LockKeyhole v-if="item.active"/><RotateCcw v-else/>{{ item.active?'Khóa':'Kích hoạt' }}</AppButton><AppButton variant="danger" :disabled="!item.canDelete" @click="emit('delete')"><Trash2/>Xóa</AppButton></footer>
   </article>
 </template>
 <style scoped>

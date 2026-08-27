@@ -11,7 +11,7 @@ test('sidebar combines compact flat navigation with collapsed icon rail and no v
   const sidebar=read('src/components/layout/SidebarNav.vue')
   assert.doesNotMatch(navigation,/NavigationGroup|visibleNavigationGroups|HỌC TẬP|HỖ TRỢ LỚP|CÁ NHÂN|QUẢN LÝ|PHÂN TÍCH|QUẢN TRỊ|HỆ THỐNG/)
   assert.match(sidebar,/visibleNavigation\(/)
-  assert.match(sidebar,/v-for="item in items"/)
+  assert.match(sidebar,/v-for="\(item,index\) in items"/)
   assert.doesNotMatch(sidebar,/nav-group|nav-group-label|v-for="group in groups"/)
   assert.match(sidebar,/nav-tooltip/)
   assert.match(sidebar,/min-height:4[6-8]px/)

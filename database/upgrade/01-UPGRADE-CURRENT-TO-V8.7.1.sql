@@ -395,5 +395,106 @@ revoke all on function public.admin_set_active_school_year(uuid,uuid) from publi
 grant execute on function public.admin_create_school_year(uuid,text,date,date,boolean) to service_role;
 grant execute on function public.admin_set_active_school_year(uuid,uuid) to service_role;
 
+
+-- =====================================================================
+-- V8.7.1 ROLE/WEEK PATCH — class-level manual override + auto lifecycle
+-- =====================================================================
+alter table public.class_weeks
+  add column if not exists manual_status public.week_status;
+
+do $manual_status_constraint$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid='public.class_weeks'::regclass
+      and conname='class_weeks_manual_status_check'
+  ) then
+    alter table public.class_weeks
+      add constraint class_weeks_manual_status_check
+      check (manual_status is null or manual_status in ('open'::public.week_status,'locked'::public.week_status));
+  end if;
+end
+$manual_status_constraint$;
+
+create or replace function public.class_week_effective_status(p_class_id uuid,p_week_id uuid)
+returns public.week_status
+language plpgsql
+stable
+security definer
+set search_path=public,pg_temp
+as $class_week_effective_status$
+declare
+  v_year_id uuid;
+  v_target_start date;
+  v_target_status public.week_status;
+  v_manual_status public.week_status;
+  v_first_start date;
+  v_target_seq integer;
+  v_current_seq integer;
+begin
+  select w.school_year_id,w.start_date,cw.status,cw.manual_status
+  into v_year_id,v_target_start,v_target_status,v_manual_status
+  from public.weeks w
+  join public.class_weeks cw on cw.week_id=w.id and cw.class_id=p_class_id
+  where w.id=p_week_id;
+
+  if not found then return null; end if;
+  if v_target_status='holiday'::public.week_status then return 'holiday'::public.week_status; end if;
+  if v_manual_status='open'::public.week_status then return 'open'::public.week_status; end if;
+  if v_manual_status='locked'::public.week_status then return 'locked'::public.week_status; end if;
+
+  select min(w.start_date) into v_first_start
+  from public.weeks w where w.school_year_id=v_year_id;
+
+  if (now() at time zone 'Asia/Ho_Chi_Minh')::date < v_first_start then
+    return 'upcoming'::public.week_status;
+  end if;
+
+  select count(*)::integer into v_target_seq
+  from public.weeks w
+  where w.school_year_id=v_year_id
+    and (w.start_date<v_target_start or (w.start_date=v_target_start and w.id<=p_week_id));
+
+  with calendar as (
+    select
+      w.id,
+      row_number() over(order by w.start_date,w.week_number,w.id)::integer as seq,
+      coalesce(
+        (
+          select max(((w.start_date+(slot.weekday-1)) + p.end_time) at time zone 'Asia/Ho_Chi_Minh')
+          from (
+            select o.weekday,o.period_number
+            from public.week_schedule_overrides o
+            where o.class_id=p_class_id and o.week_id=w.id and o.is_study_period=true
+            union all
+            select s.weekday,s.period_number
+            from public.study_schedule s
+            where s.class_id=p_class_id and s.is_study_period=true
+              and not exists(
+                select 1 from public.week_schedule_overrides ox
+                where ox.class_id=p_class_id and ox.week_id=w.id
+              )
+          ) slot
+          join public.periods p on p.period_number=slot.period_number
+        ),
+        (w.end_date + time '23:59:59') at time zone 'Asia/Ho_Chi_Minh'
+      ) as end_ts
+    from public.weeks w
+    where w.school_year_id=v_year_id
+  )
+  select c.seq into v_current_seq
+  from calendar c
+  where now()<c.end_ts
+  order by c.seq
+  limit 1;
+
+  if v_current_seq is null then return 'locked'::public.week_status; end if;
+  if v_target_seq<v_current_seq then return 'locked'::public.week_status; end if;
+  if v_target_seq in (v_current_seq,v_current_seq+1) then return 'open'::public.week_status; end if;
+  return 'upcoming'::public.week_status;
+end;
+$class_week_effective_status$;
+
+
 notify pgrst,'reload schema';
 commit;

@@ -28,7 +28,9 @@ test('topbar replaces duplicate class identity with school year bubble and reloa
   assert.match(source,/context\.schoolYears/)
   assert.match(source,/auth\.reload\(null,id\)/)
   assert.doesNotMatch(source,/identity-bubble"><b>\{\{ context\.selectedClass/)
-  assert.match(source,/auth\.currentUser\?\.role==='teacher'\|\|auth\.currentUser\?\.role==='admin'/)
+  assert.match(source,/const isTeacher=computed/)
+  assert.match(source,/const isAdmin=computed/)
+  assert.match(source,/v-if="isTeacher\|\|isAdmin" class="school-year-bubble/)
 })
 
 test('admin directory and Edge API expose school year list create and activate actions',()=>{

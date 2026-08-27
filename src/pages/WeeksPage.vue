@@ -4,9 +4,7 @@ import { useRouter } from 'vue-router'
 import { CalendarRange, LocateFixed, Save, Search } from 'lucide-vue-next'
 import AppButton from '../components/ui/AppButton.vue'
 import AppCard from '../components/ui/AppCard.vue'
-import ConfirmDialog from '../components/ui/ConfirmDialog.vue'
 import InlineStatus, { type InlineStatusState } from '../components/ui/InlineStatus.vue'
-import WeekCalendarSetup from '../components/weeks/WeekCalendarSetup.vue'
 import WeekEditorCard from '../components/weeks/WeekEditorCard.vue'
 import { useAuthStore } from '../stores/auth'
 import { useContextStore } from '../stores/context'
@@ -18,7 +16,6 @@ import {
   type WeekOperationalStatus,
 } from '../features/weeks/week-editor-model'
 import {
-  rebaseWeekCalendarMutation,
   saveWeekSettingsMutation,
 } from '../features/weeks/week-mutations'
 import { useLegacyMutationRuntime } from '../features/shared/useLegacyMutationRuntime'
@@ -34,15 +31,12 @@ const drafts = ref<WeekEditorDraft[]>([])
 const initialDrafts = ref<WeekEditorDraft[]>([])
 const filter = ref<WeekFilter>('all')
 const search = ref('')
-const firstWeekStart = ref('')
-const confirmRebase = ref(false)
 const status = ref<InlineStatusState>('idle')
 const statusMessage = ref('')
 
 const state = computed(() => auth.legacyState)
 const classId = computed(() => context.selectedClassId)
 const deadlineTime = computed(() => String(state.value?.settings.registrationDeadlineTime || '20:00'))
-const admin = computed(() => auth.currentUser?.role === 'admin')
 const lifecycle = computed(() => {
   const current = state.value
   if (!current) return { currentWeekId: null, statuses: {} as Record<string, WeekOperationalStatus>, nextBoundaryMs: null }
@@ -65,8 +59,9 @@ const filterItems: Array<{ id: WeekFilter; label: string }> = [
 ]
 
 function displayStatus(draft: WeekEditorDraft) {
-  return draft.holiday ? 'holiday' : lifecycle.value.statuses[draft.id] ?? 'upcoming'
+  return draft.holiday ? 'holiday' : draft.manualStatus ?? lifecycle.value.statuses[draft.id] ?? 'upcoming'
 }
+const nextAutoCloseText=computed(()=>lifecycle.value.nextBoundaryMs?new Intl.DateTimeFormat('vi-VN',{weekday:'short',day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}).format(new Date(lifecycle.value.nextBoundaryMs)):'Chưa xác định')
 
 const filteredDrafts = computed(() => {
   const term = search.value.trim().toLowerCase()
@@ -82,7 +77,6 @@ function loadDrafts() {
   const next = buildWeekDrafts(state.value.weeks)
   drafts.value = next
   initialDrafts.value = structuredClone(next)
-  firstWeekStart.value = next[0]?.startDate ?? ''
   status.value = 'idle'
   statusMessage.value = ''
   dirtyEditor.markClean()
@@ -115,18 +109,6 @@ async function save() {
   }
 }
 
-async function rebase() {
-  confirmRebase.value = false
-  if (!classId.value) return
-  status.value = 'saving'; statusMessage.value = 'Đang xếp lại lịch tuần…'
-  try {
-    await rebaseWeekCalendarMutation(createRuntime(), classId.value, firstWeekStart.value, deadlineTime.value)
-    loadDrafts()
-    status.value = 'success'; statusMessage.value = 'Đã xếp lại lịch tuần.'
-  } catch (error) {
-    status.value = 'error'; statusMessage.value = errorMessage(error)
-  }
-}
 
 function goCurrentWeek() {
   context.resumeAutoWeek(lifecycle.value.currentWeekId)
@@ -158,9 +140,8 @@ async function openSchedule(id: string) {
       <AppCard><span>Sắp tới</span><b>{{ summary.upcoming }}</b></AppCard>
       <AppCard><span>Tuần nghỉ</span><b>{{ summary.holiday }}</b></AppCard>
       <AppCard><span>Hạn mặc định</span><b class="deadline-value">{{ deadlineTime }}</b><small>tối hôm trước từng buổi</small></AppCard>
+      <AppCard class="auto-close-card"><span>Tự động đóng sau buổi tự học cuối</span><b class="auto-close-value">{{ nextAutoCloseText }}</b><small>Nếu GV không mở/đóng thủ công.</small></AppCard>
     </section>
-
-    <WeekCalendarSetup v-model="firstWeekStart" :deadline-time="deadlineTime" :admin="admin" :disabled="status === 'saving'" @apply="confirmRebase = true" />
     <InlineStatus :state="status" :message="statusMessage" />
     <InlineStatus v-if="serverChanged" state="server-changed" message="Dữ liệu trên máy chủ vừa thay đổi."><div class="conflict-actions"><button type="button" @click="loadServerVersion">Tải bản mới</button><button type="button" @click="keepDraft">Tiếp tục bản đang chỉnh</button></div></InlineStatus>
 
@@ -187,19 +168,9 @@ async function openSchedule(id: string) {
       />
     </section>
     <AppCard v-else padding="lg" class="empty-weeks"><h2>Không tìm thấy tuần phù hợp</h2><p>Thử đổi bộ lọc hoặc từ khóa tìm kiếm.</p></AppCard>
-
-    <ConfirmDialog
-      :open="confirmRebase"
-      title="Xếp lại lịch tuần?"
-      body="Thao tác sẽ tính lại ngày bắt đầu và kết thúc của các tuần. Trạng thái lớp sẽ được tải lại từ máy chủ."
-      confirm-label="Xếp lại lịch tuần"
-      cancel-label="Giữ lịch hiện tại"
-      @confirm="rebase"
-      @cancel="confirmRebase = false"
-    />
   </div>
 </template>
 
 <style scoped>
-.weeks-page{max-width:1500px;margin:0 auto}.weeks-header{display:flex;justify-content:space-between;align-items:flex-start;gap:20px}.weeks-header h1{font-size:clamp(2rem,4vw,3rem);margin:8px 0}.weeks-header p{margin:0;color:var(--text-muted)}.page-context{display:flex;align-items:center;gap:8px;color:var(--color-primary);font-size:.86rem;font-weight:800}.page-context svg,.header-actions :deep(svg){width:18px}.header-actions{display:flex;gap:8px;flex-wrap:wrap}.week-summary{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:12px}.week-summary :deep(.card){display:grid;gap:4px}.week-summary span,.week-summary small{color:var(--text-muted);font-size:.78rem;font-weight:750}.week-summary b{font-size:1.75rem;font-variant-numeric:tabular-nums}.week-summary .deadline-value{font-size:1.35rem;color:var(--color-primary)}.filter-card{display:flex;align-items:center;justify-content:space-between;gap:16px}.filter-chips{display:flex;gap:8px;flex-wrap:wrap}.filter-chips button{min-height:44px;border:1px solid var(--border);border-radius:999px;padding:8px 12px;background:var(--surface);color:var(--text-muted);font-weight:800;white-space:nowrap}.filter-chips button.active{border-color:var(--color-primary);background:color-mix(in srgb,var(--color-primary) 11%,var(--surface));color:var(--color-primary)}.week-search{display:flex;align-items:center;gap:8px;min-width:min(332px,100%);padding:0 12px;border:1px solid var(--border);border-radius:11px;background:var(--input)}.week-search svg{width:18px;color:var(--text-muted)}.week-search input{width:100%;height:44px;border:0;outline:0;background:transparent;color:var(--text)}.week-list{display:grid;gap:12px}.empty-weeks{text-align:center}.empty-weeks h2{margin-top:0}.empty-weeks p{margin-bottom:0;color:var(--text-muted)}.conflict-actions{display:flex;gap:8px;margin-left:auto}.conflict-actions button{min-height:44px;border:1px solid currentColor;border-radius:8px;padding:8px;background:transparent;color:inherit;font-weight:800;white-space:nowrap}@media(max-width:1050px){.week-summary{grid-template-columns:repeat(3,minmax(0,1fr))}.filter-card{align-items:stretch;flex-direction:column}.week-search{width:100%}}@media(max-width:720px){.weeks-header{flex-direction:column}.header-actions{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);width:100%}.week-summary{grid-template-columns:repeat(2,minmax(0,1fr))}}@media(max-width:450px){.header-actions{grid-template-columns:1fr}.week-summary{grid-template-columns:repeat(2,minmax(0,1fr))}.filter-chips{display:grid;grid-template-columns:repeat(2,minmax(0,1fr))}.filter-chips button:last-child{grid-column:1/-1}}
+.weeks-page{max-width:1500px;margin:0 auto}.weeks-header{display:flex;justify-content:space-between;align-items:flex-start;gap:20px}.weeks-header h1{font-size:clamp(2rem,4vw,3rem);margin:8px 0}.weeks-header p{margin:0;color:var(--text-muted)}.page-context{display:flex;align-items:center;gap:8px;color:var(--color-primary);font-size:.86rem;font-weight:800}.page-context svg,.header-actions :deep(svg){width:18px}.header-actions{display:flex;gap:8px;flex-wrap:wrap}.week-summary{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}.week-summary :deep(.card){display:grid;gap:4px}.week-summary span,.week-summary small{color:var(--text-muted);font-size:.78rem;font-weight:750}.week-summary b{font-size:1.75rem;font-variant-numeric:tabular-nums}.week-summary .deadline-value{font-size:1.35rem;color:var(--color-primary)}.week-summary .auto-close-value{font-size:1rem;color:var(--color-coral);line-height:1.25}.filter-card{display:flex;align-items:center;justify-content:space-between;gap:16px}.filter-chips{display:flex;gap:8px;flex-wrap:wrap}.filter-chips button{min-height:44px;border:1px solid var(--border);border-radius:999px;padding:8px 12px;background:var(--surface);color:var(--text-muted);font-weight:800;white-space:nowrap}.filter-chips button.active{border-color:var(--color-primary);background:color-mix(in srgb,var(--color-primary) 11%,var(--surface));color:var(--color-primary)}.week-search{display:flex;align-items:center;gap:8px;min-width:min(332px,100%);padding:0 12px;border:1px solid var(--border);border-radius:11px;background:var(--input)}.week-search svg{width:18px;color:var(--text-muted)}.week-search input{width:100%;height:44px;border:0;outline:0;background:transparent;color:var(--text)}.week-list{display:grid;gap:12px}.empty-weeks{text-align:center}.empty-weeks h2{margin-top:0}.empty-weeks p{margin-bottom:0;color:var(--text-muted)}.conflict-actions{display:flex;gap:8px;margin-left:auto}.conflict-actions button{min-height:44px;border:1px solid currentColor;border-radius:8px;padding:8px;background:transparent;color:inherit;font-weight:800;white-space:nowrap}@media(max-width:1050px){.week-summary{grid-template-columns:repeat(3,minmax(0,1fr))}.filter-card{align-items:stretch;flex-direction:column}.week-search{width:100%}}@media(max-width:720px){.weeks-header{flex-direction:column}.header-actions{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);width:100%}.week-summary{grid-template-columns:repeat(2,minmax(0,1fr))}}@media(max-width:450px){.header-actions{grid-template-columns:1fr}.week-summary{grid-template-columns:repeat(2,minmax(0,1fr))}.filter-chips{display:grid;grid-template-columns:repeat(2,minmax(0,1fr))}.filter-chips button:last-child{grid-column:1/-1}}
 </style>

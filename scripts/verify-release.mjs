@@ -79,8 +79,15 @@ for (const name of functions) {
   const integrity = spawnSync('unzip', ['-tqq', zip], { encoding: 'utf8' })
   if (integrity.status !== 0) fail(`invalid ZIP ${name}: ${integrity.stderr || integrity.stdout}`)
   const listing = spawnSync('unzip', ['-Z1', zip], { encoding: 'utf8' })
-  if (listing.status !== 0 || !/^source\/index\.ts$/m.test(listing.stdout) || !/^source\/_shared\/config\.ts$/m.test(listing.stdout)) {
+  if (listing.status !== 0 || !/^source\/index\.ts$/m.test(listing.stdout) || !/^_shared\/config\.ts$/m.test(listing.stdout) || /^source\/_shared\//m.test(listing.stdout)) {
     fail(`invalid Supabase Dashboard ZIP layout for ${name}`)
+  }
+  const indexText = spawnSync('unzip', ['-p', zip, 'source/index.ts'], { encoding: 'utf8' })
+  if (indexText.status !== 0) fail(`cannot read source/index.ts from ${name}`)
+  for (const match of indexText.stdout.matchAll(/from\s+["']\.\.\/_shared\/([^"']+)["']/g)) {
+    const target = `_shared/${match[1]}`
+    const escaped = target.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+    if (!new RegExp(`^${escaped}$`, 'm').test(listing.stdout)) fail(`${name} cannot resolve ../${target} from source/index.ts`)
   }
 }
 

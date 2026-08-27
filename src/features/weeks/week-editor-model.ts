@@ -9,6 +9,7 @@ export interface WeekEditorDraft {
   startDate: string
   endDate: string
   holiday: boolean
+  manualStatus: 'open' | 'locked' | null
   deadlineMode: 'per_session_20' | 'specific'
   deadline: string
   note: string
@@ -21,6 +22,7 @@ export function buildWeekDrafts(weeks: WeekRecord[]): WeekEditorDraft[] {
     startDate: week.startDate,
     endDate: week.endDate,
     holiday: week.status === 'holiday',
+    manualStatus: week.manualStatus??null,
     deadlineMode: week.deadlineMode === 'specific' ? 'specific' : 'per_session_20',
     deadline: week.deadline ?? '',
     note: week.note ?? '',
@@ -60,6 +62,7 @@ export function applyWeekDrafts(state: LegacyState, drafts: WeekEditorDraft[]): 
     return {
       ...week,
       status,
+      manualStatus: draft.manualStatus,
       deadlineMode: draft.deadlineMode,
       deadline: draft.deadlineMode === 'specific' ? draft.deadline : '',
       note: draft.note,
@@ -92,7 +95,7 @@ export function summarizeWeekStatuses(
       summary.holiday += 1
       continue
     }
-    const status = statuses[draft.id] ?? 'upcoming'
+    const status = draft.manualStatus ?? statuses[draft.id] ?? 'upcoming'
     summary[status] += 1
   }
   return summary

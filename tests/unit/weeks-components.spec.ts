@@ -13,6 +13,7 @@ const draft = {
   startDate: '2026-11-02',
   endDate: '2026-11-08',
   holiday: false,
+  manualStatus: null,
   deadlineMode: 'specific' as const,
   deadline: '2026-11-01T20:00',
   note: '',
@@ -38,6 +39,8 @@ describe('WeekEditorCard', () => {
     expect(html).toContain('Hiện hành')
     expect(html).toContain('Đang xem')
     expect(html).toContain('Tuần nghỉ')
+    expect(html).toContain('Chế độ vận hành')
+    expect(html).toContain('Tự động')
     expect(html).toContain('type="datetime-local"')
     expect(html).toContain('Mở TKB tuần này')
   })

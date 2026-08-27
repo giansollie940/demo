@@ -8,7 +8,7 @@
 
 ## Thứ tự bắt buộc cho bản có Quản lý Năm học
 
-Bản frontend/Edge Function này phụ thuộc vào hai RPC mới `admin_create_school_year` và `admin_set_active_school_year`. Với database đang chạy, triển khai theo đúng thứ tự:
+Bản frontend/Edge Function này phụ thuộc vào RPC quản lý năm học và patch vận hành tuần mới (`class_weeks.manual_status` + `class_week_effective_status`). Với database đang chạy, triển khai theo đúng thứ tự:
 
 ```text
 Backup database
@@ -18,7 +18,7 @@ Backup database
 → deploy frontend GitHub Pages
 ```
 
-Không deploy frontend/`admin-manage-classes` mới trước khi database upgrade hoàn tất, nếu không thao tác tạo/kích hoạt năm học sẽ lỗi vì RPC chưa tồn tại.
+Không deploy frontend/`admin-manage-classes` mới trước khi database upgrade hoàn tất. Bản này cần RPC năm học, action sửa lịch tuần chuẩn và cột `class_weeks.manual_status`; nếu thiếu, quản lý năm học hoặc Mở/Đóng thủ công của GV sẽ không hoạt động đúng.
 
 ## 1. Database — chọn đúng một nhánh
 
@@ -72,7 +72,7 @@ Chạy:
 database/verify/VERIFY-V8.7.1.sql
 ```
 
-Yêu cầu `overall = true`.
+Yêu cầu `overall = true`. Verifier bản này còn phải báo PASS cho `class_week_manual_status_column` và `class_week_effective_status_manual_override`.
 
 Khi kiểm tra riêng routing AI đã completed, chạy thêm:
 
@@ -110,7 +110,7 @@ Thiết lập trong Supabase Edge Function secrets, không đưa vào GitHub fro
 9. `audit-log.zip`
 10. `quote-feed.zip`
 
-Mỗi ZIP chứa `source/index.ts` và `source/_shared/*`. `ai-review-registration.zip` còn chứa `source/review-logic.js`.
+Mỗi ZIP chứa `source/index.ts` và thư mục `_shared/*` **ở cấp ZIP root** để các import `../_shared/...` từ `source/index.ts` resolve đúng trong Supabase bundler. Không đặt `_shared` bên trong `source/`. `ai-review-registration.zip` còn chứa `source/review-logic.js`.
 
 ## 6. GitHub Pages frontend
 
@@ -129,23 +129,24 @@ Workflow tự tạo `public/config.js` khi build. Chỉ public project URL/publi
 
 ## 7. Smoke test sau deploy
 
-Kiểm tra tối thiểu:
+Kiểm tra tối thiểu theo vai trò:
 
-1. Student đăng nhập, đăng ký và sửa đăng ký.
-2. AI trả đúng ba nhánh: duyệt, yêu cầu sửa, chuyển GV.
-3. Teacher duyệt/yêu cầu sửa trước giờ bắt đầu buổi học.
-4. Theo dõi lớp hiển thị đúng registered/missing/attention và device filter.
-5. Root admin xem lớp, học sinh, giáo viên, phân quyền; đổi mã lớp đồng bộ `class_name`; chuyển HS đồng bộ `class_id + class_name`; lớp có lịch sử không xóa cứng được.
-6. Soft-delete/restore tài khoản không làm mất lịch sử.
-7. Realtime không tạo subscription trùng khi đổi trang/lớp/tuần.
-8. Sau khi GV duyệt registration, Wise Owl không còn chấm đỏ/cảnh báo "cần xử lý" nếu không còn registration cần xử lý thật sự.
-9. Nếu registration đang `needs_revision` mà HS không sửa trước giờ bắt đầu tiết, `/issues` hiển thị **Báo cáo lỗi** và Dashboard không còn tính nó trong **Cần chỉnh sửa**.
-10. Dark/light mode, mobile, school-pattern background, profile chip và Wise Owl hoạt động bình thường.
-11. Admin mở tab **Năm học**, tạo một năm học thử với ngày bắt đầu/kết thúc hợp lệ; kiểm tra các tuần cơ sở được tạo và năm mới xuất hiện trong selector.
-12. Kích hoạt năm học mới; kiểm tra chỉ một năm có `is_active = true`.
-13. Admin/GV đổi bong bóng **Năm học**; danh sách Lớp và Tuần phải đổi theo năm đó, Dashboard/Tracking/Statistics không dùng dữ liệu của năm trước.
-14. HS/Cán sự không được tự do chuyển sang năm học khác lớp của mình.
-15. Sidebar bubble chỉ xoay vòng gradient khi hover/focus; active không quay liên tục và reduced-motion không chạy animation.
+1. **Admin** đăng nhập phải được đưa về `/admin`; sidebar chỉ có **Quản trị hệ thống** và topbar không có bộ chọn Lớp/Tuần.
+2. Admin tab **Năm học** thấy `2026–2027` đang hoạt động; KPI số năm học không được bằng 0 khi context đã có năm active.
+3. Admin tạo/kích hoạt một năm học thử; kiểm tra chỉ một năm có `is_active = true`.
+4. Admin sửa ngày bắt đầu/kết thúc một **tuần chuẩn** trong tab Năm học; reload lại và xác nhận ngày được giữ.
+5. Admin tạo/sửa lớp, phân công GV, quản lý GV/phân quyền; không có các màn Duyệt đăng ký, Quản lý tuần, TKB, Thống kê lớp của GV.
+6. **GV** đăng nhập thấy Năm học + Lớp + Tuần; không thể mở trang Admin và không có action sửa tên lớp/năm học hoặc ngày chuẩn của tuần.
+7. GV `Quản lý tuần`: thử `Tự động → Mở thủ công → Đóng thủ công → Tự động`, lưu/reload và xác nhận `manual_status` lần lượt `null/open/locked/null`.
+8. Ở chế độ **Tự động**, xác nhận thời điểm hiển thị “Tự động đóng sau buổi tự học cuối” khớp buổi cuối của TKB tuần; sau boundary, tuần cũ khóa và lifecycle chuyển sang tuần kế tiếp.
+9. GV thay deadline/tuần nghỉ/ghi chú/TKB tuần và xác nhận chỉ ảnh hưởng lớp đang chọn.
+10. GV duyệt/yêu cầu sửa đăng ký; Wise Owl hết chấm đỏ sau khi xử lý xong nếu không còn registration thực sự cần GV.
+11. **Cán sự** chỉ có chức năng cá nhân + Theo dõi lớp giới hạn; không có Duyệt, Quản lý tuần, TKB hay cấu hình AI.
+12. **HS** chỉ có chức năng cá nhân; yêu cầu sửa không hoàn tất trước giờ bắt đầu chuyển sang **Báo cáo lỗi**.
+13. Statistics của GV ở tuần cũ phải tải đúng dữ liệu tuần đã chọn; HS/Cán sự chỉ thấy thống kê cá nhân.
+14. Đổi light/dark mode: nền warm pattern chuyển mượt; dark mode không bị ảnh nền làm bạc/chớp.
+15. Sidebar macOS Dock: mục hover nổi/phóng, hai mục lân cận phóng nhẹ, vòng gradient chỉ xoay một lần; reduced-motion không magnify/rotate.
+16. Realtime không tạo subscription trùng khi đổi trang/lớp/tuần.
 
 ## 8. Rollback
 

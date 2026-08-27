@@ -30,6 +30,16 @@ checks AS (
   UNION ALL SELECT 'class_teachers_table',to_regclass('public.class_teachers') IS NOT NULL
   UNION ALL SELECT 'class_settings_table',to_regclass('public.class_settings') IS NOT NULL
   UNION ALL SELECT 'class_weeks_table',to_regclass('public.class_weeks') IS NOT NULL
+  UNION ALL SELECT 'class_week_manual_status_column',exists(
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema='public' AND table_name='class_weeks' AND column_name='manual_status'
+  )
+  UNION ALL SELECT 'class_week_effective_status_manual_override',coalesce((
+    SELECT position('manual_status' in pg_get_functiondef(p.oid))>0
+       and position('study_schedule' in pg_get_functiondef(p.oid))>0
+       and position('week_schedule_overrides' in pg_get_functiondef(p.oid))>0
+    FROM pg_proc p WHERE p.oid=to_regprocedure('public.class_week_effective_status(uuid,uuid)')
+  ),false)
   UNION ALL SELECT 'daily_quotes_table',to_regclass('public.daily_quotes') IS NOT NULL
   UNION ALL SELECT 'root_admin_exactly_one',(SELECT total=1 FROM root_admin)
   UNION ALL SELECT 'root_admin_active',(SELECT active_total=1 FROM root_admin)

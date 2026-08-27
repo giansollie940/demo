@@ -1,3 +1,17 @@
+## Role / year / macOS Dock verification — 2026-08-27
+
+- Static regression hiện tại: **131/131 PASS**.
+- Contract mới `tests/v871-role-year-macos-final.test.mjs`: **8/8 PASS**.
+- Frontend `.ts` + Vue `<script setup>` syntax transpile bằng TypeScript 5.8.3: **81 scripts, 0 syntax errors**.
+- Edge TypeScript syntax/transpile: **17 files, 0 syntax errors**.
+- `npm run verify:release`: **PASS**; 10/10 Edge ZIP import-resolvable, không phát hiện secret; lần chạy trước khi đóng artifact đã hash **195 files**.
+- Admin route/navigation đã tách khỏi nghiệp vụ GV; Admin chỉ có `/admin`, còn teacher giữ review/tracking/weeks/schedule/students/statistics/settings.
+- Admin year count hợp nhất directory + legacy context; tab Năm học có action root-admin sửa ngày tuần chuẩn.
+- `class_weeks.manual_status` và `class_week_effective_status` có contract cho manual override + automatic last-self-study-session lifecycle.
+- Settings của GV hiển thị Lớp/Năm học dưới dạng metadata chỉ đọc.
+- Sidebar có macOS Dock magnification theo khoảng cách, vẫn giữ vòng gradient `.62s` một lần và reduced-motion fallback.
+- `node_modules` không có trong workspace nên **chưa tuyên bố** Vitest, `vue-tsc` hoặc production Vite build đã PASS cục bộ; GitHub Actions vẫn là gate semantic/build.
+
 # Verification — SỔ TỰ HỌC V8.7.1 Full Stack
 
 Ngày kiểm tra: 2026-08-27
@@ -12,7 +26,7 @@ Lệnh:
 npm test
 ```
 
-Kết quả cuối sau soft floating topbar bubble refinement: **112/112 PASS, 0 fail**.
+Kết quả cuối của source hiện tại: **131/131 PASS, 0 fail**.
 
 Phạm vi gồm frontend V8.7.1 hiện có và contract mới cho:
 
@@ -33,13 +47,13 @@ Phạm vi gồm frontend V8.7.1 hiện có và contract mới cho:
 - main dùng nền kem/đào ấm và một layer `main::before` riêng cho `school-pattern-bg.png`; pattern opacity 14% ở light và 2.5% ở dark;
 - sidebar items, edge toggle, icon buttons và profile chip có hover micro-interactions hiện đại; reduced-motion vẫn được tôn trọng.
 - navigation vẫn phân quyền theo vai trò nhưng hiển thị thành một danh sách phẳng compact; khi thu gọn chuyển thành icon rail 70px có tooltip;
-- HS/Cán sự truy cập tùy chọn cá nhân từ profile thay vì sidebar; HS/Cán sự có thống kê cá nhân, Cán sự có thêm khu vực Hỗ trợ lớp; GV/Admin giữ thống kê lớp và menu nghiệp vụ/quản trị;
+- HS/Cán sự truy cập tùy chọn cá nhân từ profile thay vì sidebar; HS/Cán sự có thống kê cá nhân, Cán sự có thêm khu vực Hỗ trợ lớp; GV giữ thống kê lớp và menu nghiệp vụ lớp; Admin chỉ giữ Quản trị hệ thống;
 - cài đặt HS/Cán sự hiển thị ba cảnh báo học tập bắt buộc ở trạng thái hệ thống tự bật, không cung cấp toggle tắt;
 - Owl model thực thi nhắc chưa đăng ký, nhắc trước buổi tự học và nhắc yêu cầu chỉnh sửa cho learner; Cán sự có thêm cảnh báo lớp chưa đăng ký/cần sửa/gần buổi học chưa hoàn tất;
 - learner urgent reminder tự mở khi Owl đang hiển thị kể cả local preference auto-open cũ từng tắt;
 - school pattern dùng layer độc lập `main::before` với `--pattern-opacity`; light mode dùng nền kem/đào ấm và pattern rõ hơn, dark mode giảm pattern xuống 2.5% để không ảnh hưởng tương phản.
 - topbar dùng các bubble/pill nổi riêng cho class/year, class, week, theme và profile; không còn full-width bottom divider. Sidebar cũng bỏ các divider cứng và dùng shadow mềm.
-- GV/Admin không còn mục `Cài đặt` trùng lặp trong profile dropdown; HS/Cán sự vẫn có `Tùy chọn cá nhân` trong profile.
+- GV không còn mục `Cài đặt` trùng lặp trong profile dropdown; Admin không có Cài đặt lớp; HS/Cán sự vẫn có `Tùy chọn cá nhân` trong profile.
 
 ### 2. Release verifier
 
@@ -53,7 +67,7 @@ Kết quả: **PASS**.
 
 - 10 Edge ZIP được tái tạo từ source hiện hành;
 - 10/10 ZIP qua `unzip -tqq`;
-- mỗi ZIP có `source/index.ts` và `source/_shared/config.ts`;
+- mỗi ZIP có `source/index.ts` và `_shared/config.ts` ở ZIP root, nên import `../_shared/...` resolve đúng;
 - AI source là V8.7.1;
 - generic upgrade không có `10A1`, `7A9`, `REPAIR-10A1`;
 - `public/config.js` không tồn tại trong release;

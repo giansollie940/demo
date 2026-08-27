@@ -15,6 +15,8 @@ const auth=useAuthStore();const context=useContextStore();const preferences=useP
 const profileOpen=ref(false);const profileMenu=ref<HTMLElement|null>(null)
 onClickOutside(profileMenu,()=>{profileOpen.value=false})
 const state=computed(()=>auth.legacyState)
+const isAdmin=computed(()=>auth.currentUser?.role==='admin')
+const isTeacher=computed(()=>auth.currentUser?.role==='teacher')
 const operationalWeekId=computed(()=>state.value?getWeekLifecycle({weeks:state.value.weeks,periods:state.value.periods,getSlots:()=>state.value?.schedule??[]}).currentWeekId:null)
 const roleLabels:Record<UserRole,string>={student:'Học sinh',monitor:'Cán sự lớp',teacher:'Giáo viên',admin:'Quản trị viên'}
 const roleLabel=computed(()=>auth.currentUser?roleLabels[auth.currentUser.role]:'')
@@ -30,12 +32,12 @@ function requestLogout(){profileOpen.value=false;emit('logout')}
   <header class="topbar">
     <div class="left">
       <IconButton label="Mở menu" class="mobile-menu" @click="emit('menu')"><Menu/></IconButton>
-      <label v-if="auth.currentUser?.role==='teacher'||auth.currentUser?.role==='admin'" class="school-year-bubble"><span>Năm học</span><select :value="context.selectedSchoolYearId??''" @change="changeSchoolYear"><option v-for="item in context.schoolYears" :key="item.id" :value="item.id">{{ item.name }}{{ item.active?' · Đang hoạt động':'' }}</option></select></label>
+      <label v-if="isTeacher||isAdmin" class="school-year-bubble"><span>Năm học</span><select :value="context.selectedSchoolYearId??''" @change="changeSchoolYear"><option v-for="item in context.schoolYears" :key="item.id" :value="item.id">{{ item.name }}{{ item.active?' · Đang hoạt động':'' }}</option></select></label>
       <div v-else class="school-year-bubble static-year"><span>Năm học</span><b>{{ context.selectedSchoolYear?.name||state?.settings.schoolYear||'—' }}</b></div>
     </div>
     <div class="context-controls">
-      <label v-if="auth.currentUser?.role==='teacher'||auth.currentUser?.role==='admin'" class="compact control-bubble"><span>Lớp</span><select :value="context.selectedClassId??''" @change="changeClass"><option v-for="item in context.classes" :key="item.id" :value="item.id">{{ item.code }}{{ item.name&&item.name!==item.code?` · ${item.name}`:'' }}</option></select></label>
-      <label class="compact control-bubble"><span>Tuần</span><select :value="context.selectedWeekId??''" @change="changeWeek"><option v-for="item in context.weeks" :key="item.id" :value="item.id">Tuần {{ item.number }}</option></select></label>
+      <label v-if="isTeacher" class="compact control-bubble"><span>Lớp</span><select :value="context.selectedClassId??''" @change="changeClass"><option v-for="item in context.classes" :key="item.id" :value="item.id">{{ item.code }}{{ item.name&&item.name!==item.code?` · ${item.name}`:'' }}</option></select></label>
+      <label v-if="!isAdmin" class="compact control-bubble"><span>Tuần</span><select :value="context.selectedWeekId??''" @change="changeWeek"><option v-for="item in context.weeks" :key="item.id" :value="item.id">Tuần {{ item.number }}</option></select></label>
       <IconButton class="theme-bubble" label="Đổi giao diện" @click="preferences.toggleTheme"><Sun v-if="preferences.resolvedTheme==='dark'"/><Moon v-else/></IconButton>
       <div v-if="auth.currentUser" ref="profileMenu" class="profile-menu">
         <button class="profile-chip" type="button" :title="`${auth.currentUser.name} · ${roleLabel}`" :aria-expanded="profileOpen" aria-haspopup="menu" @click="profileOpen=!profileOpen">
@@ -43,7 +45,7 @@ function requestLogout(){profileOpen.value=false;emit('logout')}
         </button>
         <div v-if="profileOpen" class="profile-dropdown" role="menu">
           <div class="profile-summary"><span class="profile-avatar large">{{ initials }}</span><div><b>{{ auth.currentUser.name }}</b><small>{{ roleLabel }} · {{ auth.currentUser.code }}</small></div></div>
-          <div class="profile-class"><span>{{ context.selectedClass?.name||context.selectedClass?.code||state?.settings.className||'Lớp học' }}</span><small>{{ state?.settings.schoolYear||'' }}</small></div>
+          <div v-if="!isAdmin" class="profile-class"><span>{{ context.selectedClass?.name||context.selectedClass?.code||state?.settings.className||'Lớp học' }}</span><small>{{ state?.settings.schoolYear||'' }}</small></div>
           <RouterLink v-if="auth.currentUser.role==='student'||auth.currentUser.role==='monitor'" class="profile-settings" to="/settings" role="menuitem" @click="profileOpen=false"><SlidersHorizontal/>Tùy chọn cá nhân</RouterLink>
           <button type="button" class="profile-logout" role="menuitem" @click="requestLogout"><LogOut/>Đăng xuất</button>
         </div>

@@ -93,13 +93,21 @@ test('release never contains real browser config or obvious server secrets', () 
   }
 })
 
-test('standalone Edge deployment package inventory is complete', () => {
+test('standalone Edge deployment package inventory resolves shared imports from source/index.ts', () => {
   for (const name of functions) {
     const rel = `deploy/edge-functions/${name}.zip`
     assert.ok(exists(rel), rel)
-    const listing = execFileSync('unzip', ['-Z1', path.join(root, rel)], { encoding: 'utf8' })
+    const zipPath = path.join(root, rel)
+    const listing = execFileSync('unzip', ['-Z1', zipPath], { encoding: 'utf8' })
     assert.match(listing, /^source\/index\.ts$/m)
-    assert.match(listing, /^source\/_shared\/config\.ts$/m)
+    assert.match(listing, /^_shared\/config\.ts$/m, `${name}: ../_shared imports must resolve from source/index.ts`)
+    assert.doesNotMatch(listing, /^source\/_shared\//m, `${name}: shared helpers must not be nested under source/`)
+
+    const indexText = execFileSync('unzip', ['-p', zipPath, 'source/index.ts'], { encoding: 'utf8' })
+    for (const match of indexText.matchAll(/from\s+["']\.\.\/_shared\/([^"']+)["']/g)) {
+      const target = `_shared/${match[1]}`
+      assert.match(listing, new RegExp(`^${target.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'm'), `${name}: missing ${target}`)
+    }
   }
 })
 

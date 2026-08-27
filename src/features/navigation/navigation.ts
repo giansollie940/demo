@@ -1,35 +1,34 @@
 import type { UserRole } from '../../types/legacy'
 
 export interface NavigationItem{label:string;to:string;icon:string;roles:UserRole[]}
-const all:UserRole[]=['student','monitor','teacher','admin']
 const learners:UserRole[]=['student','monitor']
-const managers:UserRole[]=['teacher','admin']
+const teachers:UserRole[]=['teacher']
 
 const item=(label:string,to:string,icon:string,roles:UserRole[]):NavigationItem=>({label,to,icon,roles})
 
 export const navigation:NavigationItem[]=[
-  item('Tổng quan','/dashboard','LayoutDashboard',all),
+  item('Tổng quan','/dashboard','LayoutDashboard',['student','monitor','teacher']),
   item('Đăng ký tự học','/register','NotebookPen',learners),
-  item('Duyệt đăng ký','/review','ClipboardCheck',managers),
-  item('Báo cáo lỗi','/issues','TriangleAlert',all),
+  item('Duyệt đăng ký','/review','ClipboardCheck',teachers),
+  item('Báo cáo lỗi','/issues','TriangleAlert',['student','monitor','teacher']),
   item('Theo dõi lớp','/tracking','UsersRound',['monitor']),
-  item('Theo dõi cả lớp','/tracking','UsersRound',managers),
-  item('Quản lý tuần','/weeks','CalendarRange',managers),
-  item('Thời khóa biểu','/schedule','CalendarClock',managers),
-  item('Học sinh','/students','GraduationCap',managers),
-  item('Thống kê','/statistics','ChartNoAxesCombined',managers),
+  item('Theo dõi cả lớp','/tracking','UsersRound',teachers),
+  item('Quản lý tuần','/weeks','CalendarRange',teachers),
+  item('Thời khóa biểu','/schedule','CalendarClock',teachers),
+  item('Học sinh','/students','GraduationCap',teachers),
+  item('Thống kê','/statistics','ChartNoAxesCombined',teachers),
   item('Thống kê của tôi','/statistics','ChartNoAxesCombined',learners),
   item('Lịch sử','/history','History',learners),
   item('Nhận xét GV','/comments','MessagesSquare',learners),
   item('Quản trị hệ thống','/admin','ShieldCheck',['admin']),
-  item('Cài đặt','/settings','Settings',managers),
+  item('Cài đặt','/settings','Settings',teachers),
 ]
 
 const orders:Record<UserRole,string[]>={
   student:['Tổng quan','Đăng ký tự học','Báo cáo lỗi','Lịch sử','Nhận xét GV','Thống kê của tôi'],
   monitor:['Tổng quan','Đăng ký tự học','Báo cáo lỗi','Theo dõi lớp','Lịch sử','Nhận xét GV','Thống kê của tôi'],
   teacher:['Tổng quan','Duyệt đăng ký','Báo cáo lỗi','Theo dõi cả lớp','Quản lý tuần','Thời khóa biểu','Học sinh','Thống kê','Cài đặt'],
-  admin:['Tổng quan','Duyệt đăng ký','Báo cáo lỗi','Theo dõi cả lớp','Quản lý tuần','Thời khóa biểu','Học sinh','Thống kê','Quản trị hệ thống','Cài đặt'],
+  admin:['Quản trị hệ thống'],
 }
 
 export function visibleNavigation(role:UserRole|null|undefined):NavigationItem[]{

@@ -43,11 +43,11 @@ for (const name of functions) {
   const sourceRoot = path.join(tempRoot, 'source')
   try {
     copyDir(functionRoot, sourceRoot)
-    copyDir(sharedRoot, path.join(sourceRoot, '_shared'))
+    copyDir(sharedRoot, path.join(tempRoot, '_shared'))
 
     const output = path.join(outputRoot, `${name}.zip`)
     fs.rmSync(output, { force: true })
-    const result = spawnSync('zip', ['-q', '-r', output, 'source'], {
+    const result = spawnSync('zip', ['-q', '-r', output, 'source', '_shared'], {
       cwd: tempRoot,
       encoding: 'utf8',
     })
