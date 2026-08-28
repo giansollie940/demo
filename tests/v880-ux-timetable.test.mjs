@@ -58,7 +58,7 @@ test('tracking quick reports are scoped to the selected session and distinguish 
 test('week detail uses a compact master column and deadline overlay instead of conditional grid row',()=>{
   const weeks=read('src/pages/WeeksPage.vue')
   const editor=read('src/components/weeks/WeekEditorCard.vue')
-  assert.match(weeks,/clamp\(280px,25vw,330px\)/)
+  assert.match(weeks,/clamp\(310px,28vw,370px\)/)
   assert.match(editor,/deadline-popover|deadline-overlay/)
   assert.doesNotMatch(editor,/v-if="modelValue\.deadlineMode === 'specific'" class="field-control"/)
 })

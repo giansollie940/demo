@@ -111,3 +111,10 @@ The canonical release verifies all of the following:
 - `audit-log.zip` contains `AUDIT_LIST_CONTRACT_VERSION = 2`;
 - the repository `supabase/functions/audit-log/index.ts` exactly matches `source/index.ts` inside the deployable Audit ZIP;
 - the generated Audit hotfix overlay uses repository-relative paths and contains the matching deployable Audit ZIP.
+## Week save dirty-state check
+
+- Danh sách tuần desktop/laptop dùng `clamp(310px,28vw,370px)` và vẫn có `overflow-y:auto`.
+- Save tuần phải dùng canonical result của `saveWeekSettingsMutation`, lập lại `drafts/initialDrafts`, và `markClean()` trước khi hiển thị thành công.
+- Dirty watcher của trang tuần chạy `flush: 'sync'`; auth/realtime reload bị bỏ qua khi `status === 'saving'`.
+- Regression: `tests/v880-week-save-dirty-hardening.test.mjs`.
+

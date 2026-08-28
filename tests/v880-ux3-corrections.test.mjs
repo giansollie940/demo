@@ -27,7 +27,7 @@ test('tracking uses compact session selectors and clickable metrics inside one c
 test('week management has a laptop-width scrollable master column and applied deadline label',()=>{
   const page=read('src/pages/WeeksPage.vue')
   const editor=read('src/components/weeks/WeekEditorCard.vue')
-  assert.match(page,/clamp\(280px,\s*25vw,\s*330px\)/)
+  assert.match(page,/clamp\(310px,\s*28vw,\s*370px\)/)
   assert.match(page,/scrollbar-gutter:\s*stable/)
   assert.match(page,/min-height:\s*0/)
   assert.match(editor,/deadlineDraft/)

@@ -79,7 +79,7 @@ Assignment TKB của lớp:
 - `Chưa đăng ký / Có thiết bị / Không thiết bị / Chưa xác định thiết bị` hiển thị báo cáo ngắn ngay dưới KPI tương ứng.
 - Các mutation duyệt/sửa/xóa hiển thị trạng thái đang xử lý.
 - TKB: GV chỉ chọn tiết Tự học trong các tiết được mẫu sinh ra.
-- Quản lý tuần: cột tuần 280–330px trên laptop/desktop, có cuộn dọc thật; deadline cụ thể mở overlay/popover không đẩy bố cục.
+- Quản lý tuần: cột tuần 310–370px trên laptop/desktop, có cuộn dọc thật; deadline cụ thể mở overlay/popover không đẩy bố cục.
 - Popover deadline có `Hủy / Áp dụng hạn`; sau áp dụng field chính phải hiện `dd/mm/yyyy · HH:mm`, và nút `Lưu thay đổi` của tuần mới ghi DB.
 
 ### Cán sự
@@ -144,3 +144,7 @@ The current audit list contract is `audit-list` version `2`. A pre-list Edge dep
 Do not merge the older Audit HOTFIX package that used `frontend-patch/` and `release-guard/` wrapper directories. For a full source refresh, replace the repository with the current canonical ROOT-FLAT package. For an Audit-only source repair, use `deploy/hotfix/AUDIT-CONTRACT-SOURCE-SYNC-HOTFIX.zip`; its entries already use exact repository-relative paths and may be overlaid directly onto the repository root.
 
 Before release, run `npm run verify:release`. The verifier rebuilds all Edge ZIPs from repository source and fails if the Audit source embedded in `audit-log.zip` differs from `supabase/functions/audit-log/index.ts`.
+## Week management save-state hotfix
+
+Hotfix này chỉ thay đổi frontend/tests. Không cần chạy lại SQL hoặc deploy Edge Functions nếu database V8.8.0 đã `overall=true`. Sau khi bấm **Lưu thay đổi** ở Quản lý tuần, ứng dụng lấy canonical state trả về từ backend làm baseline và xóa dirty-state ngay; chuyển sang chức năng khác không được hiện cảnh báo chưa lưu nếu không có thay đổi mới.
+
