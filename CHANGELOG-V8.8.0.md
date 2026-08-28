@@ -43,3 +43,11 @@
 - Bổ sung `DIAG-V8.8.0-REGISTRATION-GUARDS.sql` (read-only) để chẩn đoán hai guard đăng ký.
 - Bổ sung `REPAIR-V8.8.0-REGISTRATION-GUARDS.sql` trong `database/maintenance/` cho trường hợp database nâng cấp dở dang.
 
+
+## CI portability hotfix — không phụ thuộc đường dẫn Node toàn cục
+- Loại bỏ hoàn toàn việc `npm test` tự nạp TypeScript từ đường dẫn NVM/global như `/opt/nvm/.../typescript.js`.
+- Hai kiểm thử hành vi engine TKB được chuyển về đúng `tests/unit/timetable-engine.spec.ts` để Vitest xử lý TypeScript sau `npm ci`.
+- Static suite `npm test` giờ chỉ dùng Node built-ins/relative imports và có thể chạy ngay cả khi chưa có `node_modules`.
+- Bổ sung `tests/ci-portability.test.mjs`: CI tự fail nếu test sau này hard-code global Node/TypeScript path hoặc đưa dependency ngoài vào static suite.
+- Bổ sung `.nvmrc` làm nguồn Node major duy nhất; GitHub Actions dùng `node-version-file: '.nvmrc'` thay vì hard-code version trong workflow.
+- Workflow preflight bắt buộc `.nvmrc` tồn tại trước khi setup Node.

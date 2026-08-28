@@ -25,7 +25,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          required=(package.json package-lock.json tsconfig.json tsconfig.app.json tsconfig.node.json vite.config.ts index.html)
+          required=(.nvmrc package.json package-lock.json tsconfig.json tsconfig.app.json tsconfig.node.json vite.config.ts index.html)
           for file in "${required[@]}"; do
             if [ ! -f "$file" ]; then
               echo "::error::Missing required root file: $file. Re-upload the complete ZIP contents to the repository root."
@@ -37,7 +37,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v7
         with:
-          node-version: '24'
+          node-version-file: '.nvmrc'
           cache: npm
 
       - name: Install dependencies

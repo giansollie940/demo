@@ -11,6 +11,29 @@ describe('V8.8 timetable engine',()=>{
     expect(result.periods.at(-1)).toMatchObject({number:8,start:'15:10',end:'15:50',session:'afternoon'})
   })
 
+
+  it('auto-applies short breaks when long break is disabled for a session',()=>{
+    const config=defaultTimetableConfig()
+    config.morningLongBreakEnabled=false
+    config.afternoonLongBreakEnabled=false
+    config.breakRules=[]
+    const result=calculateTimetable(config,0)
+    expect(result.errors).toEqual([])
+    const morning=result.periods.filter((row)=>row.session==='morning')
+    expect(morning[0].breakAfter).toEqual({type:'short',minutes:config.shortBreakMinutes})
+    expect(morning.slice(0,-1).every((row)=>row.breakAfter?.type==='short')).toBe(true)
+  })
+
+  it('replaces the selected automatic short break with a long break',()=>{
+    const config=defaultTimetableConfig()
+    config.morningLongBreakEnabled=true
+    config.morningLongBreakAfterPeriod=2
+    config.breakRules=[]
+    const result=calculateTimetable(config,0)
+    expect(result.errors).toEqual([])
+    expect(result.periods.find((row)=>row.number===2)?.breakAfter).toEqual({type:'long',minutes:config.longBreakMinutes})
+  })
+
   it('applies a duration override without asking for explicit start or end times',()=>{
     const config=defaultTimetableConfig()
     config.periodOverrides=[{period:5,minutes:35}]

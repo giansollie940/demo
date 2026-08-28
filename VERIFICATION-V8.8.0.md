@@ -71,3 +71,16 @@ Kiểm tra thêm sau deploy:
 - Quản lý tuần: cột trái 280–330px, danh sách có scroll; deadline popover có Hủy/Áp dụng và field chính hiển thị ngày giờ đã chọn.
 - Database đã `overall=true` thì UX3 không yêu cầu migration SQL mới.
 - Edge `admin-manage-classes` phải được deploy lại vì config validator có các trường tự động nghỉ dài theo buổi.
+
+## CI portability invariant
+
+Bản final yêu cầu `npm test` là static suite **pure Node**:
+
+- không cần `typescript`, Vitest hoặc package bên thứ ba;
+- không được require/import `/opt/nvm/...`, global `node_modules`, hoặc absolute runtime dependency path;
+- dependency-backed TypeScript behavior tests phải nằm trong `tests/unit/` và chạy bằng `npm run test:unit` sau `npm ci`;
+- Node major được khai báo một lần trong `.nvmrc`; workflow phải dùng `actions/setup-node` với `node-version-file: '.nvmrc'`.
+
+Regression guard: `tests/ci-portability.test.mjs`.
+
+Điều này ngăn lỗi kiểu CI chạy Node 24 nhưng test còn trỏ vào thư mục global của Node 22.

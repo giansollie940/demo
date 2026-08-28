@@ -94,3 +94,21 @@ Bản release này đã tích hợp verifier cuối cùng, không dùng bản ve
 
 Nếu `VERIFY-V8.8.0.sql` vẫn báo lỗi hai guard này, chạy file read-only `database/verify/DIAG-V8.8.0-REGISTRATION-GUARDS.sql` trước khi dùng repair. Chỉ khi diagnostic xác nhận guard thật sự còn cũ mới chạy `database/maintenance/REPAIR-V8.8.0-REGISTRATION-GUARDS.sql`, sau đó chạy lại verifier đầy đủ.
 
+
+## CI portability hotfix
+
+Hotfix này chỉ thay đổi test/workflow và **không thay đổi database, Edge Function hay runtime app**. Nếu V8.8.0 UX3 đã được deploy và database verifier đang `overall=true`, không cần chạy SQL hoặc deploy lại Edge chỉ để nhận hotfix CI này.
+
+Khi cập nhật GitHub source, phải upload cả file `.nvmrc` ở root repository. Workflow final đọc Node major từ file này thay vì hard-code một đường dẫn/version Node cụ thể.
+
+Pipeline mong đợi:
+
+```text
+Verify root files (có .nvmrc)
+→ setup-node đọc .nvmrc
+→ npm ci
+→ npm test          # pure Node, không phụ thuộc node_modules
+→ npm run test:unit # Vitest xử lý TypeScript
+→ npm run typecheck
+→ npm run build
+```
