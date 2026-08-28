@@ -19,6 +19,10 @@ export interface TimetableDayOverride {
   defaultPeriodMinutes?:number
   shortBreakMinutes?:number
   longBreakMinutes?:number
+  morningLongBreakEnabled?:boolean
+  morningLongBreakAfterPeriod?:number
+  afternoonLongBreakEnabled?:boolean
+  afternoonLongBreakAfterPeriod?:number
   periodOverrides?:TimetablePeriodOverride[]
   breakRules?:TimetableBreakRule[]
 }
@@ -31,6 +35,10 @@ export interface TimetableConfig {
   defaultPeriodMinutes:number
   shortBreakMinutes:number
   longBreakMinutes:number
+  morningLongBreakEnabled:boolean
+  morningLongBreakAfterPeriod:number
+  afternoonLongBreakEnabled:boolean
+  afternoonLongBreakAfterPeriod:number
   periodOverrides:TimetablePeriodOverride[]
   breakRules:TimetableBreakRule[]
   dayOverrides:Record<string,TimetableDayOverride>

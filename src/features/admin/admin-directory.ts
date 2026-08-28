@@ -25,6 +25,10 @@ function timetableConfig(value:unknown):TimetableConfig{
     morningStart:(row.morningStart??row.morning_start??null) as string|null,morningEnd:(row.morningEnd??row.morning_end??null) as string|null,
     afternoonStart:(row.afternoonStart??row.afternoon_start??null) as string|null,afternoonEnd:(row.afternoonEnd??row.afternoon_end??null) as string|null,
     defaultPeriodMinutes:num(row.defaultPeriodMinutes??row.default_period_minutes)||40,shortBreakMinutes:num(row.shortBreakMinutes??row.short_break_minutes)||5,longBreakMinutes:num(row.longBreakMinutes??row.long_break_minutes)||15,
+    morningLongBreakEnabled:row.morningLongBreakEnabled===undefined?true:row.morningLongBreakEnabled!==false,
+    morningLongBreakAfterPeriod:num(row.morningLongBreakAfterPeriod??row.morning_long_break_after_period)||2,
+    afternoonLongBreakEnabled:row.afternoonLongBreakEnabled===undefined?true:row.afternoonLongBreakEnabled!==false,
+    afternoonLongBreakAfterPeriod:num(row.afternoonLongBreakAfterPeriod??row.afternoon_long_break_after_period)||7,
     periodOverrides:Array.isArray(row.periodOverrides)?row.periodOverrides as TimetableConfig['periodOverrides']:[],breakRules:Array.isArray(row.breakRules)?row.breakRules as TimetableConfig['breakRules']:[],dayOverrides:(row.dayOverrides&&typeof row.dayOverrides==='object'?row.dayOverrides:{}) as TimetableConfig['dayOverrides'],
   }
 }

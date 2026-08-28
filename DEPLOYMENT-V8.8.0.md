@@ -2,6 +2,9 @@
 
 V8.8.0 là bản nâng cấp UX quản trị + Theo dõi lớp + Quản lý tuần + hệ thống Mẫu TKB phiên bản hóa. Database V8.7.1 final là baseline bắt buộc.
 
+### UX3 hotfix (bản đóng gói này)
+Nếu database hiện tại đã chạy V8.8.0 và `database/verify/VERIFY-V8.8.0.sql` trả `overall=true`, **không cần chạy lại SQL upgrade** chỉ để nhận UX3. Hotfix này thay đổi frontend và validation/config của Edge `admin-manage-classes`; nên deploy lại Edge này, hoặc an toàn nhất deploy lại đủ 10 Edge Function trong gói để tránh lệch phiên bản.
+
 ## Thứ tự bắt buộc
 
 1. **Backup database**.
@@ -33,6 +36,17 @@ Khung giờ hiện tại được chuyển thành mẫu dự trữ **`TKB mặc 
 
 ## Quy tắc Mẫu TKB V8.8.0
 
+Ở builder UX3, Admin nhập quy luật cơ sở thay vì liệt kê từng khoảng nghỉ:
+
+- giờ bắt đầu/kết thúc buổi sáng và buổi chiều;
+- thời lượng tiết chuẩn;
+- thời lượng nghỉ giữa các tiết;
+- thời lượng nghỉ dài;
+- mỗi buổi chọn độc lập `Chỉ nghỉ ngắn` hoặc `Có nghỉ dài`; nếu có, chọn nghỉ dài sau tiết nào;
+- app tự tính giờ bắt đầu/kết thúc và số tiết tối đa;
+- chỉ các trường hợp hiếm mới dùng `Ngoại lệ nâng cao` (duration riêng, không nghỉ, nghỉ tùy chỉnh, long/short override).
+
+
 Admin có thể tạo nhiều mẫu trong một năm học. Mỗi phiên bản chứa cấu hình cơ sở và biến thể theo ngày; app tự sinh giờ tiết từ:
 
 - giờ bắt đầu/kết thúc buổi sáng và chiều;
@@ -61,10 +75,12 @@ Assignment TKB của lớp:
 
 ### GV
 - Theo dõi lớp: Quick Report chỉ phản ánh **buổi đang chọn**.
-- `Chưa đăng ký / Có thiết bị / Không thiết bị / Chưa xác định thiết bị` hiển thị báo cáo ngắn.
+- Selector buổi, KPI có thể bấm và kết quả nằm trong cùng một workspace; không còn card thống kê rời rồi nhảy xuống một vùng chi tiết khác.
+- `Chưa đăng ký / Có thiết bị / Không thiết bị / Chưa xác định thiết bị` hiển thị báo cáo ngắn ngay dưới KPI tương ứng.
 - Các mutation duyệt/sửa/xóa hiển thị trạng thái đang xử lý.
 - TKB: GV chỉ chọn tiết Tự học trong các tiết được mẫu sinh ra.
-- Quản lý tuần: cột tuần gọn; deadline cụ thể mở overlay/popover không đẩy bố cục.
+- Quản lý tuần: cột tuần 280–330px trên laptop/desktop, có cuộn dọc thật; deadline cụ thể mở overlay/popover không đẩy bố cục.
+- Popover deadline có `Hủy / Áp dụng hạn`; sau áp dụng field chính phải hiện `dd/mm/yyyy · HH:mm`, và nút `Lưu thay đổi` của tuần mới ghi DB.
 
 ### Cán sự
 - Xem Quick Report theo buổi và TKB ở chế độ read-only.

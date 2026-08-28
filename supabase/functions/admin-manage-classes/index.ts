@@ -75,6 +75,13 @@ function validateTimetableConfig(raw:any){
     if(!Number.isInteger(value)||value<0||value>240)throw Object.assign(new Error(`Thời lượng ${key} không hợp lệ`),{status:400,code:"INVALID_TIMETABLE_DURATION"});
     config[key]=value;
   }
+  for(const key of ["morningLongBreakEnabled","afternoonLongBreakEnabled"])config[key]=config[key]!==false;
+  for(const key of ["morningLongBreakAfterPeriod","afternoonLongBreakAfterPeriod"]){
+    const fallback=key.startsWith("morning")?2:7;
+    const value=Number(config[key]??fallback);
+    if(!Number.isInteger(value)||value<1||value>40)throw Object.assign(new Error(`Vị trí ${key} không hợp lệ`),{status:400,code:"INVALID_TIMETABLE_BREAK_POSITION"});
+    config[key]=value;
+  }
   config.periodOverrides=Array.isArray(config.periodOverrides)?config.periodOverrides:[];
   config.breakRules=Array.isArray(config.breakRules)?config.breakRules:[];
   config.dayOverrides=config.dayOverrides&&typeof config.dayOverrides==="object"&&!Array.isArray(config.dayOverrides)?config.dayOverrides:{};

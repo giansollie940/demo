@@ -12,11 +12,7 @@
 - Không suy diễn HS chưa đăng ký thành `Không thiết bị`.
 - Theo dõi lớp dùng một workspace liền mạch: selector buổi + KPI có thể bấm + báo cáo/danh sách của đúng buổi đang chọn trong cùng một khối.
 - Cột master tuần trên laptop/desktop dùng `clamp(280px,25vw,330px)` và có cuộn dọc thật với scrollbar ổn định.
-- Cột master tuần thu còn khoảng 210–225px.
 - Hạn cụ thể mở bằng popover/bottom sheet có `Hủy / Áp dụng hạn`; sau khi áp dụng, field chính hiển thị ngay ngày giờ thực tế thay vì chữ chung chung “Hạn cụ thể”.
-- Hạn cụ thể mở bằng popover/bottom sheet, không làm layout nhảy.
-- `Chưa đăng ký / Có thiết bị / Không thiết bị / Chưa rõ thiết bị` là Quick Report theo **đúng buổi đang chọn**.
-- Không suy diễn HS chưa đăng ký thành `Không thiết bị`.
 
 ## UX3 — Builder TKB tự động hơn
 - Cấu hình cơ sở không còn bắt Admin liệt kê nghỉ ngắn sau từng tiết.

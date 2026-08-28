@@ -17,6 +17,10 @@ export function resolveTimetableConfig(base:TimetableConfig,weekday:number):Time
     defaultPeriodMinutes:override.defaultPeriodMinutes??base.defaultPeriodMinutes,
     shortBreakMinutes:override.shortBreakMinutes??base.shortBreakMinutes,
     longBreakMinutes:override.longBreakMinutes??base.longBreakMinutes,
+    morningLongBreakEnabled:override.morningLongBreakEnabled??base.morningLongBreakEnabled,
+    morningLongBreakAfterPeriod:override.morningLongBreakAfterPeriod??base.morningLongBreakAfterPeriod,
+    afternoonLongBreakEnabled:override.afternoonLongBreakEnabled??base.afternoonLongBreakEnabled,
+    afternoonLongBreakAfterPeriod:override.afternoonLongBreakAfterPeriod??base.afternoonLongBreakAfterPeriod,
     periodOverrides:mergePeriodOverrides(base.periodOverrides??[],override.periodOverrides),
     breakRules:mergeBreakRules(base.breakRules??[],override.breakRules),
     dayOverrides:base.dayOverrides??{},
@@ -28,6 +32,8 @@ export function validateTimetableConfig(config:TimetableConfig):string[]{
   if(!Number.isFinite(config.defaultPeriodMinutes)||config.defaultPeriodMinutes<=0)errors.push('Thời lượng tiết chuẩn phải lớn hơn 0.')
   if(!Number.isFinite(config.shortBreakMinutes)||config.shortBreakMinutes<0)errors.push('Thời lượng nghỉ ngắn không hợp lệ.')
   if(!Number.isFinite(config.longBreakMinutes)||config.longBreakMinutes<0)errors.push('Thời lượng nghỉ dài không hợp lệ.')
+  if(config.morningLongBreakEnabled&&(!Number.isInteger(config.morningLongBreakAfterPeriod)||config.morningLongBreakAfterPeriod<1))errors.push('Vị trí nghỉ dài buổi sáng không hợp lệ.')
+  if(config.afternoonLongBreakEnabled&&(!Number.isInteger(config.afternoonLongBreakAfterPeriod)||config.afternoonLongBreakAfterPeriod<1))errors.push('Vị trí nghỉ dài buổi chiều không hợp lệ.')
   for(const [name,start,end] of [['Buổi sáng',config.morningStart,config.morningEnd],['Buổi chiều',config.afternoonStart,config.afternoonEnd]] as const){
     if((start&&!end)||(!start&&end))errors.push(`${name} cần đủ giờ bắt đầu và kết thúc.`)
     const s=minutes(start),e=minutes(end);if(s!==null&&e!==null&&s>=e)errors.push(`${name} phải kết thúc sau giờ bắt đầu.`)
@@ -39,7 +45,13 @@ export function validateTimetableConfig(config:TimetableConfig):string[]{
   return errors
 }
 
-function breakMinutes(rule:TimetableBreakRule|undefined,config:TimetableConfig){if(!rule||rule.type==='none')return 0;if(rule.type==='short')return config.shortBreakMinutes;if(rule.type==='long')return config.longBreakMinutes;return Math.max(0,Number(rule.minutes||0))}
+function breakMinutes(rule:TimetableBreakRule,config:TimetableConfig){if(rule.type==='none')return 0;if(rule.type==='short')return config.shortBreakMinutes;if(rule.type==='long')return config.longBreakMinutes;return Math.max(0,Number(rule.minutes||0))}
+function automaticBreakRule(session:'morning'|'afternoon',period:number,config:TimetableConfig):TimetableBreakRule{
+  const long=session==='morning'
+    ?config.morningLongBreakEnabled&&period===config.morningLongBreakAfterPeriod
+    :config.afternoonLongBreakEnabled&&period===config.afternoonLongBreakAfterPeriod
+  return{afterPeriod:period,type:long?'long':'short'}
+}
 
 export function calculateTimetable(base:TimetableConfig,weekday=0):CalculatedTimetable{
   const config=resolveTimetableConfig(base,weekday)
@@ -56,9 +68,14 @@ export function calculateTimetable(base:TimetableConfig,weekday=0):CalculatedTim
       const duration=overrides.get(number)??config.defaultPeriodMinutes
       const periodEnd=cursor+duration
       if(periodEnd>end)break
-      const rule=breaks.get(number),pause=breakMinutes(rule,config)
-      periods.push({number,start:hhmm(cursor),end:hhmm(periodEnd),minutes:duration,session,breakAfter:pause?{type:rule?.type??'none',minutes:pause}:null})
-      cursor=periodEnd+pause
+      const rule=breaks.get(number)??automaticBreakRule(session,number,config)
+      const pause=breakMinutes(rule,config)
+      const nextNumber=number+1
+      const nextDuration=overrides.get(nextNumber)??config.defaultPeriodMinutes
+      const nextStart=periodEnd+pause
+      const canFitNext=nextNumber<=MAX_TIMETABLE_PERIODS&&nextStart+nextDuration<=end
+      periods.push({number,start:hhmm(cursor),end:hhmm(periodEnd),minutes:duration,session,breakAfter:canFitNext&&pause?{type:rule.type,minutes:pause}:null})
+      cursor=nextStart
       number++
     }
   }
@@ -69,5 +86,6 @@ export function calculateTimetable(base:TimetableConfig,weekday=0):CalculatedTim
 
 export const defaultTimetableConfig=():TimetableConfig=>({
   morningStart:'07:30',morningEnd:'11:30',afternoonStart:'13:30',afternoonEnd:'16:30',defaultPeriodMinutes:40,shortBreakMinutes:5,longBreakMinutes:15,
-  periodOverrides:[],breakRules:[{afterPeriod:1,type:'short'},{afterPeriod:2,type:'long'},{afterPeriod:3,type:'short'},{afterPeriod:6,type:'short'},{afterPeriod:7,type:'long'}],dayOverrides:{},
+  morningLongBreakEnabled:true,morningLongBreakAfterPeriod:2,afternoonLongBreakEnabled:true,afternoonLongBreakAfterPeriod:7,
+  periodOverrides:[],breakRules:[],dayOverrides:{},
 })
