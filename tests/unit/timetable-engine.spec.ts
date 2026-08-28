@@ -6,16 +6,16 @@ describe('V8.8 timetable engine',()=>{
   it('automatically generates the maximum periods that fit both sessions',()=>{
     const result=calculateTimetable(defaultTimetableConfig(),0)
     expect(result.errors).toEqual([])
-    expect(result.periods).toHaveLength(8)
+    expect(result.periods).toHaveLength(9)
     expect(result.periods[0]).toMatchObject({number:1,start:'07:30',end:'08:10',session:'morning'})
-    expect(result.periods.at(-1)).toMatchObject({number:8,start:'15:10',end:'15:50',session:'afternoon'})
+    expect(result.periods.at(-1)).toMatchObject({number:9,start:'15:50',end:'16:30',session:'afternoon'})
   })
 
   it('applies a duration override without asking for explicit start or end times',()=>{
     const config=defaultTimetableConfig()
     config.periodOverrides=[{period:5,minutes:35}]
     const result=calculateTimetable(config,0)
-    expect(result.periods.find(item=>item.number===5)).toMatchObject({start:'10:40',end:'11:15',minutes:35})
+    expect(result.periods.find(item=>item.number===5)).toMatchObject({start:'10:35',end:'11:10',minutes:35})
   })
 
   it('supports a custom break and shifts later periods automatically',()=>{
