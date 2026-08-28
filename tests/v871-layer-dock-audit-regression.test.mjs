@@ -28,9 +28,12 @@ test('desktop vertical dock can render outside sidebar without scroll clipping',
 
 test('audit UI distinguishes backend failure from a truly empty audit log', () => {
   const audit = read('src/components/admin/AdminAuditLog.vue')
-  assert.match(audit, /Array\.isArray\(raw\.logs\)/)
-  assert.match(audit, /throw new Error\([^)]*Nhật ký hệ thống[^)]*không hợp lệ/i)
+  const bridge = read('public/supabase-service.js')
+  assert.match(bridge, /Array\.isArray\(data\?\.logs\)/)
+  assert.match(bridge, /AUDIT_EDGE_OUTDATED/)
+  assert.match(bridge, /AUDIT_INVALID_RESPONSE/)
   assert.match(audit, /query\.isError\.value/)
+  assert.match(audit, /queryErrorHelp/)
   assert.match(audit, /Không tải được Nhật ký hệ thống/)
   assert.match(audit, /Chưa có nhật ký hệ thống/)
   assert.match(audit, /query\.error\.value/)

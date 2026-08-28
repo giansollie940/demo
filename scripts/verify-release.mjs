@@ -84,6 +84,9 @@ for (const name of functions) {
   }
   const indexText = spawnSync('unzip', ['-p', zip, 'source/index.ts'], { encoding: 'utf8' })
   if (indexText.status !== 0) fail(`cannot read source/index.ts from ${name}`)
+  if (name==='audit-log' && !/AUDIT_LIST_CONTRACT_VERSION\s*=\s*2/.test(indexText.stdout)) {
+    fail('audit-log ZIP does not contain the current AUDIT_LIST_CONTRACT_VERSION=2 marker')
+  }
   for (const match of indexText.stdout.matchAll(/from\s+["']\.\.\/_shared\/([^"']+)["']/g)) {
     const target = `_shared/${match[1]}`
     const escaped = target.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
