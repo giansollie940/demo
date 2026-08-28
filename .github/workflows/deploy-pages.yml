@@ -50,14 +50,8 @@ jobs:
           rm -f public/config.js
           test ! -f public/config.js
 
-      - name: Static source tests
-        run: npm test
-
-      - name: Unit tests
-        run: npm run test:unit
-
-      - name: Typecheck
-        run: npm run typecheck
+      - name: Quality gate
+        run: npm run verify:quality
 
       - name: Validate required Supabase secrets
         shell: bash

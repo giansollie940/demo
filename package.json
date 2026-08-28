@@ -14,7 +14,8 @@
     "test:static": "node --test tests/*.test.mjs",
     "test:e2e": "playwright test",
     "package:edge": "node scripts/package-edge-functions.mjs",
-    "verify:release": "node scripts/verify-release.mjs"
+    "verify:release": "node scripts/verify-release.mjs",
+    "verify:quality": "node scripts/run-quality-gate.mjs"
   },
   "dependencies": {
     "@tanstack/vue-query": "^5.0.0",

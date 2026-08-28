@@ -84,3 +84,10 @@ Bản final yêu cầu `npm test` là static suite **pure Node**:
 Regression guard: `tests/ci-portability.test.mjs`.
 
 Điều này ngăn lỗi kiểu CI chạy Node 24 nhưng test còn trỏ vào thư mục global của Node 22.
+
+## UX3 CI quality-gate verification
+
+- `npm test`: 183/183 PASS on the source tree used to create this hotfix.
+- `npm run verify:release`: PASS; 226 files hashed; 10/10 Edge ZIPs valid.
+- Changed `weeks-components.spec.ts` and the `<script setup>` section of `WeekEditorCard.vue` parse with TypeScript 5.8.3 with zero syntax diagnostics.
+- `npm ci` could not complete in the packaging sandbox within the available network timeout, so local Vitest/vue-tsc/build are not claimed as PASS. GitHub Actions is the authoritative dependency-backed quality gate.

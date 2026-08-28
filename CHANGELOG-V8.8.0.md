@@ -51,3 +51,13 @@
 - Bổ sung `tests/ci-portability.test.mjs`: CI tự fail nếu test sau này hard-code global Node/TypeScript path hoặc đưa dependency ngoài vào static suite.
 - Bổ sung `.nvmrc` làm nguồn Node major duy nhất; GitHub Actions dùng `node-version-file: '.nvmrc'` thay vì hard-code version trong workflow.
 - Workflow preflight bắt buộc `.nvmrc` tồn tại trước khi setup Node.
+
+## UX3 CI quality-gate hardening (2026-08-28)
+
+- Fixed stale `WeekEditorCard` Vitest expectations after the deadline editor moved to an on-demand popover.
+- Unit tests now verify the applied deadline summary while the popover is closed, instead of requiring a hidden `datetime-local` input to exist in SSR output.
+- Invalid saved `specific` deadline state is now surfaced on the visible deadline selector with `aria-invalid`, `aria-describedby`, and the actionable message `Hãy chọn ngày và giờ hết hạn.`.
+- Added `npm run verify:quality`, backed by `scripts/run-quality-gate.mjs`, as the single CI quality gate for static tests, Vitest unit tests, and Vue/TypeScript typecheck.
+- The quality gate runs every check and prints a combined summary before failing, so one CI run can expose all failing quality gates instead of revealing them one by one across repeated pushes.
+- GitHub Pages workflow now calls the aggregate quality gate before runtime browser config generation.
+- Added regression guards to prevent unit tests from reverting to the obsolete always-visible deadline input contract.

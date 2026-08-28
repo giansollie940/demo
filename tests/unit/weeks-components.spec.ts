@@ -27,7 +27,7 @@ describe('WeekStatusBadge', () => {
 })
 
 describe('WeekEditorCard', () => {
-  it('renders week identity, holiday control, and specific deadline input', async () => {
+  it('renders the applied specific deadline summary while the editor popover stays closed', async () => {
     const html = await renderToString(h(WeekEditorCard, {
       modelValue: draft,
       operationalStatus: 'open',
@@ -41,7 +41,9 @@ describe('WeekEditorCard', () => {
     expect(html).toContain('Tuần nghỉ')
     expect(html).toContain('Chế độ vận hành')
     expect(html).toContain('Tự động')
-    expect(html).toContain('type="datetime-local"')
+    expect(html).toContain('01/11/2026 · 20:00')
+    expect(html).toContain('Hạn cụ thể cho cả tuần · 01/11/2026 · 20:00')
+    expect(html).not.toContain('type="datetime-local"')
     expect(html).toContain('Mở TKB tuần này')
   })
 
@@ -52,7 +54,7 @@ describe('WeekEditorCard', () => {
       deadlineTime: '20:00',
     }))
     expect(html).toContain('aria-invalid="true"')
-    expect(html).toContain('aria-describedby="week-week-12-deadline-help"')
+    expect(html).toContain('aria-describedby="week-week-12-deadline-summary-help"')
     expect(html).toContain('Hãy chọn ngày và giờ hết hạn.')
   })
 })

@@ -26,9 +26,15 @@ const deadlinePreviousMode=ref<WeekEditorDraft['deadlineMode']>('per_session_20'
 const validDeadline=(value:string)=>/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(value)
 const deadlineInvalid = computed(() => props.modelValue.deadlineMode === 'specific' && !validDeadline(props.modelValue.deadline))
 const deadlineDraftInvalid=computed(()=>!validDeadline(deadlineDraft.value))
-const deadlineHelpId = computed(() => `week-${props.modelValue.id}-deadline-help`)
+const deadlineSummaryHelpId = computed(() => `week-${props.modelValue.id}-deadline-summary-help`)
+const deadlineDraftHelpId = computed(() => `week-${props.modelValue.id}-deadline-draft-help`)
 const operationMode = computed(() => props.modelValue.manualStatus ?? 'auto')
 const specificDeadlineLabel=computed(()=>validDeadline(props.modelValue.deadline)?formatDateTime(props.modelValue.deadline):'Hạn cụ thể cho cả tuần')
+const deadlineSummaryText=computed(()=>{
+  if(props.modelValue.deadlineMode!=='specific')return 'Deadline được tính riêng cho từng buổi.'
+  if(deadlineInvalid.value)return 'Hãy chọn ngày và giờ hết hạn.'
+  return `Hạn cụ thể cho cả tuần · ${specificDeadlineLabel.value}`
+})
 
 watch(()=>props.modelValue.id,()=>{deadlineOpen.value=false;deadlineDraft.value=props.modelValue.deadline})
 watch(()=>props.modelValue.deadline,value=>{if(!deadlineOpen.value)deadlineDraft.value=value})
@@ -58,15 +64,15 @@ function formatDateTime(value:string){if(!validDeadline(value))return value;cons
 
       <div class="field-control deadline-control">
         <span>Deadline</span>
-        <select :value="modelValue.deadlineMode" :disabled="disabled" @change="updateDeadlineMode(($event.target as HTMLSelectElement).value as WeekEditorDraft['deadlineMode'])">
+        <select :value="modelValue.deadlineMode" :disabled="disabled" :aria-invalid="deadlineInvalid ? 'true' : undefined" :aria-describedby="deadlineSummaryHelpId" @change="updateDeadlineMode(($event.target as HTMLSelectElement).value as WeekEditorDraft['deadlineMode'])">
           <option value="per_session_20">{{ deadlineTime }} tối hôm trước từng buổi</option>
           <option value="specific">{{ specificDeadlineLabel }}</option>
         </select>
-        <small class="field-helper" :class="{error:deadlineInvalid}">{{ modelValue.deadlineMode==='specific'&&validDeadline(modelValue.deadline)?`Hạn cụ thể cho cả tuần · ${specificDeadlineLabel}`:'Deadline được tính riêng cho từng buổi.' }}</small>
+        <small :id="deadlineSummaryHelpId" class="field-helper" :class="{error:deadlineInvalid}">{{ deadlineSummaryText }}</small>
         <div v-if="deadlineOpen" class="deadline-popover" role="dialog" aria-modal="false" aria-label="Chọn hạn cụ thể">
           <b>Chọn ngày và giờ hết hạn</b>
-          <input v-model="deadlineDraft" type="datetime-local" :disabled="disabled" :aria-invalid="deadlineDraftInvalid" :aria-describedby="deadlineHelpId"/>
-          <small :id="deadlineHelpId" class="field-helper" :class="{ error: deadlineDraftInvalid }">{{ deadlineDraftInvalid ? 'Hãy chọn ngày và giờ hết hạn.' : `Sẽ hiển thị: ${formatDateTime(deadlineDraft)}` }}</small>
+          <input v-model="deadlineDraft" type="datetime-local" :disabled="disabled" :aria-invalid="deadlineDraftInvalid" :aria-describedby="deadlineDraftHelpId"/>
+          <small :id="deadlineDraftHelpId" class="field-helper" :class="{ error: deadlineDraftInvalid }">{{ deadlineDraftInvalid ? 'Hãy chọn ngày và giờ hết hạn.' : `Sẽ hiển thị: ${formatDateTime(deadlineDraft)}` }}</small>
           <div class="deadline-popover-actions"><AppButton size="sm" variant="secondary" :disabled="disabled" @click="cancelSpecificDeadline">Hủy</AppButton><AppButton size="sm" :disabled="disabled||deadlineDraftInvalid" @click="applySpecificDeadline">Áp dụng hạn</AppButton></div>
         </div>
       </div>

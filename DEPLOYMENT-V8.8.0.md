@@ -112,3 +112,18 @@ Verify root files (có .nvmrc)
 → npm run typecheck
 → npm run build
 ```
+
+## UX3 CI quality-gate hotfix
+
+This hotfix changes frontend/test/workflow files only. If the V8.8.0 database verifier already returns `overall=true`, do **not** rerun SQL migrations. Edge Functions do **not** need redeployment for this hotfix.
+
+After replacing the GitHub repository source, the workflow runs one canonical quality gate:
+
+```text
+npm run verify:quality
+  ├─ npm test
+  ├─ npm run test:unit
+  └─ npm run typecheck
+```
+
+The runner attempts all three checks and reports a combined PASS/FAIL summary. Production build still runs only after that quality gate passes and the browser Supabase config has been generated.
