@@ -4,7 +4,7 @@ import type { TrackingFilter, TrackingSort } from '../../features/tracking/track
 const props=defineProps<{modelValue:TrackingFilter;counts:Record<TrackingFilter,number>;query:string;sort:TrackingSort}>()
 const emit=defineEmits<{ 'update:modelValue':[value:TrackingFilter];'update:query':[value:string];'update:sort':[value:TrackingSort] }>()
 const filters:Array<{key:TrackingFilter;label:string}>=[
-  {key:'all',label:'Tất cả'},{key:'registered',label:'Đã đăng ký'},{key:'missing',label:'Chưa đăng ký'},{key:'attention',label:'Cần xử lý'},{key:'device',label:'Có thiết bị'},{key:'no-device',label:'Không thiết bị'},
+  {key:'all',label:'Tất cả'},{key:'registered',label:'Đã đăng ký'},{key:'missing',label:'Chưa đăng ký'},{key:'attention',label:'Cần xử lý'},{key:'device',label:'Có thiết bị'},{key:'no-device',label:'Không thiết bị'},{key:'unknown-device',label:'Chưa rõ thiết bị'},
 ]
 </script>
 <template>

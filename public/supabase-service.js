@@ -806,6 +806,23 @@
     for(const r of [scheduleRes,settingsRes,notificationsRes])if(r.error)throw r.error;
     if(memoryStatsRes.error)console.warn("Không tải được thống kê bộ nhớ AI.",memoryStatsRes.error);
 
+    let timetableAssignments=[];
+    let timetableVersionPeriods=[];
+    if(activeClassId){
+      const {data:assignmentRows,error:assignmentError}=await sb.from("class_timetable_assignments")
+        .select("id,class_id,school_year_id,template_version_id,effective_from,effective_to,active")
+        .eq("class_id",activeClassId).eq("active",true).order("effective_from");
+      if(assignmentError)throw assignmentError;
+      timetableAssignments=(assignmentRows||[]).map(row=>({id:row.id,classId:row.class_id,schoolYearId:row.school_year_id,templateVersionId:row.template_version_id,effectiveFrom:row.effective_from,effectiveTo:row.effective_to,active:row.active!==false}));
+      const versionIds=[...new Set(timetableAssignments.map(row=>row.templateVersionId).filter(Boolean))];
+      if(versionIds.length){
+        const {data:periodRows,error:periodError}=await sb.from("timetable_version_periods")
+          .select("version_id,weekday,period_number,start_time,end_time,session").in("version_id",versionIds).order("weekday").order("period_number");
+        if(periodError)throw periodError;
+        timetableVersionPeriods=(periodRows||[]).map(row=>({versionId:row.version_id,weekday:Number(row.weekday),period:Number(row.period_number),start:String(row.start_time).slice(0,5),end:String(row.end_time).slice(0,5),session:row.session||"day"}));
+      }
+    }
+
     const weekData=isManager&&!activeClassId?{overrides:[],registrations:[]}:await loadWeekData(currentWeek?.id,activeClassId);
     let registrations=weekData.registrations;
     if(["student","monitor"].includes(profile.role)){
@@ -842,6 +859,7 @@
       },
       users,weeks,
       periods:effectivePeriods.map(p=>({n:p.period_number,start:String(p.start_time).slice(0,5),end:String(p.end_time).slice(0,5)})),
+      timetableAssignments,timetableVersionPeriods,
       schedule:(scheduleRes.data||[]).map(x=>({dow:Number(x.weekday)-1,period:x.period_number})),
       overrides:weekData.overrides,registrations,aiFeedbackMemoryStats:memory,
       notifications:(notificationsRes.data||[]).map(n=>({id:n.id,classId:n.class_id,registrationId:n.registration_id,studentId:n.student_id,weekId:n.week_id,type:n.notification_type,title:n.title,message:n.message||"",isRead:n.is_read===true,createdAt:n.created_at})),

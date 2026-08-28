@@ -46,7 +46,7 @@ function requestLogout(){profileOpen.value=false;emit('logout')}
         <div v-if="profileOpen" class="profile-dropdown" role="menu">
           <div class="profile-summary"><span class="profile-avatar large">{{ initials }}</span><div><b>{{ auth.currentUser.name }}</b><small>{{ roleLabel }} · {{ auth.currentUser.code }}</small></div></div>
           <div v-if="!isAdmin" class="profile-class"><span>{{ context.selectedClass?.name||context.selectedClass?.code||state?.settings.className||'Lớp học' }}</span><small>{{ state?.settings.schoolYear||'' }}</small></div>
-          <RouterLink v-if="auth.currentUser.role==='student'||auth.currentUser.role==='monitor'" class="profile-settings" to="/settings" role="menuitem" @click="profileOpen=false"><SlidersHorizontal/>Tùy chọn cá nhân</RouterLink>
+          <RouterLink v-if="auth.currentUser.role==='student'||auth.currentUser.role==='monitor'||auth.currentUser.role==='admin'" class="profile-settings" to="/settings" role="menuitem" @click="profileOpen=false"><SlidersHorizontal/>Tùy chọn cá nhân</RouterLink>
           <button type="button" class="profile-logout" role="menuitem" @click="requestLogout"><LogOut/>Đăng xuất</button>
         </div>
       </div>

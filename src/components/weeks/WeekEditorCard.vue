@@ -71,7 +71,7 @@ function formatDate(value: string) {
         <small class="field-helper">Tự động sẽ đóng sau buổi tự học cuối và chuyển sang tuần kế tiếp.</small>
       </label>
 
-      <label class="field-control">
+      <div class="field-control deadline-control">
         <span>Chế độ deadline</span>
         <select
           :value="modelValue.deadlineMode"
@@ -81,20 +81,20 @@ function formatDate(value: string) {
           <option value="per_session_20">{{ deadlineTime }} tối hôm trước từng buổi</option>
           <option value="specific">Hạn cụ thể cho cả tuần</option>
         </select>
-      </label>
-
-      <label v-if="modelValue.deadlineMode === 'specific'" class="field-control">
-        <span>Ngày và giờ hết hạn</span>
-        <input
-          type="datetime-local"
-          :value="modelValue.deadline"
-          :disabled="disabled"
-          :aria-invalid="deadlineInvalid"
-          :aria-describedby="deadlineHelpId"
-          @input="update({ deadline: ($event.target as HTMLInputElement).value })"
-        />
-        <small :id="deadlineHelpId" class="field-helper" :class="{ error: deadlineInvalid }">{{ deadlineInvalid ? 'Hãy chọn ngày và giờ hết hạn.' : 'Deadline áp dụng cho toàn bộ tuần.' }}</small>
-      </label>
+        <small class="field-helper">{{ modelValue.deadlineMode==='specific'?'Chọn ngày giờ trong popover nổi; bố cục không bị dịch chuyển.':'Deadline được tính riêng cho từng buổi.' }}</small>
+        <div v-if="modelValue.deadlineMode === 'specific'" class="deadline-popover" role="group" aria-label="Hạn cụ thể">
+          <b>Ngày và giờ hết hạn</b>
+          <input
+            type="datetime-local"
+            :value="modelValue.deadline"
+            :disabled="disabled"
+            :aria-invalid="deadlineInvalid"
+            :aria-describedby="deadlineHelpId"
+            @input="update({ deadline: ($event.target as HTMLInputElement).value })"
+          />
+          <small :id="deadlineHelpId" class="field-helper" :class="{ error: deadlineInvalid }">{{ deadlineInvalid ? 'Hãy chọn ngày và giờ hết hạn.' : 'Deadline áp dụng cho toàn bộ tuần.' }}</small>
+        </div>
+      </div>
 
       <label class="field-control note-field">
         <span>Ghi chú tuần</span>
@@ -117,5 +117,5 @@ function formatDate(value: string) {
 </template>
 
 <style scoped>
-.week-editor-card{border:1px solid var(--border);border-radius:18px;padding:20px;background:var(--surface);box-shadow:var(--shadow-sm);transition:border-color var(--transition-fast),background var(--transition-fast)}.week-editor-card.current{border-color:color-mix(in srgb,var(--color-success) 45%,var(--border))}.week-editor-card.viewing{background:color-mix(in srgb,var(--color-primary) 5%,var(--surface));box-shadow:0 0 0 2px color-mix(in srgb,var(--color-primary) 18%,transparent)}header{display:flex;justify-content:space-between;gap:16px;align-items:flex-start}.week-number{font-size:1.15rem;font-weight:900}.week-dates{margin-top:4px;color:var(--text-muted);font-size:.87rem;font-variant-numeric:tabular-nums}.week-labels{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end}.context-label{display:inline-flex;align-items:center;padding:8px 12px;border-radius:999px;background:color-mix(in srgb,var(--color-success) 12%,var(--surface));color:var(--color-success);font-size:.76rem;font-weight:850}.context-label.is-viewing{background:color-mix(in srgb,var(--color-primary) 12%,var(--surface));color:var(--color-primary)}.week-controls{display:grid;grid-template-columns:minmax(220px,.9fr) minmax(220px,1fr) minmax(220px,1fr);gap:12px;margin-top:20px}.holiday-control,.field-control{display:flex;gap:8px;border:1px solid var(--border);border-radius:12px;padding:12px;background:var(--surface-soft)}.holiday-control{align-items:center}.holiday-control input{width:20px;height:20px;accent-color:var(--color-primary)}.holiday-control svg{width:20px;color:var(--color-warning)}.holiday-control span{display:grid}.holiday-control small{color:var(--text-muted)}.field-control{flex-direction:column}.field-control>span{font-size:.78rem;font-weight:850;color:var(--text-muted)}.field-control input,.field-control select{width:100%;min-height:44px;border:1px solid var(--border);border-radius:9px;padding:8px 12px;background:var(--input);color:var(--text)}.field-control input:disabled,.field-control select:disabled{opacity:.55;cursor:not-allowed}.field-helper{min-height:1lh;color:var(--text-muted);font-size:.76rem}.field-helper.error{color:var(--color-danger);font-weight:800}.field-control input[aria-invalid="true"]{border-color:var(--color-danger)}.note-field{grid-column:1/-1}footer{display:flex;justify-content:flex-end;gap:8px;margin-top:16px}footer :deep(svg){width:16px}@media(max-width:900px){.week-controls{grid-template-columns:1fr 1fr}.note-field{grid-column:1/-1}}@media(max-width:620px){header{flex-direction:column}.week-labels{justify-content:flex-start}.week-controls{grid-template-columns:1fr}.note-field{grid-column:auto}footer{display:grid;grid-template-columns:1fr}footer :deep(button){width:100%}}
+.week-editor-card{border:1px solid var(--border);border-radius:18px;padding:20px;background:var(--surface);box-shadow:var(--shadow-sm);transition:border-color var(--transition-fast),background var(--transition-fast)}.week-editor-card.current{border-color:color-mix(in srgb,var(--color-success) 45%,var(--border))}.week-editor-card.viewing{background:color-mix(in srgb,var(--color-primary) 5%,var(--surface));box-shadow:0 0 0 2px color-mix(in srgb,var(--color-primary) 18%,transparent)}header{display:flex;justify-content:space-between;gap:16px;align-items:flex-start}.week-number{font-size:1.15rem;font-weight:900}.week-dates{margin-top:4px;color:var(--text-muted);font-size:.87rem;font-variant-numeric:tabular-nums}.week-labels{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end}.context-label{display:inline-flex;align-items:center;padding:8px 12px;border-radius:999px;background:color-mix(in srgb,var(--color-success) 12%,var(--surface));color:var(--color-success);font-size:.76rem;font-weight:850}.context-label.is-viewing{background:color-mix(in srgb,var(--color-primary) 12%,var(--surface));color:var(--color-primary)}.week-controls{display:grid;grid-template-columns:minmax(220px,.9fr) minmax(220px,1fr) minmax(220px,1fr);gap:12px;margin-top:20px}.holiday-control,.field-control{display:flex;gap:8px;border:1px solid var(--border);border-radius:12px;padding:12px;background:var(--surface-soft)}.holiday-control{align-items:center}.holiday-control input{width:20px;height:20px;accent-color:var(--color-primary)}.holiday-control svg{width:20px;color:var(--color-warning)}.holiday-control span{display:grid}.holiday-control small{color:var(--text-muted)}.field-control{flex-direction:column}.deadline-control{position:relative}.deadline-popover{position:absolute;z-index:115;top:calc(100% + 8px);left:0;right:0;display:grid;gap:8px;padding:12px;border:1px solid color-mix(in srgb,var(--color-primary) 24%,var(--border));border-radius:14px;background:var(--surface-raised);box-shadow:0 18px 42px rgb(54 44 70 / .18)}.deadline-popover b{font-size:.82rem}.deadline-popover::before{content:"";position:absolute;top:-6px;left:24px;width:12px;height:12px;transform:rotate(45deg);background:var(--surface-raised);border-left:1px solid color-mix(in srgb,var(--color-primary) 24%,var(--border));border-top:1px solid color-mix(in srgb,var(--color-primary) 24%,var(--border))}.field-control>span{font-size:.78rem;font-weight:850;color:var(--text-muted)}.field-control input,.field-control select{width:100%;min-height:44px;border:1px solid var(--border);border-radius:9px;padding:8px 12px;background:var(--input);color:var(--text)}.field-control input:disabled,.field-control select:disabled{opacity:.55;cursor:not-allowed}.field-helper{min-height:1lh;color:var(--text-muted);font-size:.76rem}.field-helper.error{color:var(--color-danger);font-weight:800}.field-control input[aria-invalid="true"]{border-color:var(--color-danger)}.note-field{grid-column:1/-1}footer{display:flex;justify-content:flex-end;gap:8px;margin-top:16px}footer :deep(svg){width:16px}@media(max-width:900px){.week-controls{grid-template-columns:1fr 1fr}.note-field{grid-column:1/-1}}@media(max-width:620px){.deadline-popover{position:fixed;z-index:125;left:10px;right:10px;top:auto;bottom:10px}.deadline-popover::before{display:none}header{flex-direction:column}.week-labels{justify-content:flex-start}.week-controls{grid-template-columns:1fr}.note-field{grid-column:auto}footer{display:grid;grid-template-columns:1fr}footer :deep(button){width:100%}}
 </style>

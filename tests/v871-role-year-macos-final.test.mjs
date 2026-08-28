@@ -14,9 +14,8 @@ test('admin navigation and routes are system-only while teacher retains class op
   assert.match(nav,/admin:\s*\['Tổng quan','Năm học','Lớp học','Học sinh','Giáo viên','Phân quyền','Nhật ký hệ thống'\]/)
   assert.match(nav,/teacher:\s*\[[^\]]*'Duyệt đăng ký'[^\]]*'Quản lý tuần'[^\]]*'Cài đặt'/s)
   assert.doesNotMatch(routes,/const managers: UserRole\[\] = \['teacher', 'admin'\]/)
-  for(const pathName of ['review','weeks','schedule','students']){
-    assert.match(routes,new RegExp(`path: '${pathName}'.*roles: teachers`))
-  }
+  for(const pathName of ['review','weeks','students']) assert.match(routes,new RegExp(`path: '${pathName}'.*roles: teachers`))
+  assert.match(routes,/path: 'schedule'.*roles: \['monitor', \.\.\.teachers\]/)
   assert.match(routes,/path: 'admin'.*roles: \['admin'\]/)
   assert.match(guard,/auth\.currentUser\?\.role==='admin'.*\/admin/s)
 })

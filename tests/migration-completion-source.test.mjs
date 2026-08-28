@@ -16,9 +16,9 @@ test('realtime is centralized and app source avoids deprecated unsafe execution 
   for(const source of [app,realtime,shell]) assert.doesNotMatch(source,/beforeunload|addEventListener\(['"]unload|eval\(|new Function|unsafe-eval/)
 })
 
-test('package identifies the V8.7.1 release and exposes verification scripts', async()=>{
+test('package identifies the V8.8.0 release and exposes verification scripts', async()=>{
   const pkg=JSON.parse(await text('package.json'))
-  assert.equal(pkg.version,'8.7.1')
+  assert.equal(pkg.version,'8.8.0')
   assert.equal(pkg.scripts.typecheck,'vue-tsc -b')
   assert.equal(pkg.scripts.test,'node --test tests/*.test.mjs')
   assert.equal(pkg.scripts['test:unit'],'vitest run --configLoader runner tests/unit')

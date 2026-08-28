@@ -45,6 +45,25 @@ export interface PeriodRecord {
   end: string
 }
 
+export interface TimetableAssignmentSnapshot {
+  id:string
+  classId:string
+  schoolYearId:string
+  templateVersionId:string
+  effectiveFrom:string
+  effectiveTo:string
+  active:boolean
+}
+
+export interface TimetableVersionPeriodSnapshot {
+  versionId:string
+  weekday:number
+  period:number
+  start:string
+  end:string
+  session:'morning'|'afternoon'|'day'
+}
+
 export interface ScheduleSlot {
   dow: number
   period: number
@@ -167,6 +186,8 @@ export interface LegacyState {
   users: CurrentUser[]
   weeks: WeekRecord[]
   periods: PeriodRecord[]
+  timetableAssignments: TimetableAssignmentSnapshot[]
+  timetableVersionPeriods: TimetableVersionPeriodSnapshot[]
   schedule: ScheduleSlot[]
   overrides: WeekData['overrides']
   registrations: RegistrationRecord[]

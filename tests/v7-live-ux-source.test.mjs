@@ -24,10 +24,11 @@ test('owl settings are real toggles persisted in preferences',()=>{
   for(const model of ['preferences.owlEnabled','preferences.owlFollowPointer','preferences.owlHeadTilt','preferences.owlAutoOpenUrgent','preferences.owlQuotesEnabled']) assert.match(settings,new RegExp(model.replaceAll('.','\\.')))
 })
 
-test('schedule displays only Tu hoc for selected slots and blank for unselected slots',()=>{
+test('schedule shows generated period time and marks only selected slots as Tự học',()=>{
   const schedule=read('src/components/schedule/ScheduleGrid.vue')
-  assert.match(schedule,/isSelected\(dow, period\.n\) \? 'Tự học' : ''/)
-  assert.match(schedule,/isSelected\(activeDay, period\.n\) \? 'Tự học' : ''/)
+  assert.match(schedule,/periodForDay/)
+  assert.match(schedule,/isSelected\(dow,n\)\?'Tự học':''/)
+  assert.match(schedule,/isSelected\(activeDay,period\.n\)\?'Tự học':''/)
   assert.doesNotMatch(schedule,/Có học|Không học|Bật|Tắt/)
 })
 

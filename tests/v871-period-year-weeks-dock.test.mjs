@@ -24,19 +24,19 @@ test('teacher week management uses one master list and one detail editor instead
   assert.doesNotMatch(page,/<WeekEditorCard\s+v-for=/)
 })
 
-test('admin school year management exposes period timetable per school year',()=>{
+test('admin school year management exposes versioned timetable templates per school year',()=>{
   const feature=read('src/features/admin/admin-directory.ts')
   const page=read('src/pages/AdminPage.vue')
   const card=read('src/components/admin/AdminSchoolYearCard.vue')
   const edge=read('supabase/functions/admin-manage-classes/index.ts')
-  assert.match(feature,/AdminSchoolYearPeriodRecord/)
-  assert.match(feature,/periods:AdminSchoolYearPeriodRecord\[\]/)
-  assert.match(feature,/updateSchoolYearPeriods/)
-  assert.match(edge,/school_year_periods/)
-  assert.match(edge,/action==="update_school_year_periods"/)
-  assert.match(page,/yearPeriods/)
-  assert.match(card,/Khung giờ tiết học/)
-  assert.match(card,/Sao chép từ khung giờ mặc định|Lưu khung giờ/)
+  assert.match(feature,/AdminTimetableTemplateRecord/)
+  assert.match(feature,/timetableTemplates/)
+  assert.match(feature,/assignTimetableTemplate/)
+  assert.match(edge,/create_timetable_template/)
+  assert.match(edge,/assign_timetable_template/)
+  assert.match(page,/yearTemplates/)
+  assert.match(card,/AdminTimetableBuilder/)
+  assert.match(card,/AdminTimetableAssignment/)
 })
 
 test('database stores period times per school year and session lifecycle resolves year-specific periods',()=>{

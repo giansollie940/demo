@@ -7,7 +7,8 @@ import InlineStatus, { type InlineStatusState } from '../components/ui/InlineSta
 import SessionSummaryCard from '../components/tracking/SessionSummaryCard.vue'
 import TrackingFilters from '../components/tracking/TrackingFilters.vue'
 import StudentTrackingRow from '../components/tracking/StudentTrackingRow.vue'
-import { filterTrackingRows, summarizeTrackingSession, trackingFilterCounts, type TrackingFilter, type TrackingSort } from '../features/tracking/tracking-model'
+import TrackingQuickReport from '../components/tracking/TrackingQuickReport.vue'
+import { filterTrackingRows, summarizeTrackingSession, trackingFilterCounts, trackingQuickReport, type TrackingFilter, type TrackingSort } from '../features/tracking/tracking-model'
 import { aiOutcomeMismatch, aiReviewHistoryLabel, needsTeacherAction, registrationManagerActions } from '../features/registrations/registration-model'
 import { approveRegistrationsMutation, deleteManagedRegistration, markHandledRegistrationNotificationsRead, requestManagedRevision, saveTeacherCommentMutation, type ApprovalMutationRuntime } from '../features/approvals/approval-mutations'
 import { useLegacyMutationRuntime } from '../features/shared/useLegacyMutationRuntime'
@@ -31,6 +32,9 @@ watch([classId,weekId],()=>{filter.value='all';query.value='';selectedKey.value=
 const selectedSummary=computed(()=>summaries.value.find(item=>key(item.session)===selectedKey.value)??null)
 const counts=computed(()=>trackingFilterCounts(selectedSummary.value?.rows??[]))
 const visibleRows=computed(()=>filterTrackingRows(selectedSummary.value?.rows??[],filter.value,query.value,sort.value))
+const quickReportMode=computed(()=>['missing','device','no-device','unknown-device'].includes(filter.value))
+const quickReportFilter=computed<'missing'|'device'|'no-device'|'unknown-device'>(()=>quickReportMode.value?filter.value as 'missing'|'device'|'no-device'|'unknown-device':'missing')
+const quickReportRows=computed(()=>quickReportMode.value?trackingQuickReport(selectedSummary.value?.rows??[],quickReportFilter.value,query.value,sort.value):[])
 const manager=computed(()=>['teacher','admin'].includes(auth.currentUser?.role??''))
 const aiEnabled=computed(()=>Boolean(auth.legacyState?.settings?.aiAutomationEnabled??auth.legacyState?.settings?.smartApprovalEnabled??auth.legacyState?.settings?.aiReviewEnabled??true))
 const dayName=(dow:number)=>['Thứ 2','Thứ 3','Thứ 4','Thứ 5','Thứ 6','Thứ 7','Chủ nhật'][Number(dow)]??`Ngày ${Number(dow)+1}`
@@ -41,7 +45,7 @@ function actionsFor(row:(typeof visibleRows.value)[number]){if(!manager.value||!
 function aiCandidate(registration:RegistrationRecord|undefined|null){if(!registration||registration.isDeleted===true||registration.revisionOverdueAt)return false;const ai=String(registration.aiReviewStatus??'').toLowerCase();return registration.status==='approved'||(registration.status==='submitted'&&!['pending','processing'].includes(ai))}
 const sessionAiCandidates=computed(()=>selectedSummary.value?.rows.map(row=>row.registration).filter((row):row is RegistrationRecord=>Boolean(row)&&aiCandidate(row))??[])
 function canAiRereview(row:(typeof visibleRows.value)[number]){return manager.value&&aiEnabled.value&&aiCandidate(row.registration)}
-async function run(id:string,task:()=>Promise<unknown>,message:string){if(!classId.value)return;busyId.value=id;try{await task();status.value='success';statusMessage.value=message}catch(error){status.value='error';statusMessage.value=error instanceof Error?error.message:'Không hoàn tất được thao tác.'}finally{busyId.value=null}}
+async function run(id:string,task:()=>Promise<unknown>,message:string){if(!classId.value)return;busyId.value=id;status.value='saving';statusMessage.value='Đang xử lý và đồng bộ với cơ sở dữ liệu…';try{await task();status.value='success';statusMessage.value=message}catch(error){status.value='error';statusMessage.value=error instanceof Error?error.message:'Không hoàn tất được thao tác.'}finally{busyId.value=null}}
 async function approve(id:string){await run(id,()=>approveRegistrationsMutation(runtime(),classId.value!,[id]),'Đã duyệt đăng ký.')}
 async function revise(id:string){const comment=window.prompt('Nhập hướng dẫn cần chỉnh sửa:')?.trim();if(!comment)return;await run(id,()=>requestManagedRevision(runtime(),classId.value!,id,comment),'Đã yêu cầu chỉnh sửa.')}
 async function comment(id:string){const row=registrations.value.find(item=>item.id===id);const value=window.prompt('Nhận xét giáo viên:',String(row?.teacherComment??''))?.trim();if(!value)return;await run(id,()=>saveTeacherCommentMutation(runtime(),classId.value!,id,value),'Đã lưu nhận xét.')}
@@ -106,7 +110,7 @@ async function rerunSessionAi(){
       <header class="detail-head"><div><span class="page-context">CHI TIẾT BUỔI</span><h2>{{ label(selectedSummary.session) }}</h2><p>{{ selectedSummary.total }} học sinh · {{ selectedSummary.completion }}% đã có đăng ký.</p></div><div class="summary-numbers"><span><small>Sĩ số</small><b>{{ selectedSummary.total }}</b></span><span><small>Đã ĐK</small><b>{{ selectedSummary.registered }}</b></span><span><small>Chưa ĐK</small><b>{{ selectedSummary.missing }}</b></span><span><small>Cần xử lý</small><b>{{ selectedSummary.attention }}</b></span></div></header>
       <div v-if="manager" class="ai-rereview-bar"><div><span><BrainCircuit/>AI DUYỆT LẠI THEO BUỔI</span><b>{{ aiEnabled?`${sessionAiCandidates.length} đăng ký phù hợp`:'AI đang tắt trong Cài đặt' }}</b><small>Bỏ qua bản nháp, yêu cầu sửa, báo cáo lỗi và đăng ký AI đang chờ/đang xử lý.</small><small v-if="aiProgress" class="ai-progress">{{ aiProgress }}</small></div><AppButton variant="secondary" :loading="aiBusy" :disabled="!aiEnabled||!sessionAiCandidates.length" @click="rerunSessionAi"><BrainCircuit/>AI duyệt lại buổi này</AppButton></div>
       <TrackingFilters v-model="filter" v-model:query="query" v-model:sort="sort" :counts="counts"/>
-      <div class="student-list"><StudentTrackingRow v-for="row in visibleRows" :key="row.user.id" :row="row" :actions="actionsFor(row)" :can-ai-rereview="canAiRereview(row)" :busy="busyId===row.registration?.id" @ai-rereview="row.registration&&rerunRegistrationAi(row.registration.id)" @approve="row.registration&&approve(row.registration.id)" @revision="row.registration&&revise(row.registration.id)" @comment="row.registration&&comment(row.registration.id)" @delete="row.registration&&remove(row.registration.id)"/><div v-if="!visibleRows.length" class="empty-list">Không có học sinh phù hợp bộ lọc.</div></div>
+      <TrackingQuickReport v-if="quickReportMode" :rows="quickReportRows" :filter="quickReportFilter" :session-label="label(selectedSummary.session)"/><div v-else class="student-list"><StudentTrackingRow v-for="row in visibleRows" :key="row.user.id" :row="row" :actions="actionsFor(row)" :can-ai-rereview="canAiRereview(row)" :busy="busyId===row.registration?.id" @ai-rereview="row.registration&&rerunRegistrationAi(row.registration.id)" @approve="row.registration&&approve(row.registration.id)" @revision="row.registration&&revise(row.registration.id)" @comment="row.registration&&comment(row.registration.id)" @delete="row.registration&&remove(row.registration.id)"/><div v-if="!visibleRows.length" class="empty-list">Không có học sinh phù hợp bộ lọc.</div></div>
     </AppCard>
   </div>
 </template>

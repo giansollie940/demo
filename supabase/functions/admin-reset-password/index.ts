@@ -45,10 +45,15 @@ Deno.serve(async (req: Request) => {
     });
     if (error) throw error;
 
+    const resetAction = target.role === "teacher"
+      ? "ADMIN_RESET_TEACHER_PASSWORD"
+      : target.role === "monitor"
+        ? "ADMIN_RESET_MONITOR_PASSWORD"
+        : "ADMIN_RESET_STUDENT_PASSWORD";
     await writeAudit(admin, {
       actorId: actor.id,
       classId: target.class_id,
-      action: "ADMIN_RESET_PASSWORD",
+      action: resetAction,
       entityType: "profile",
       entityId: userId,
       newData: { passwordReset: true },

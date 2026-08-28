@@ -13,6 +13,8 @@ import {
   createWeekScheduleDraft,
   diffSchedule,
   effectiveScheduleForWeek,
+  resolvedTimetableDays,
+  timetablePeriodUnion,
 } from '../features/schedule/schedule-model'
 import {
   resetWeekScheduleMutation,
@@ -36,6 +38,8 @@ const status = ref<InlineStatusState>('idle')
 const statusMessage = ref('')
 
 const state = computed(() => auth.legacyState)
+const isMonitor = computed(() => auth.currentUser?.role === 'monitor')
+const readOnly = computed(() => isMonitor.value)
 const classId = computed(() => context.selectedClassId)
 const weekId = computed(() => context.selectedWeekId)
 const weekNumber = computed(() => context.selectedWeek?.number ?? '–')
@@ -50,15 +54,20 @@ const isDirty = computed(() => normalizedKey(slots.value) !== normalizedKey(init
 const serverChanged = computed(() => dirtyEditor.state.serverChanged)
 const selectedByDay = computed(() => [0, 1, 2, 3, 4].map(dow => slots.value.filter(slot => slot.dow === dow).length))
 const differences = computed(() => diffSchedule(state.value?.schedule ?? [], slots.value))
+const resolvedPeriods = computed(() => state.value ? timetablePeriodUnion(state.value) : [])
+const generatedDayPeriods = computed(() => state.value ? resolvedTimetableDays(state.value, context.selectedWeek) : {})
 
 function loadDraft() {
   const current = state.value
   if (!current) return
-  const next = mode.value === 'default'
-    ? structuredClone(current.schedule)
-    : weekId.value
-      ? createWeekScheduleDraft(current, weekId.value)
-      : []
+  if (isMonitor.value) mode.value = 'week'
+  const next = isMonitor.value
+    ? (weekId.value ? createWeekScheduleDraft(current, weekId.value) : structuredClone(current.schedule))
+    : mode.value === 'default'
+      ? structuredClone(current.schedule)
+      : weekId.value
+        ? createWeekScheduleDraft(current, weekId.value)
+        : []
   slots.value = next
   initialSlots.value = structuredClone(next)
   weekDraftCreated.value = mode.value === 'week' && hasWeekOverride.value
@@ -72,7 +81,7 @@ watch(() => auth.legacyState, () => { if (!(isDirty.value && serverChanged.value
 watch(isDirty, value => dirtyEditor.setDirty(value), { immediate: true })
 
 function changeMode(next:'default'|'week') {
-  if (next === mode.value) return
+  if (readOnly.value || next === mode.value) return
   if (isDirty.value && !window.confirm('Bỏ thay đổi chưa lưu và đổi chế độ TKB?')) return
   dirtyEditor.markClean()
   mode.value = next
@@ -102,7 +111,7 @@ function errorMessage(error: unknown) {
 }
 
 async function save() {
-  if (!classId.value || !state.value) return
+  if (readOnly.value || !classId.value || !state.value) return
   status.value = 'saving'
   statusMessage.value = 'Đang lưu thời khóa biểu…'
   try {
@@ -124,6 +133,7 @@ async function save() {
 }
 
 async function resetToDefault() {
+  if (readOnly.value) return
   confirmReset.value = false
   if (!classId.value || !weekId.value) return
   status.value = 'saving'
@@ -148,22 +158,23 @@ async function resetToDefault() {
         <h1>Thời khóa biểu</h1>
         <p>{{ context.selectedClass?.name || context.selectedClass?.code || 'Lớp đang chọn' }} · Tuần {{ weekNumber }}</p>
       </div>
-      <div class="header-actions">
+      <div v-if="!readOnly" class="header-actions">
         <AppButton variant="secondary" :disabled="!isDirty || status === 'saving'" @click="cancelChanges"><RotateCcw /> Hủy thay đổi</AppButton>
         <AppButton :loading="status === 'saving'" :disabled="!isDirty || (mode === 'week' && !canEditWeek)" @click="save"><Save /> Lưu TKB</AppButton>
       </div>
     </header>
 
     <AppCard padding="lg" class="mode-card">
-      <ScheduleModeTabs :model-value="mode" :week-number="weekNumber" @update:model-value="changeMode" />
-      <p v-if="mode === 'default'" class="mode-help">Áp dụng cho mọi tuần chưa có TKB riêng. Việc lưu không xóa các TKB riêng đã có.</p>
+      <ScheduleModeTabs v-if="!readOnly" :model-value="mode" :week-number="weekNumber" @update:model-value="changeMode" />
+      <p v-if="readOnly" class="mode-help">Cán sự xem lịch tự học của buổi/tuần đang chọn; cấu trúc giờ do Admin quản lý và GV chọn tiết tự học.</p>
+      <p v-else-if="mode === 'default'" class="mode-help">Áp dụng cho mọi tuần chưa có TKB riêng. Việc lưu không xóa các TKB riêng đã có.</p>
       <p v-else class="mode-help">Chỉ áp dụng cho Tuần {{ weekNumber }} và không ảnh hưởng tuần khác.</p>
     </AppCard>
 
     <InlineStatus :state="status" :message="statusMessage" />
     <InlineStatus v-if="serverChanged" state="server-changed" message="Dữ liệu trên máy chủ vừa thay đổi."><div class="conflict-actions"><button type="button" @click="loadServerVersion">Tải bản mới</button><button type="button" @click="keepDraft">Tiếp tục bản đang chỉnh</button></div></InlineStatus>
 
-    <AppCard v-if="mode === 'week' && !canEditWeek" padding="lg" class="inherit-card">
+    <AppCard v-if="!readOnly && mode === 'week' && !canEditWeek" padding="lg" class="inherit-card">
       <Sparkles aria-hidden="true" />
       <div><h2>Tuần {{ weekNumber }} đang dùng TKB mặc định</h2><p>Tạo một bản riêng từ lịch mặc định rồi chỉ chỉnh những tiết cần thay đổi.</p></div>
       <AppButton @click="createWeekDraft">Tạo TKB riêng</AppButton>
@@ -171,19 +182,19 @@ async function resetToDefault() {
 
     <AppCard v-else padding="lg">
       <div class="grid-heading">
-        <div><h2>{{ mode === 'default' ? 'Lịch áp dụng mặc định' : `Lịch riêng Tuần ${weekNumber}` }}</h2><p>Chọn từng ô để bật hoặc tắt tiết tự học.</p></div>
+        <div><h2>{{ mode === 'default' ? 'Lịch áp dụng mặc định' : `Lịch riêng Tuần ${weekNumber}` }}</h2><p>{{ readOnly ? 'Cán sự chỉ xem các tiết tự học theo mẫu TKB đang hiệu lực.' : 'Chọn từng ô để bật hoặc tắt tiết tự học.' }}</p></div>
         <strong>{{ slots.length }} tiết/tuần</strong>
       </div>
-      <ScheduleGrid v-model="slots" :periods="state?.periods ?? []" :disabled="status === 'saving'" />
+      <ScheduleGrid v-model="slots" :periods="resolvedPeriods" :day-periods="generatedDayPeriods" :disabled="status === 'saving'" :read-only="readOnly" />
       <div class="schedule-summary">
         <span v-for="(count, dow) in selectedByDay" :key="dow">Thứ {{ dow + 2 }}: <b>{{ count }}</b></span>
       </div>
-      <div v-if="mode === 'week'" class="difference-summary">
+      <div v-if="!readOnly && mode === 'week'" class="difference-summary">
         <b>Khác TKB mặc định</b>
         <span>Thêm {{ differences.added.length }} tiết</span>
         <span>Bớt {{ differences.removed.length }} tiết</span>
       </div>
-      <div v-if="mode === 'week' && hasWeekOverride" class="reset-row">
+      <div v-if="!readOnly && mode === 'week' && hasWeekOverride" class="reset-row">
         <AppButton variant="danger" @click="confirmReset = true">Dùng lại TKB mặc định</AppButton>
       </div>
     </AppCard>

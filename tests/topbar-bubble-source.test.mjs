@@ -20,9 +20,9 @@ test('topbar bubbles use soft rounded surfaces and hover lift', async () => {
   assert.match(source, /\.profile-chip:hover\{[^}]*translateY\(-2px\)/)
 })
 
-test('teacher and admin profile dropdown does not duplicate Settings', async () => {
+test('teacher stays class-settings only while learner monitor and admin get personal settings', async () => {
   const source = await read('src/components/layout/TopBar.vue')
-  assert.match(source, /v-if="auth\.currentUser\.role==='student'\|\|auth\.currentUser\.role==='monitor'" class="profile-settings"/)
+  assert.match(source, /v-if="auth\.currentUser\.role==='student'\|\|auth\.currentUser\.role==='monitor'\|\|auth\.currentUser\.role==='admin'" class="profile-settings"/)
   assert.doesNotMatch(source, /\?\s*'Tùy chọn cá nhân'\s*:\s*'Cài đặt'/)
 })
 
