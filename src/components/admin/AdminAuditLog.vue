@@ -12,9 +12,6 @@ const query=useQuery({
   queryKey:['admin-audit-log'],
   queryFn:async()=>{
     const raw=await legacyApi.adminListAudit({limit:250})
-    if(!raw||raw.ok!==true||!Array.isArray(raw.logs)){
-      throw new Error('Phản hồi Nhật ký hệ thống từ backend không hợp lệ.')
-    }
     return raw.logs as AuditRow[]
   },
   staleTime:10_000,
@@ -41,6 +38,13 @@ const queryErrorMessage=computed(()=>{
   const error=query.error.value
   return error instanceof Error&&error.message?error.message:'Không xác định được lỗi backend.'
 })
+const queryErrorCode=computed(()=>String((query.error.value as (Error&{code?:string})|null)?.code||''))
+const queryErrorHelp=computed(()=>{
+  if(queryErrorCode.value==='AUDIT_EDGE_OUTDATED') return 'Chỉ cần deploy lại Edge Function audit-log từ đúng gói release hiện tại. Database không cần chạy lại nếu VERIFY đang overall=true.'
+  if(queryErrorCode.value==='AUDIT_SCHEMA_NOT_READY'||/schema.*nhật ký|audit.*schema/i.test(queryErrorMessage.value)) return 'Edge Function đã phản hồi nhưng schema Audit chưa sẵn sàng. Hãy chạy SQL upgrade/VERIFY của phiên bản đang dùng.'
+  if(queryErrorCode.value==='AUDIT_INVALID_RESPONSE') return 'Backend đang trả một contract Audit không nhận diện được. Hãy kiểm tra frontend và Edge Function audit-log có cùng phiên bản release.'
+  return 'Hãy kiểm tra quyền Root Admin, Edge Function audit-log và trạng thái kết nối Supabase.'
+})
 const pretty=(value:unknown)=>value==null?'—':JSON.stringify(value,null,2)
 const when=(value:string)=>{const d=new Date(value);return Number.isFinite(d.getTime())?d.toLocaleString('vi-VN'):value}
 </script>
@@ -51,7 +55,7 @@ const when=(value:string)=>{const d=new Date(value);return Number.isFinite(d.get
     <AppCard v-if="query.isError.value" padding="md">
       <div class="audit-error" role="alert">
         <AlertTriangle aria-hidden="true"/>
-        <div><b>Không tải được Nhật ký hệ thống</b><p>{{ queryErrorMessage }}</p><small>Hãy kiểm tra Edge Function <code>audit-log</code> và chạy SQL upgrade/VERIFY nếu database chưa có schema Audit mới.</small></div>
+        <div><b>Không tải được Nhật ký hệ thống</b><p>{{ queryErrorMessage }}</p><small>{{ queryErrorHelp }}</small></div>
         <AppButton variant="secondary" @click="query.refetch()"><RefreshCw/>Thử lại</AppButton>
       </div>
     </AppCard>

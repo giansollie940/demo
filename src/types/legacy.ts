@@ -225,7 +225,7 @@ export interface LegacySupabaseService {
   teacherUpdateUser(userId: string, changes: TeacherUserChanges): Promise<unknown>
   teacherDeleteUser(userId: string, confirmCode: string): Promise<unknown>
   adminHardDeleteUser(userId: string, confirmCode: string, confirmPhrase: string): Promise<unknown>
-  adminListAudit(filters?: Record<string, unknown>): Promise<Record<string, unknown>>
+  adminListAudit(filters?: Record<string, unknown>): Promise<{ok:true;contract?:string;contractVersion?:number;logs:Array<Record<string, unknown>>;limit?:number}>
   teacherCreateUser(changes: TeacherUserChanges): Promise<TeacherDirectoryResponse>
   teacherListUsers(classId?: string | null): Promise<TeacherDirectoryResponse>
   adminManageClasses(action: string, payload?: Record<string, unknown>): Promise<Record<string, unknown>>

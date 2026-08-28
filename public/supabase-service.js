@@ -218,11 +218,25 @@
 
 
   async function adminListAudit(filters={}){
-    return invokeEdgeFunction(
+    const data=await invokeEdgeFunction(
       "audit-log",
       {action:"list",...filters},
       "Không tải được nhật ký hệ thống."
     );
+
+    if(!Array.isArray(data?.logs)){
+      const looksLikePreListEdge=data?.ok===true&&Number.isFinite(Number(data?.count));
+      const wrapped=new Error(
+        looksLikePreListEdge
+          ? "Edge Function audit-log đang là phiên bản cũ và chưa hỗ trợ đọc Nhật ký hệ thống. Hãy deploy lại audit-log từ đúng gói release hiện tại."
+          : "Phản hồi Nhật ký hệ thống từ backend không đúng contract."
+      );
+      wrapped.code=looksLikePreListEdge?"AUDIT_EDGE_OUTDATED":"AUDIT_INVALID_RESPONSE";
+      wrapped.backendPayload=data;
+      throw wrapped;
+    }
+
+    return data;
   }
 
   async function teacherListUsers(classId=null){
