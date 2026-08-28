@@ -1,6 +1,6 @@
-# SỔ TỰ HỌC V8.7.1 — Full Stack Source
+# SỔ TỰ HỌC V8.8.0 — Full Stack Source
 
-Bản này hợp nhất **frontend Vue 3/TypeScript V8.7.1** và **backend Supabase** vào một source tree duy nhất để dễ kiểm tra, lưu trữ và triển khai.
+Bản này hợp nhất **frontend Vue 3/TypeScript V8.8.0** và **backend Supabase** vào một source tree duy nhất để dễ kiểm tra, lưu trữ và triển khai.
 
 ## Thành phần
 
@@ -11,35 +11,24 @@ Bản này hợp nhất **frontend Vue 3/TypeScript V8.7.1** và **backend Supab
 - Deployment: 10 ZIP độc lập trong `deploy/edge-functions/` và workflow GitHub Pages ở `.github/workflows/deploy-pages.yml`.
 
 
-## Quyền và vận hành tuần ở bản hiện tại
+## Quyền và vận hành ở V8.8.0
 
-- **Admin:** chỉ quản trị hệ thống (`Năm học / Lớp học / Giáo viên / Phân quyền`). Admin quản lý lịch chuẩn của năm học và có thể sửa ngày bắt đầu/kết thúc từng tuần.
-- **Giáo viên:** vận hành lớp (`Duyệt / Theo dõi / Quản lý tuần / TKB / Học sinh / Thống kê / Cài đặt`). GV không sửa tên lớp, năm học hoặc ngày chuẩn của tuần.
-- **Cán sự:** chức năng cá nhân + hỗ trợ theo dõi lớp trong phạm vi cho phép.
+- **Admin:** 7 chức năng hệ thống trực tiếp (`Tổng quan / Năm học / Lớp học / Học sinh / Giáo viên / Phân quyền / Nhật ký hệ thống`), quản lý toàn bộ HS/GV, reset mật khẩu và Mẫu TKB; Tùy chọn cá nhân chứa Cú/Theme.
+- **Giáo viên:** vận hành lớp (`Duyệt / Theo dõi / Quản lý tuần / TKB / Học sinh / Thống kê / Cài đặt`), chỉ chọn tiết Tự học từ Mẫu TKB được Admin gán.
+- **Cán sự:** chức năng cá nhân + Quick Report/Theo dõi lớp và TKB read-only trong phạm vi lớp.
 - **Học sinh:** chức năng cá nhân.
-- `class_weeks.manual_status = null` giữ lifecycle tự động; `open/locked` là override của GV. Tự động vẫn dựa trên buổi tự học cuối cùng của tuần.
+- `class_weeks.manual_status = null` giữ lifecycle tự động; `open/locked` là override của GV. Lifecycle tự động dùng giờ TKB hiệu lực của đúng lớp/ngày.
 
-## Database: chỉ chọn MỘT đường
+## Database: đường nâng cấp hiện tại
 
-### Hệ thống hiện tại đã ở V8.4.x trở lên
+V8.8.0 **không phải bootstrap từ Supabase trống**. Database phải ở V8.7.1 final trước.
 
-Chạy:
+Chạy theo thứ tự:
 
-`database/upgrade/01-UPGRADE-CURRENT-TO-V8.7.1.sql`
+1. `database/upgrade/01-UPGRADE-CURRENT-TO-V8.8.0.sql`
+2. `database/verify/VERIFY-V8.8.0.sql` và yêu cầu `overall = true`
 
-File này có preflight và **không chứa repair 10A1 → 7A9**.
-
-### Dựng trên database Sổ Tự Học có các bảng lõi tương thích
-
-Chạy:
-
-`database/fresh-install/01-INSTALL-V8.7.1-FROM-COMPATIBLE-BASELINE.sql`
-
-Đây **không phải** bootstrap cho Supabase hoàn toàn trống. Nguồn migration lịch sử đáng tin cậy hiện có yêu cầu sẵn các bảng lõi `profiles`, `weeks`, `registrations`, `periods`; vì vậy bản phát hành không giả tạo một empty-database schema chưa được kiểm chứng.
-
-**Không chạy fresh-install và upgrade trên cùng database.**
-
-Sau đó chạy `database/verify/VERIFY-V8.7.1.sql`. File verify chỉ đọc dữ liệu/schema.
+`database/fresh-install/02-INSTALL-V8.8.0-TIMETABLE-TEMPLATES.sql` chỉ là chỉ dẫn second-stage cho một baseline V8.7.1 tương thích; không được mô tả là empty-database install.
 
 ## Root admin
 
@@ -67,4 +56,4 @@ npm run build
 
 `public/config.js` thật không được lưu trong source. Workflow GitHub Pages tạo file này từ cấu hình public khi build.
 
-Xem `DEPLOYMENT-V8.7.1.md` để triển khai theo đúng thứ tự.
+Xem `DEPLOYMENT-V8.8.0.md` để triển khai V8.8.0 theo đúng thứ tự.

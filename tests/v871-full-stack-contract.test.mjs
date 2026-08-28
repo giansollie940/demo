@@ -120,10 +120,10 @@ test('release verifier checks source, secrets, Edge ZIPs and checksum manifest',
 })
 
 test('release documentation and verification command are present', () => {
-  for (const rel of ['README.md', 'DEPLOYMENT-V8.7.1.md', 'CHANGELOG-V8.7.1.md', 'scripts/verify-release.mjs']) {
+  for (const rel of ['README.md', 'DEPLOYMENT-V8.8.0.md', 'CHANGELOG-V8.8.0.md', 'VERIFICATION-V8.8.0.md', 'scripts/verify-release.mjs']) {
     assert.ok(exists(rel), rel)
   }
   const pkg = JSON.parse(read('package.json'))
-  assert.equal(pkg.version, '8.7.1')
+  assert.equal(pkg.version, '8.8.0')
   assert.equal(pkg.scripts['verify:release'], 'node scripts/verify-release.mjs')
 })

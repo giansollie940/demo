@@ -67,7 +67,7 @@ describe('normalizeScheduleSlots', () => {
   })
 
   it('rejects a period missing from the class period list', () => {
-    expect(() => normalizeScheduleSlots([{ dow: 0, period: 9 }], periods)).toThrow('Tiết học không tồn tại.')
+    expect(() => normalizeScheduleSlots([{ dow: 0, period: 9 }], periods)).toThrow('Tiết học không tồn tại trong mẫu TKB.')
   })
 })
 

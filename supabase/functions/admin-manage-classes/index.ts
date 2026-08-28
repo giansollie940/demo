@@ -55,6 +55,67 @@ async function ensureCanDeactivateClass(admin:any,classId:string){
   }
 }
 
+
+function validateTimetableConfig(raw:any){
+  if(!raw||typeof raw!=="object"||Array.isArray(raw))throw Object.assign(new Error("Cấu hình mẫu TKB không hợp lệ"),{status:400,code:"INVALID_TIMETABLE_CONFIG"});
+  const config={...raw};
+  const time=(value:any)=>value===null||value===""?null:String(value);
+  for(const key of ["morningStart","morningEnd","afternoonStart","afternoonEnd"]){
+    const value=time(config[key]);
+    if(value!==null&&!/^(?:[01]\d|2[0-3]):[0-5]\d$/.test(value))throw Object.assign(new Error(`Giờ ${key} không hợp lệ`),{status:400,code:"INVALID_TIMETABLE_TIME"});
+    config[key]=value;
+  }
+  {
+    const value=Number(config.defaultPeriodMinutes);
+    if(!Number.isInteger(value)||value<1||value>240)throw Object.assign(new Error("Thời lượng defaultPeriodMinutes không hợp lệ"),{status:400,code:"INVALID_TIMETABLE_DURATION"});
+    config.defaultPeriodMinutes=value;
+  }
+  for(const key of ["shortBreakMinutes","longBreakMinutes"]){
+    const value=Number(config[key]);
+    if(!Number.isInteger(value)||value<0||value>240)throw Object.assign(new Error(`Thời lượng ${key} không hợp lệ`),{status:400,code:"INVALID_TIMETABLE_DURATION"});
+    config[key]=value;
+  }
+  for(const key of ["morningLongBreakEnabled","afternoonLongBreakEnabled"])config[key]=config[key]!==false;
+  for(const key of ["morningLongBreakAfterPeriod","afternoonLongBreakAfterPeriod"]){
+    const fallback=key.startsWith("morning")?2:7;
+    const value=Number(config[key]??fallback);
+    if(!Number.isInteger(value)||value<1||value>40)throw Object.assign(new Error(`Vị trí ${key} không hợp lệ`),{status:400,code:"INVALID_TIMETABLE_BREAK_POSITION"});
+    config[key]=value;
+  }
+  config.periodOverrides=Array.isArray(config.periodOverrides)?config.periodOverrides:[];
+  config.breakRules=Array.isArray(config.breakRules)?config.breakRules:[];
+  config.dayOverrides=config.dayOverrides&&typeof config.dayOverrides==="object"&&!Array.isArray(config.dayOverrides)?config.dayOverrides:{};
+  return config;
+}
+
+function normalizeGeneratedDays(raw:any){
+  if(!Array.isArray(raw)||raw.length===0||raw.length>7)throw Object.assign(new Error("Preview TKB theo ngày không hợp lệ"),{status:400,code:"INVALID_TIMETABLE_DAYS"});
+  const seen=new Set<number>();
+  return raw.map((day:any)=>{
+    const weekday=Number(day?.weekday);
+    if(!Number.isInteger(weekday)||weekday<1||weekday>7||seen.has(weekday))throw Object.assign(new Error("Thứ trong tuần không hợp lệ hoặc bị trùng"),{status:400,code:"INVALID_TIMETABLE_WEEKDAY"});
+    seen.add(weekday);
+    const periods=Array.isArray(day?.periods)?day.periods:[];
+    if(periods.length===0||periods.length>40)throw Object.assign(new Error("Mỗi ngày phải có ít nhất một tiết hợp lệ"),{status:400,code:"INVALID_TIMETABLE_PERIODS"});
+    const periodSeen=new Set<number>();
+    const normalized=periods.map((row:any)=>{
+      const number=Number(row?.number??row?.period_number);
+      const start=String(row?.start??row?.start_time??"").slice(0,5);
+      const end=String(row?.end??row?.end_time??"").slice(0,5);
+      const session=String(row?.session||"day");
+      if(!Number.isInteger(number)||number<1||number>40||periodSeen.has(number)||!/^(?:[01]\d|2[0-3]):[0-5]\d$/.test(start)||!/^(?:[01]\d|2[0-3]):[0-5]\d$/.test(end)||start>=end||!["morning","afternoon","day"].includes(session)){
+        throw Object.assign(new Error("Tiết được sinh từ mẫu TKB không hợp lệ"),{status:400,code:"INVALID_GENERATED_PERIOD"});
+      }
+      periodSeen.add(number);return{number,start,end,session};
+    }).sort((a:any,b:any)=>a.number-b.number);
+    return{weekday,periods:normalized};
+  });
+}
+
+async function insertVersionPeriods(admin:any,versionId:string,generatedDays:any[]){
+  const rows=generatedDays.flatMap(day=>day.periods.map((row:any)=>({version_id:versionId,weekday:day.weekday,period_number:row.number,start_time:row.start,end_time:row.end,session:row.session})));
+  const {error}=await admin.from("timetable_version_periods").insert(rows);if(error)throw error;
+}
 async function loadClass(admin:any,classId:string){
   const {data,error}=await admin.from("classes")
     .select("id,school_year_id,code,name,active,created_at,updated_at")
@@ -78,20 +139,25 @@ Deno.serve(async(req:Request)=>{
     const action=String(body?.action||"list");
 
     if(action==="list"){
-      const [classes,teachers,assignments,schoolYears,weeks,periods]=await Promise.all([
+      const [classes,teachers,assignments,schoolYears,weeks,periods,timetableTemplates,timetableVersions,timetableAssignments]=await Promise.all([
         admin.from("classes").select("id,school_year_id,code,name,active,created_at,updated_at").order("code"),
         admin.from("profiles").select("id,student_code,full_name,active").eq("role","teacher").order("full_name"),
         admin.from("class_teachers").select("class_id,teacher_id,active,assigned_at"),
         admin.from("school_years").select("id,name,start_date,end_date,is_active").order("start_date",{ascending:false}),
         admin.from("weeks").select("id,school_year_id,week_number,start_date,end_date,status").order("week_number"),
-        admin.from("school_year_periods").select("school_year_id,period_number,start_time,end_time").order("school_year_id").order("period_number")
+        admin.from("school_year_periods").select("school_year_id,period_number,start_time,end_time").order("school_year_id").order("period_number"),
+        admin.from("timetable_templates").select("id,school_year_id,name,active,created_at,updated_at").order("name"),
+        admin.from("timetable_template_versions").select("id,template_id,version_number,config,created_at").order("version_number",{ascending:false}),
+        admin.from("class_timetable_assignments").select("id,class_id,school_year_id,template_version_id,effective_from,effective_to,active,created_at,updated_at").order("effective_from",{ascending:false})
       ]);
-      for(const result of [classes,teachers,assignments,schoolYears,weeks,periods])if(result.error)throw result.error;
-      const enriched=await Promise.all((classes.data||[]).map(async(row:any)=>({
-        ...row,
-        ...(await classUsage(admin,row.id))
-      })));
-      return json(req,200,{ok:true,classes:enriched,teachers:teachers.data||[],assignments:assignments.data||[],schoolYears:schoolYears.data||[],weeks:weeks.data||[],periods:periods.data||[]});
+      for(const result of [classes,teachers,assignments,schoolYears,weeks,periods,timetableTemplates,timetableVersions,timetableAssignments])if(result.error)throw result.error;
+      const versions=timetableVersions.data||[];
+      const enrichedTemplates=(timetableTemplates.data||[]).map((row:any)=>{
+        const latest=versions.filter((v:any)=>v.template_id===row.id).sort((a:any,b:any)=>Number(b.version_number)-Number(a.version_number))[0];
+        return{...row,latest_version_id:latest?.id||null,latest_version_number:Number(latest?.version_number||0)};
+      });
+      const enriched=await Promise.all((classes.data||[]).map(async(row:any)=>({...row,...(await classUsage(admin,row.id))})));
+      return json(req,200,{ok:true,classes:enriched,teachers:teachers.data||[],assignments:assignments.data||[],schoolYears:schoolYears.data||[],weeks:weeks.data||[],periods:periods.data||[],timetableTemplates:enrichedTemplates,timetableVersions:versions,timetableAssignments:timetableAssignments.data||[]});
     }
 
     if(action==="create_school_year"){
@@ -122,6 +188,51 @@ Deno.serve(async(req:Request)=>{
       return json(req,200,{ok:true,schoolYearId});
     }
 
+
+    if(action==="create_timetable_template"){
+      const schoolYearId=assertUuid(body?.schoolYearId,"schoolYearId");
+      const name=clean(body?.name,120);if(!name)throw Object.assign(new Error("Tên mẫu TKB không hợp lệ"),{status:400,code:"INVALID_TIMETABLE_NAME"});
+      const config=validateTimetableConfig(body?.config);const generatedDays=normalizeGeneratedDays(body?.generatedDays);
+      const {data:year,error:yearError}=await admin.from("school_years").select("id,name").eq("id",schoolYearId).maybeSingle();if(yearError)throw yearError;if(!year)throw Object.assign(new Error("Không tìm thấy năm học"),{status:404,code:"SCHOOL_YEAR_NOT_FOUND"});
+      const {data:template,error:templateError}=await admin.from("timetable_templates").insert({school_year_id:schoolYearId,name,active:true,created_by:actor.id,updated_at:new Date().toISOString()}).select().single();if(templateError)throw templateError;
+      try{
+        const {data:version,error:versionError}=await admin.from("timetable_template_versions").insert({template_id:template.id,version_number:1,config,created_by:actor.id}).select().single();if(versionError)throw versionError;
+        await insertVersionPeriods(admin,version.id,generatedDays);
+        await writeAudit(admin,{actorId:actor.id,action:"ADMIN_CREATE_TIMETABLE",entityType:"timetable_template",entityId:template.id,newData:{schoolYearId,name,version:1}});
+        return json(req,200,{ok:true,template,version});
+      }catch(error){await admin.from("timetable_templates").delete().eq("id",template.id);throw error;}
+    }
+
+    if(action==="save_timetable_version"){
+      const templateId=assertUuid(body?.templateId,"templateId");const config=validateTimetableConfig(body?.config);const generatedDays=normalizeGeneratedDays(body?.generatedDays);
+      const {data:template,error:templateError}=await admin.from("timetable_templates").select("id,school_year_id,name,active").eq("id",templateId).maybeSingle();if(templateError)throw templateError;if(!template)throw Object.assign(new Error("Không tìm thấy mẫu TKB"),{status:404,code:"TIMETABLE_TEMPLATE_NOT_FOUND"});
+      const {data:latest,error:latestError}=await admin.from("timetable_template_versions").select("version_number").eq("template_id",templateId).order("version_number",{ascending:false}).limit(1).maybeSingle();if(latestError)throw latestError;
+      const versionNumber=Number(latest?.version_number||0)+1;
+      const {data:version,error:versionError}=await admin.from("timetable_template_versions").insert({template_id:templateId,version_number:versionNumber,config,created_by:actor.id}).select().single();if(versionError)throw versionError;
+      try{await insertVersionPeriods(admin,version.id,generatedDays);}catch(error){await admin.from("timetable_template_versions").delete().eq("id",version.id);throw error;}
+      await admin.from("timetable_templates").update({updated_at:new Date().toISOString()}).eq("id",templateId);
+      await writeAudit(admin,{actorId:actor.id,action:"ADMIN_SAVE_TIMETABLE_VERSION",entityType:"timetable_template",entityId:templateId,newData:{version:versionNumber,name:template.name}});
+      return json(req,200,{ok:true,version});
+    }
+
+    if(action==="assign_timetable_template"){
+      const classId=assertUuid(body?.classId,"classId"),schoolYearId=assertUuid(body?.schoolYearId,"schoolYearId"),templateVersionId=assertUuid(body?.templateVersionId,"templateVersionId");
+      const effectiveFrom=String(body?.effectiveFrom||""),effectiveTo=String(body?.effectiveTo||"");
+      if(!/^\d{4}-\d{2}-\d{2}$/.test(effectiveFrom)||!/^\d{4}-\d{2}-\d{2}$/.test(effectiveTo)||effectiveTo<effectiveFrom)throw Object.assign(new Error("Khoảng hiệu lực TKB không hợp lệ"),{status:400,code:"INVALID_TIMETABLE_RANGE"});
+      const [cls,version,year]=await Promise.all([
+        admin.from("classes").select("id,school_year_id,code").eq("id",classId).maybeSingle(),
+        admin.from("timetable_template_versions").select("id,template_id,timetable_templates!inner(school_year_id,name)").eq("id",templateVersionId).maybeSingle(),
+        admin.from("school_years").select("start_date,end_date").eq("id",schoolYearId).maybeSingle()
+      ]);
+      if(cls.error)throw cls.error;if(version.error)throw version.error;if(year.error)throw year.error;if(!cls.data||!version.data||!year.data)throw Object.assign(new Error("Không tìm thấy lớp, năm học hoặc phiên bản TKB"),{status:404,code:"TIMETABLE_ASSIGNMENT_TARGET_NOT_FOUND"});
+      if(cls.data.school_year_id!==schoolYearId)throw Object.assign(new Error("Lớp không thuộc năm học đã chọn"),{status:409,code:"CLASS_YEAR_MISMATCH"});
+      const templateYear=(version.data as any).timetable_templates?.school_year_id;if(templateYear!==schoolYearId)throw Object.assign(new Error("Mẫu TKB không thuộc năm học của lớp"),{status:409,code:"TIMETABLE_YEAR_MISMATCH"});
+      if(effectiveFrom<year.data.start_date||effectiveTo>year.data.end_date)throw Object.assign(new Error("Khoảng hiệu lực TKB phải nằm trong năm học đã chọn"),{status:409,code:"TIMETABLE_RANGE_OUTSIDE_SCHOOL_YEAR"});
+      const {data,error}=await admin.rpc("admin_assign_timetable_version",{p_actor_id:actor.id,p_class_id:classId,p_school_year_id:schoolYearId,p_template_version_id:templateVersionId,p_effective_from:effectiveFrom,p_effective_to:effectiveTo});if(error)throw error;
+      const assignmentId=String(data||"");
+      await writeAudit(admin,{actorId:actor.id,classId,action:"ADMIN_ASSIGN_TIMETABLE",entityType:"class_timetable_assignment",entityId:assignmentId,newData:{templateVersionId,effectiveFrom,effectiveTo,historyPreserved:true}});
+      return json(req,200,{ok:true,assignmentId});
+    }
 
     if(action==="update_school_year_periods"){
       const schoolYearId=assertUuid(body?.schoolYearId,"schoolYearId");
@@ -193,6 +304,13 @@ Deno.serve(async(req:Request)=>{
             updated_by:actor.id
           })));
           if(classWeeksError)throw classWeeksError;
+        }
+        const {data:year,error:yearError}=await admin.from("school_years").select("start_date,end_date").eq("id",schoolYearId).maybeSingle();if(yearError)throw yearError;
+        const {data:templates,error:templateError}=await admin.from("timetable_templates").select("id").eq("school_year_id",schoolYearId).eq("active",true).order("created_at").limit(1);if(templateError)throw templateError;
+        const templateId=templates?.[0]?.id;
+        if(templateId&&year){
+          const {data:version,error:versionError}=await admin.from("timetable_template_versions").select("id").eq("template_id",templateId).order("version_number",{ascending:false}).limit(1).maybeSingle();if(versionError)throw versionError;
+          if(version?.id){const {error:assignError}=await admin.rpc("admin_assign_timetable_version",{p_actor_id:actor.id,p_class_id:data.id,p_school_year_id:schoolYearId,p_template_version_id:version.id,p_effective_from:year.start_date,p_effective_to:year.end_date});if(assignError)throw assignError;}
         }
       }catch(error){
         await cleanupCreatedClass(admin,data.id);

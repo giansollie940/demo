@@ -54,7 +54,7 @@ run(process.execPath, ['scripts/package-edge-functions.mjs'])
 console.log('[2/7] Run static regression/contract suite: npm test')
 run('npm', ['test'])
 
-console.log('[3/7] Check source inventory and V8.7.1 AI contract')
+console.log('[3/7] Check source inventory, V8.8.0 app contract and V8.7.1 AI contract')
 for (const name of functions) {
   if (!fs.existsSync(path.join(root, 'supabase', 'functions', name, 'index.ts'))) fail(`missing source for ${name}`)
 }
@@ -62,7 +62,7 @@ const ai = read('supabase/functions/ai-review-registration/index.ts')
 if (!/AI_FUNCTION_VERSION\s*=\s*["']8\.7\.1["']/.test(ai)) fail('AI function is not V8.7.1')
 
 console.log('[4/7] Check upgrade isolation and obvious secret leakage')
-const upgrade = read('database/upgrade/01-UPGRADE-CURRENT-TO-V8.7.1.sql')
+const upgrade = read('database/upgrade/01-UPGRADE-CURRENT-TO-V8.8.0.sql')
 if (/10A1|7A9|REPAIR-10A1/i.test(upgrade)) fail('generic upgrade contains project-specific 10A1/7A9 repair data')
 if (fs.existsSync(path.join(root, 'public', 'config.js'))) fail('public/config.js must not be shipped')
 for (const file of walk(root)) {
@@ -92,7 +92,7 @@ for (const name of functions) {
 }
 
 console.log('[6/7] Check read-only verifier SQL')
-for (const rel of ['database/verify/VERIFY-V8.7.1.sql', 'database/verify/VERIFY-AI-COMPLETED-ROUTING-V8.7.1.sql']) {
+for (const rel of ['database/verify/VERIFY-V8.8.0.sql', 'database/verify/VERIFY-V8.7.1.sql', 'database/verify/VERIFY-AI-COMPLETED-ROUTING-V8.7.1.sql']) {
   const sql = read(rel)
   if (/\b(update|delete|insert|alter|drop|create|truncate)\b/i.test(sql)) fail(`${rel} is not read-only`)
 }

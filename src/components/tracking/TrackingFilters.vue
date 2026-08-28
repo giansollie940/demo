@@ -1,15 +1,15 @@
 <script setup lang="ts">
 import { Search } from 'lucide-vue-next'
 import type { TrackingFilter, TrackingSort } from '../../features/tracking/tracking-model'
-const props=defineProps<{modelValue:TrackingFilter;counts:Record<TrackingFilter,number>;query:string;sort:TrackingSort}>()
+withDefaults(defineProps<{modelValue:TrackingFilter;counts:Record<TrackingFilter,number>;query:string;sort:TrackingSort;showFilters?:boolean}>(),{showFilters:true})
 const emit=defineEmits<{ 'update:modelValue':[value:TrackingFilter];'update:query':[value:string];'update:sort':[value:TrackingSort] }>()
 const filters:Array<{key:TrackingFilter;label:string}>=[
-  {key:'all',label:'Tất cả'},{key:'registered',label:'Đã đăng ký'},{key:'missing',label:'Chưa đăng ký'},{key:'attention',label:'Cần xử lý'},{key:'device',label:'Có thiết bị'},{key:'no-device',label:'Không thiết bị'},
+  {key:'all',label:'Tất cả'},{key:'registered',label:'Đã đăng ký'},{key:'missing',label:'Chưa đăng ký'},{key:'attention',label:'Cần xử lý'},{key:'device',label:'Có thiết bị'},{key:'no-device',label:'Không thiết bị'},{key:'unknown-device',label:'Chưa rõ thiết bị'},
 ]
 </script>
 <template>
   <div class="tracking-controls">
-    <div class="filter-chips" role="tablist" aria-label="Lọc học sinh"><button v-for="item in filters" :key="item.key" type="button" role="tab" :aria-selected="modelValue===item.key" :class="{active:modelValue===item.key}" @click="emit('update:modelValue',item.key)">{{ item.label }} · {{ counts[item.key] }}</button></div>
+    <div v-if="showFilters" class="filter-chips" role="tablist" aria-label="Lọc học sinh"><button v-for="item in filters" :key="item.key" type="button" role="tab" :aria-selected="modelValue===item.key" :class="{active:modelValue===item.key}" @click="emit('update:modelValue',item.key)">{{ item.label }} · {{ counts[item.key] }}</button></div>
     <div class="search-sort"><label class="search"><Search aria-hidden="true"/><span class="sr-only">Tìm học sinh</span><input :value="query" placeholder="Tìm mã, tên hoặc nội dung" @input="emit('update:query',($event.target as HTMLInputElement).value)"></label><label class="sort"><span>Sắp xếp</span><select :value="sort" @change="emit('update:sort',($event.target as HTMLSelectElement).value as TrackingSort)"><option value="name">Theo tên</option><option value="code">Theo mã</option><option value="status">Theo trạng thái</option></select></label></div>
   </div>
 </template>

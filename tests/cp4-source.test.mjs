@@ -10,6 +10,6 @@ test('CP4 tracking route is a real page with session summary and one filterable 
   assert.match(routes,/path:\s*'tracking',\s*component:\s*TrackingPage/)
   const page=read('src/pages/TrackingPage.vue')
   const filters=read('src/components/tracking/TrackingFilters.vue')
-  for(const token of ['SessionSummaryCard','TrackingFilters','StudentTrackingRow']) assert.ok(page.includes(token),token)
+  for(const token of ['TrackingFilters','StudentTrackingRow','TrackingQuickReport','tracking-workspace','session-selector']) assert.ok(page.includes(token),token)
   for(const token of ['Có thiết bị','Không thiết bị']) assert.ok(filters.includes(token),token)
 })
