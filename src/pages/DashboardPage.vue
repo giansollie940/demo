@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import { AlertTriangle, CheckCircle2, ClipboardClock, ClipboardList, UsersRound } from 'lucide-vue-next'
+import { AlertTriangle, CheckCircle2, ClipboardList, UsersRound } from 'lucide-vue-next'
 import DashboardHero from '../components/dashboard/DashboardHero.vue'
 import KpiTrendCard from '../components/dashboard/KpiTrendCard.vue'
 import PendingTasksTable from '../components/dashboard/PendingTasksTable.vue'
@@ -114,7 +114,7 @@ const heroSubtitle = computed(() => isLearner.value
         :label="isLearner ? 'Cần chỉnh sửa' : 'Cần GV xử lý'"
         :value="isLearner ? activeMetrics.needsRevision : managerQueue"
         :context="isLearner ? 'Theo phản hồi' : 'Chờ duyệt'"
-        :icon="ClipboardClock"
+        :icon="ClipboardList"
         tone="amber"
       />
       <KpiTrendCard label="Cần chú ý" :value="attentionCount" context="Quá hạn / Bất thường" :icon="AlertTriangle" tone="violet" />
