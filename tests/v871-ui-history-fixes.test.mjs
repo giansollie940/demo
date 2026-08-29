@@ -25,7 +25,7 @@ test('desktop sidebar uses an edge chevron control while mobile keeps the hambur
   assert.match(shell,/class=["']sidebar-edge-toggle["']/)
   assert.match(shell,/<ChevronsRight\s+v-if=["']preferences\.sidebarCollapsed["']/)
   assert.match(shell,/<ChevronsLeft\s+v-else/)
-  assert.match(shell,/\.sidebar-edge-toggle\{[^}]*right:-15px[^}]*border-radius:999px/s)
+  assert.match(shell,/\.sidebar-edge-toggle\{[^}]*right:-17px[^}]*border-radius:999px/s)
   assert.match(top,/import\s*\{[^}]*\bMenu\b[^}]*\}\s*from\s*['"]lucide-vue-next['"]/s)
   assert.match(top,/<Menu\s*\/?\s*>/)
 })
