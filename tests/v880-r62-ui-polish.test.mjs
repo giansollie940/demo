@@ -28,20 +28,20 @@ test('R6.2 login autofill paints the entire field and removes split white ends',
   const login=read('src/pages/LoginPage.vue')
   assert.match(login,/\.field:has\(input:-webkit-autofill\)/)
   assert.match(login,/input:-webkit-autofill/)
-  assert.match(login,/-webkit-box-shadow:0 0 0 1000px/)
-  assert.match(login,/-webkit-text-fill-color:var\(--text\)/)
+  assert.match(login,/-webkit-box-shadow:\s*0 0 0 1000px/)
+  assert.match(login,/-webkit-text-fill-color:\s*var\(--text\)/)
 })
 
 test('R6.2 login illustration uses restrained CSS motion with reduced-motion fallback',()=>{
   const login=read('src/pages/LoginPage.vue')
-  assert.match(login,/animation:login-hero-float/)
-  assert.match(login,/@keyframes login-hero-float/)
-  assert.match(login,/@media\(prefers-reduced-motion:reduce\)[\s\S]*\.hero-card/)
+  assert.match(login,/animation:\s*login-hero-drift/)
+  assert.match(login,/@keyframes login-hero-drift/)
+  assert.match(login,/@media\s*\(prefers-reduced-motion:\s*reduce\)[\s\S]*\.hero-card img/)
 })
 
 test('R6.2 dashboard uses a student study group illustration instead of teacher illustration',()=>{
   const dashboard=read('src/pages/DashboardPage.vue')
-  assert.match(dashboard,/student-group-dashboard(?:-blend)?\.png/)
+  assert.match(dashboard,/student-group-dashboard-blend\.png/)
   assert.doesNotMatch(dashboard,/teacher-dashboard-illustration\.png/)
-  assert.ok(fs.existsSync(path.join(root,'public/assets/images/student-group-dashboard.png')))
+  assert.ok(fs.existsSync(path.join(root,'public/assets/images/student-group-dashboard-blend.png')))
 })

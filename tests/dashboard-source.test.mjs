@@ -14,5 +14,5 @@ test('dashboard model derives registration KPIs without DOM rendering',()=>{
 test('dashboard uses current Vue Query week data',()=>{
   const text=read('src/pages/DashboardPage.vue');
   assert.match(text,/useWeekData/);
-  assert.match(text,/student-group-dashboard(?:-blend)?\.png/);
+  assert.match(text,/student-group-dashboard-blend\.png/);
 });

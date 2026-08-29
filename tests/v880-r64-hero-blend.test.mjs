@@ -23,6 +23,7 @@ test('R6.4 hero illustration is part of the hero surface rather than an inner ca
 
 test('R6.4 blend remains responsive without restoring a framed image on smaller screens',()=>{
   const page=read('src/pages/DashboardPage.vue')
-  assert.match(page,/@media\(max-width:1100px\)[\s\S]*\.hero-illustration\{[^}]*background:transparent/s)
-  assert.doesNotMatch(page,/@media\(max-width:1100px\)[\s\S]*\.hero-illustration\{[^}]*box-shadow:[^n]/s)
+  assert.match(page,/\.hero-illustration\{[^}]*background:transparent[^}]*box-shadow:none/s)
+  assert.match(page,/@media\(max-width:1100px\)[\s\S]*\.hero-illustration\{[^}]*position:relative[^}]*width:100%[^}]*height:160px/s)
+  assert.doesNotMatch(page,/@media\(max-width:1100px\)[\s\S]*\.hero-illustration\{[^}]*background:(?!transparent)/s)
 })
