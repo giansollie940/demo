@@ -26,9 +26,9 @@ test('teacher stays class-settings only while learner monitor and admin get pers
   assert.doesNotMatch(source, /\?\s*'Tùy chọn cá nhân'\s*:\s*'Cài đặt'/)
 })
 
-test('shell removes hard sidebar divider lines in favor of soft elevation', async () => {
+test('R7 shell uses a floating elevated sidebar instead of a hard divider rail', async () => {
   const source = await read('src/layouts/AppShell.vue')
-  assert.doesNotMatch(source, /\.sidebar\{[^}]*border-right:/)
-  assert.doesNotMatch(source, /\.side-head\{[^}]*border-bottom:/)
-  assert.match(source, /\.sidebar\{[^}]*box-shadow:/)
+  assert.doesNotMatch(source, /\.sidebar-r7\s*\{[^}]*border-right:/s)
+  assert.doesNotMatch(source, /\.side-head\s*\{[^}]*border-bottom:/s)
+  assert.match(source, /\.sidebar-r7\s*\{[^}]*box-shadow:/s)
 })

@@ -29,24 +29,24 @@ test('topbar class and week context use larger readable typography', async () =>
   assert.match(topbar, /font-weight:800/)
 })
 
-test('sidebar and dashboard use multiple semantic accent colors with warm menu emphasis', async () => {
+test('sidebar and R7 KPI cards keep multiple semantic accents', async () => {
   const sidebar = await text('src/components/layout/SidebarNav.vue')
-  const dashboard = await text('src/pages/DashboardPage.vue')
+  const kpi = await text('src/components/dashboard/KpiTrendCard.vue')
   assert.match(sidebar, /nth-child\(2\)/)
   assert.match(sidebar, /--nav-accent:var\(--color-coral\)/)
   assert.match(sidebar, /--nav-accent:var\(--color-sun\)/)
   assert.match(sidebar, /--nav-accent:var\(--color-mint\)/)
-  assert.match(dashboard, /nth-child\(1\).*--metric-accent:var\(--color-sky\)/s)
-  assert.match(dashboard, /nth-child\(2\).*--metric-accent:var\(--color-mint\)/s)
-  assert.match(dashboard, /nth-child\(3\).*--metric-accent:var\(--color-sun\)/s)
-  assert.match(dashboard, /nth-child\(4\).*--metric-accent:var\(--color-lilac\)/s)
+  assert.match(kpi, /--kpi-accent:\s*var\(--color-sky\)/)
+  assert.match(kpi, /data-tone="green"[^}]*--kpi-accent:\s*var\(--color-success\)/s)
+  assert.match(kpi, /data-tone="amber"[^}]*--kpi-accent:\s*var\(--color-warning\)/s)
+  assert.match(kpi, /data-tone="violet"[^}]*--kpi-accent:\s*var\(--color-lilac\)/s)
 })
-
-test('student-facing registration and login pages use colorful learning washes', async () => {
+test('student-facing registration and R7 login retain colorful learning surfaces', async () => {
   const login = await text('src/pages/LoginPage.vue')
   const registration = await text('src/pages/RegistrationPage.vue')
+  assert.match(login, /r7-login-panorama-soft@2x\.png/)
   assert.match(login, /var\(--wash-sky\)/)
-  assert.match(login, /var\(--wash-pink\)/)
+  assert.match(login, /linear-gradient\(100deg,#246fe8,#8249e7,#ec5f86\)/)
   assert.match(registration, /var\(--wash-mint\)/)
   assert.match(registration, /var\(--wash-sun\)/)
 })

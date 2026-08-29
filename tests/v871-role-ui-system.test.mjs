@@ -61,17 +61,17 @@ test('learner settings expose personal appearance and owl controls with mandator
   assert.match(prefs,/owlMotionEnabled/)
 })
 
-test('dashboard has distinct learner monitor and manager summary modes',()=>{
+test('R7 dashboard preserves role-aware metrics while sharing the new presentation components',()=>{
   const page=read('src/pages/DashboardPage.vue')
   assert.match(page,/isStudent/)
   assert.match(page,/isMonitor/)
+  assert.match(page,/isLearner/)
   assert.match(page,/personalMetrics/)
-  assert.match(page,/CÁ NHÂN CỦA TÔI/)
-  assert.match(page,/Tình hình lớp/)
-  assert.match(page,/Đăng ký tuần này/)
-  assert.match(page,/Cần GV xử lý|Đã đăng ký/)
+  assert.match(page,/classMetrics/)
+  assert.match(page,/DashboardHero/)
+  assert.match(page,/KpiTrendCard/)
+  assert.match(page,/Cần GV xử lý/)
 })
-
 test('sidebar supports compact soft flat navigation and collapsed icon rail tooltips',()=>{
   const nav=read('src/components/layout/SidebarNav.vue')
   const tokens=read('src/styles/tokens.css')
@@ -102,9 +102,9 @@ test('school pattern remains visible as an independent layer through translucent
   const themes=read('src/styles/themes.css')
   assert.match(shell,/--school-pattern-image/)
   assert.match(shell,/\.main::before/)
-  assert.match(shell,/background-image:var\(--school-pattern-image\)/)
-  assert.match(shell,/opacity:var\(--pattern-opacity\)/)
-  assert.doesNotMatch(shell,/mix-blend-mode:multiply/)
+  assert.match(shell,/background-image:\s*var\(--school-pattern-image\)/)
+  assert.match(shell,/opacity:\s*var\(--pattern-opacity\)/)
+  assert.doesNotMatch(shell,/mix-blend-mode:\s*multiply/)
   assert.match(shell,/\.main::after[\s\S]*--pattern-dark-overlay/)
   assert.match(themes,/--content-glass:/)
   assert.match(themes,/--pattern-opacity:/)

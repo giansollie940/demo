@@ -75,16 +75,17 @@ test('approval captures notification ids before canonical reload so handled noti
   assert.ok(capture>=0&&commit>=0&&capture<commit,'notification ids must be captured before commitStateMutation reloads canonical state')
 })
 
-test('shell restores subtle school background, signed-in profile identity, and sidebar encouragement',()=>{
+test('R7 shell restores subtle school background and signed-in profile identity in the expanded sidebar',()=>{
   const shell=read('src/layouts/AppShell.vue')
   const top=read('src/components/layout/TopBar.vue')
+  const profile=read('src/components/layout/SidebarProfileCard.vue')
   assert.match(shell,/school-pattern-bg\.png/)
-  assert.match(shell,/Mỗi tiết tự học là một bước tiến nhỏ/)
+  assert.match(shell,/SidebarProfileCard/)
+  assert.match(shell,/:name="auth\.currentUser\?\.name/)
+  assert.match(profile,/roleLabel/)
   assert.match(top,/profile-chip/)
   assert.match(top,/auth\.currentUser\?\.name|auth\.currentUser\.name/)
-  assert.match(top,/Giáo viên|Quản trị viên|Học sinh|Cán sự lớp/)
 })
-
 test('revision overdue has a dedicated issues route and page for learner and manager views',()=>{
   const routes=read('src/app/router/routes.ts')
   const navigation=read('src/features/navigation/navigation.ts')
@@ -111,8 +112,10 @@ test('registration overdue status is clock-reactive instead of relying on a rend
 test('dashboard separates overdue reports from active revision requests',()=>{
   const model=read('src/features/dashboard/dashboard-model.ts')
   const page=read('src/pages/DashboardPage.vue')
+  const presenter=read('src/features/dashboard/dashboard-presenter.ts')
   assert.match(model,/issues:number/)
   assert.match(model,/isRevisionOverdue/)
-  assert.match(page,/(?:classMetrics|personalMetrics)\.issues/)
-  assert.match(page,/Báo cáo lỗi/)
+  assert.match(page,/activeMetrics(?:\.value)?\.issues/)
+  assert.match(page,/issue-count="activeMetrics\.issues"/)
+  assert.match(presenter,/issue \? 'overdue' : row\.status/)
 })

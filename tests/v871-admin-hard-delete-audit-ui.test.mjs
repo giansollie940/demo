@@ -74,26 +74,24 @@ test('vertical dock moves hovered item to the right and opens real vertical spac
 test('brand safe zone keeps first dock item away from favicon even at maximum magnification',()=>{
   const shell=read('src/layouts/AppShell.vue')
   const sidebar=read('src/components/layout/SidebarNav.vue')
-  assert.match(shell,/nav-safe-zone[^}]*padding-top:\s*(?:2[02468]|3\d)px/)
+  assert.match(shell,/nav-safe-zone[^}]*padding:\s*20px\s+8px\s+4px/)
   assert.match(sidebar,/transform-origin:left center/)
   assert.match(sidebar,/--dock-lift-x/)
 })
-
 test('light mode keeps vanilla school image under a subtle soft overlay while dark mode fades a charcoal overlay above it',()=>{
   const shell=read('src/layouts/AppShell.vue')
   const themes=read('src/styles/themes.css')
   const tokens=read('src/styles/tokens.css')
-  assert.match(shell,/\.main::before[\s\S]*background-image:var\(--school-pattern-image\)/)
+  assert.match(shell,/\.main::before[\s\S]*background-image:\s*var\(--school-pattern-image\)/)
   assert.match(shell,/\.main::after[\s\S]*var\(--pattern-soft-overlay\)[\s\S]*var\(--pattern-dark-overlay\)/)
-  assert.match(shell,/\.main::before[\s\S]*opacity:var\(--pattern-opacity\)/)
-  assert.doesNotMatch(shell,/\.main::before[\s\S]*mix-blend-mode:multiply/)
+  assert.match(shell,/\.main::before[\s\S]*opacity:\s*var\(--pattern-opacity\)/)
+  assert.doesNotMatch(shell,/\.main::before[\s\S]*mix-blend-mode:\s*multiply/)
   assert.match(themes,/--pattern-soft-overlay:rgb\([^;]*\/\s*\.56\)/)
   assert.match(themes,/--pattern-dark-overlay:transparent/)
   assert.match(themes,/\[data-theme='dark'\][\s\S]*--pattern-soft-overlay:transparent/)
   assert.match(themes,/\[data-theme='dark'\][\s\S]*--pattern-dark-overlay:/)
   assert.match(tokens,/--theme-transition:\s*2(?:5|6|7|8|9)0ms|--theme-transition:\s*\.2[5-9]s/)
 })
-
 test('AppCard supports zero padding for edge-to-edge audit tables',()=>{
   const card=read('src/components/ui/AppCard.vue')
   assert.match(card,/padding\?:\s*['"]none['"]\|['"]sm['"]\|['"]md['"]\|['"]lg['"]|padding\?:\s*['"]sm['"]\|['"]md['"]\|['"]lg['"]\|['"]none['"]/)

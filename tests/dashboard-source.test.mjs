@@ -11,8 +11,9 @@ test('dashboard model derives registration KPIs without DOM rendering',()=>{
   assert.doesNotMatch(text,/document\.|innerHTML|querySelector/);
 });
 
-test('dashboard uses current Vue Query week data',()=>{
+test('dashboard uses current Vue Query week data and R7 high-density artwork',()=>{
   const text=read('src/pages/DashboardPage.vue');
   assert.match(text,/useWeekData/);
-  assert.match(text,/student-group-dashboard-blend\.png/);
+  assert.match(text,/r7-dashboard-students@2x\.png/);
+  assert.match(text,/DashboardHero/);
 });
