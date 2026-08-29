@@ -24,6 +24,7 @@
   --wash-cream:#fff8e9;
   --pattern-opacity:1;
   --pattern-filter:none;
+  --pattern-soft-overlay:rgb(255 255 255 / .30);
   --pattern-dark-overlay:transparent;
 }
 [data-theme='dark'] {
@@ -52,5 +53,6 @@
   --wash-cream:#352f26;
   --pattern-opacity:1;
   --pattern-filter:saturate(.72) brightness(.78) contrast(.92);
+  --pattern-soft-overlay:transparent;
   --pattern-dark-overlay:linear-gradient(rgb(23 21 28 / .84),rgb(23 21 28 / .88));
 }

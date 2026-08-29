@@ -79,15 +79,17 @@ test('brand safe zone keeps first dock item away from favicon even at maximum ma
   assert.match(sidebar,/--dock-lift-x/)
 })
 
-test('light mode shows vanilla school image without overlay while dark mode fades a charcoal overlay above it',()=>{
+test('light mode keeps vanilla school image under a subtle soft overlay while dark mode fades a charcoal overlay above it',()=>{
   const shell=read('src/layouts/AppShell.vue')
   const themes=read('src/styles/themes.css')
   const tokens=read('src/styles/tokens.css')
   assert.match(shell,/\.main::before[\s\S]*background-image:var\(--school-pattern-image\)/)
-  assert.match(shell,/\.main::after[\s\S]*background:var\(--pattern-dark-overlay\)/)
+  assert.match(shell,/\.main::after[\s\S]*var\(--pattern-soft-overlay\)[\s\S]*var\(--pattern-dark-overlay\)/)
   assert.match(shell,/\.main::before[\s\S]*opacity:1/)
   assert.doesNotMatch(shell,/\.main::before[\s\S]*mix-blend-mode:multiply/)
+  assert.match(themes,/--pattern-soft-overlay:rgb\([^;]*\/\s*\.30\)/)
   assert.match(themes,/--pattern-dark-overlay:transparent/)
+  assert.match(themes,/\[data-theme='dark'\][\s\S]*--pattern-soft-overlay:transparent/)
   assert.match(themes,/\[data-theme='dark'\][\s\S]*--pattern-dark-overlay:/)
   assert.match(tokens,/--theme-transition:\s*2(?:5|6|7|8|9)0ms|--theme-transition:\s*\.2[5-9]s/)
 })

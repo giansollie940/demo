@@ -4,6 +4,7 @@ import { Clock3, Plus, Save, Trash2 } from 'lucide-vue-next'
 import AppButton from '../ui/AppButton.vue'
 import InlineStatus from '../ui/InlineStatus.vue'
 import { calculateTimetable, defaultTimetableConfig } from '../../features/timetable/timetable-engine'
+import { cloneTimetableSnapshot } from '../../features/timetable/timetable-clone.js'
 import type { TimetableConfig, TimetableDayOverride } from '../../features/timetable/timetable-types'
 import type { AdminTimetableTemplateRecord, AdminTimetableVersionRecord } from '../../features/admin/admin-directory'
 
@@ -23,9 +24,8 @@ const scope=ref<'base'|'0'|'1'|'2'|'3'|'4'>('base')
 const draftDay=ref<TimetableDayOverride>({})
 const pendingTemplateId=ref('')
 
-function clone<T>(value:T):T{return structuredClone(value)}
 function normalizedConfig(value:TimetableConfig):TimetableConfig{
-  const defaults=defaultTimetableConfig(),raw=clone(value)
+  const defaults=defaultTimetableConfig(),raw=cloneTimetableSnapshot(value)
   return{
     ...defaults,...raw,
     morningLongBreakEnabled:raw.morningLongBreakEnabled??defaults.morningLongBreakEnabled,
@@ -50,7 +50,7 @@ function selectPendingTemplate(){const id=pendingTemplateId.value;if(!id||!props
 watch([templateId,selectedVersionId],loadTemplate)
 watch(()=>props.feedback?.token,()=>{const id=props.feedback?.selectedTemplateId??'';if(id){pendingTemplateId.value=id;selectPendingTemplate()}})
 watch(()=>props.templates,selectPendingTemplate)
-watch(scope,value=>{draftDay.value=value==='base'?{}:clone(config.value.dayOverrides[value]??{})})
+watch(scope,value=>{draftDay.value=value==='base'?{}:cloneTimetableSnapshot(config.value.dayOverrides[value]??{})})
 
 const previews=computed(()=>days.map((_,weekday)=>calculateTimetable(config.value,weekday)))
 const allErrors=computed(()=>[...new Set(previews.value.flatMap(row=>row.errors))])
@@ -64,7 +64,7 @@ function addPeriodOverride(){activePeriodOverrides.value.push({period:1,minutes:
 function removePeriodOverride(index:number){activePeriodOverrides.value.splice(index,1)}
 function addBreak(){activeBreakRules.value.push({afterPeriod:1,type:'custom',minutes:10})}
 function removeBreak(index:number){activeBreakRules.value.splice(index,1)}
-function commitDay(){if(scope.value==='base')return;config.value.dayOverrides={...config.value.dayOverrides,[scope.value]:clone(draftDay.value)}}
+function commitDay(){if(scope.value==='base')return;config.value.dayOverrides={...config.value.dayOverrides,[scope.value]:cloneTimetableSnapshot(draftDay.value)}}
 function clearDay(){if(scope.value==='base')return;const next={...config.value.dayOverrides};delete next[scope.value];config.value.dayOverrides=next;draftDay.value={}}
 function updateDayField(key:keyof TimetableDayOverride,event:Event,type:'time'|'number'='time'){
   if(scope.value==='base')return
@@ -92,7 +92,7 @@ function effectiveLongEnabled(session:SessionName){
   const local=session==='morning'?draftDay.value.morningLongBreakEnabled:draftDay.value.afternoonLongBreakEnabled
   return local??(session==='morning'?config.value.morningLongBreakEnabled:config.value.afternoonLongBreakEnabled)
 }
-function save(){if(!canSave.value)return;const payload={config:clone(config.value),generatedDays:clone(generatedDays.value)};if(templateId.value)emit('saveVersion',{templateId:templateId.value,...payload});else emit('create',{schoolYearId:props.schoolYearId,name:name.value.trim(),...payload})}
+function save(){if(!canSave.value)return;const payload={config:cloneTimetableSnapshot(config.value),generatedDays:cloneTimetableSnapshot(generatedDays.value)};if(templateId.value)emit('saveVersion',{templateId:templateId.value,...payload});else emit('create',{schoolYearId:props.schoolYearId,name:name.value.trim(),...payload})}
 function syncArrays(){if(scope.value!=='base')commitDay()}
 </script>
 
