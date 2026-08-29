@@ -47,7 +47,7 @@ test('R6.2 login illustration uses restrained CSS motion with reduced-motion fal
 
 test('R6.2 dashboard uses a student study group illustration instead of teacher illustration',()=>{
   const dashboard=read('src/pages/DashboardPage.vue')
-  assert.match(dashboard,/student-group-dashboard(?:-blend)?\.png/)
+  assert.match(dashboard,/student-group-dashboard\.png/)
   assert.doesNotMatch(dashboard,/teacher-dashboard-illustration\.png/)
   assert.ok(fs.existsSync(path.join(root,'public/assets/images/student-group-dashboard.png')))
 })
