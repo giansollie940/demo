@@ -18,6 +18,7 @@ c4f8434c076a2d350615a6fdeade3a1132fa7cf6cffe1d5fbe3be5c009ac7e4d  database/upgra
 0a6ea7936ae438acd17d9f9787c691049f1372bcfb944bc950f5de48c4bf02df  database/verify/VERIFY-AI-COMPLETED-ROUTING-V8.7.1.sql
 26f1e1ab802fd47fbf09a19034f1d06874ec8a262357273c58394c6d4bb887b8  database/verify/VERIFY-V8.7.1.sql
 3aea8457f61137604266ae49ab3016e6403dba03775558b6202fa872d0502ebb  database/verify/VERIFY-V8.8.0.sql
+<<<<<<< HEAD
 91907b74b28e819f6012bf5ee150b62e30ea6db43b2cdf061f3eb57b2c8b554d  deploy/edge-functions/admin-create-user.zip
 7c66ccc0cc2ba0272d187a2de9d11abdddcb2b72ecc2e1561cd591074e72e754  deploy/edge-functions/admin-delete-user.zip
 0e4ee0bb00d834b6be4bb36522fccf01567adbcc30cbe81fcbbe3bebe898b7fa  deploy/edge-functions/admin-list-users.zip
@@ -28,6 +29,18 @@ ef9d5be5d6531572901d176633758a09dcacc22e13d410fc90adc04c282874f3  deploy/edge-fu
 1b61cfe32659159dfe64b9efd0142c408f3f0af21114897daae6da5265fdf7fa  deploy/edge-functions/audit-log.zip
 d4aebd434dc32724b1af9e49510a552978bb036072934bebe4ec09ce687b1ebe  deploy/edge-functions/emergency-register.zip
 57135cc0215604941c1fe27b1505e579e510de3e4f3b796eb25230ddbba64a68  deploy/edge-functions/quote-feed.zip
+=======
+01c8b8945ca637e113d166f76bda4466f328ee4b16e661e138d64108d7eeae20  deploy/edge-functions/admin-create-user.zip
+ecfc103f19b4bdea097e21f0dc91c4fa4fd8c594b89beefbdaaf3689e6a7ead7  deploy/edge-functions/admin-delete-user.zip
+e689d2bead769d81612e8ba6da7edcba093873ea714ebd958dba777cdb9d5b9f  deploy/edge-functions/admin-list-users.zip
+2acd288e3fb185ba1e51f698f088e7d7b89246e5924a78c4405354c8a1abe87b  deploy/edge-functions/admin-manage-classes.zip
+08c220dd118cf41f24afb2d56f2269d03fcec543908e56cf402a7ed4ba30b065  deploy/edge-functions/admin-reset-password.zip
+ce133605b47c148fd601c2d49067c9e5c4e43003016367e6ddf67f115cdb7a85  deploy/edge-functions/admin-update-user.zip
+73cc9ecd57e9fe8c32b1437ab749ecd2d9b5e95fbc4aa0b751169ef08d139289  deploy/edge-functions/ai-review-registration.zip
+04b1787023338f9abf76ca84b9b413ae58e00be0fd5746a273bc49d3e7cef6fd  deploy/edge-functions/audit-log.zip
+c3951b870f80045d51e88b2830ad5da18a98a27b494a9d71b2e09d7754306cd9  deploy/edge-functions/emergency-register.zip
+c91e60f0bfb48b292f73375abc76dad542313fd0a53a3e43511cf26df5767388  deploy/edge-functions/quote-feed.zip
+>>>>>>> parent of 66b0142 (demo 36)
 fa9ac585664ccc9594220d9652a4a2b72f5a9a49b3e9539fe84d7074e182ae5d  deploy/hotfix/AUDIT-CONTRACT-SOURCE-SYNC-HOTFIX.zip
 ec0ce1960a360598a1f3577caf67a3eff6fcc6a901f813e519ced08c3b07d71c  docs/superpowers/plans/2026-08-26-v871-full-stack.md
 a956810b40b89a4166c7a6560467dcbb419785994d34193538e60970ea58beaf  docs/superpowers/plans/2026-08-27-admin-hard-delete-dock-vanilla-bg.md
@@ -54,6 +67,11 @@ a1751c2f3b9aa5d17f0910756fa0d94900d3e9909c49abfd751d3c352037b567  public/assets/
 cbb52de2502a655b3e473ab70397be35a65a70424dda56d016a913f3afbd5188  public/assets/images/owl/right-wing.webp
 1d7cbb75cbaf5ed6593f1469e9d2b7597cfae1fd1223c1e7e2f70970c6e5161e  public/assets/images/school-pattern-bg.png
 767b2264818c56102b2e79871b66da72747e2aa9e403a1aab962b4f5f557e576  public/assets/images/student-cards.png
+<<<<<<< HEAD
+=======
+c54ba366f8c87f4b9b72c5ddbe6c63456179dc1d1af1458cdd20b6f8bb4508f0  public/assets/images/student-group-dashboard.png
+cc3d6d89a6f710e42e52878e7439f01d2d63a9dfc0511f60e6b4264cadc17a66  public/assets/images/teacher-dashboard-illustration.png
+>>>>>>> parent of 66b0142 (demo 36)
 454ab8598403fb8e76f05a7b623bd451a04be76f3b2a0fa8955479f94cfb7edf  public/supabase-service.js
 a206f31bf8a776c463f31ab00666c3df75859e539b14a629531bdcc297730dce  scripts/package-audit-hotfix.mjs
 a5ffcc3c59937aea7007045ee1aa46c14a63f919d47e1aeba78b2a5bb5e4b947  scripts/package-edge-functions.mjs
@@ -147,10 +165,17 @@ e7405b3797a2a540c0f5f20fbb231be540841318c1dfb75d8c258dd540cfd469  src/main.ts
 175c8f21a2e8d5aa4031780b864408e6d67627aab7bfa57831b4f87e804f5b2d  src/pages/AdminPage.vue
 7631401775896fb6d4c744ea5d53be5bbee5e4aae79c095e2a3e1729a9329f2d  src/pages/ApprovalPage.vue
 d190a0f3be5ec2c8225ebcbdfcc8db62b838082a7310edb6749f6adb281aff23  src/pages/CommentsPage.vue
+<<<<<<< HEAD
 a4d309bdc77f391fbad7c4ba2498af8cedf690e8187d1e0256fd2c0151072d9c  src/pages/DashboardPage.vue
 f9936357bd5eb9d97063cf3da2fdb5e2b670763bb3d4c3a2492331cb1975aa32  src/pages/HistoryPage.vue
 32acbd94e4d76a4f29aee326b862b30c638bf1f9cab8838f1946c8a418603592  src/pages/IssuesPage.vue
 1162a2eb4ff623a43d894bb32edf56c54c36806f59376400285f535130773152  src/pages/LoginPage.vue
+=======
+825acfe97269d4b31eb24c7a0d2629cd537124a0778580ca36595d6c672a727c  src/pages/DashboardPage.vue
+f9936357bd5eb9d97063cf3da2fdb5e2b670763bb3d4c3a2492331cb1975aa32  src/pages/HistoryPage.vue
+32acbd94e4d76a4f29aee326b862b30c638bf1f9cab8838f1946c8a418603592  src/pages/IssuesPage.vue
+b56c32a7755767f953495b063c53eccddfc11bd2b10499aae127d71481cac1e9  src/pages/LoginPage.vue
+>>>>>>> parent of 66b0142 (demo 36)
 0f42a25eaf00c09cfd2e9a7545d7c5387a8827fa8142206fdad541c904b758aa  src/pages/RegistrationPage.vue
 47e672660262f3452412a42f3267645866ed73cc31a306636485ed996c4fba86  src/pages/SchedulePage.vue
 c41333234009c799a917b292c23292f31d92d44603a80f4c1f653f87d558aa92  src/pages/SettingsPage.vue
@@ -198,7 +223,11 @@ b785bbe00a9c3e2e64d953fb466402ac94c220faf785ca1d623978dcb91e0c1b  tests/cp4-sour
 02a0684c6f0c95b8116efb9c8f070cf2bc35f2bdcb279aa1b5271658d4911a5d  tests/cp6-source.test.mjs
 4bba5ddd0859f37ac2b3b35b03cab30ce66eeae46cfea6ff33559725012810dc  tests/cp7-source.test.mjs
 fd20d492823bea64ab6691ba88adcc392f9fca4076d4c28361176b280c1292e0  tests/cp8-source.test.mjs
+<<<<<<< HEAD
 f24467a04c3602c0de0096eab20d7814fe4b662a44657a0945c901bed16f6bac  tests/dashboard-source.test.mjs
+=======
+8b7730707ce05d1cb1be4609089e1bae022307085b82c056a714f4a13f9a011c  tests/dashboard-source.test.mjs
+>>>>>>> parent of 66b0142 (demo 36)
 f3df0c87722e1bb674a4b9f3cc9158c3de9ea9ebc0495989f9d2e40f3d102316  tests/design-theme.test.mjs
 12ce6cc286de7622a8b3ef772c1f2bfb4ccec19286e04b17a58574070efe4905  tests/github-deploy-source.test.mjs
 217d938bec30128f044ecbdefc19eb948b3525cfde4576f76051bb897125a57a  tests/migration-completion-source.test.mjs
@@ -236,11 +265,17 @@ e626329e3febc95926eb45f220cb51153404f261d5596dea576515bba6d9dc5f  tests/v871-rol
 57c164db9fa217d255eb75307044df66708e2928d60c4afa9a034a4329f2b6ae  tests/v880-audit-contract-hardening.test.mjs
 f091c915fa095394672d8d0fac87f6965544af91e68bba21448ee63c18afb6ae  tests/v880-r4-admin-week-vanilla.test.mjs
 2e922dba22da24b5a8b4d8febef3a63dad874137cf77888301f18ccc4b75588b  tests/v880-r5-tkb-proxy-overlay.test.mjs
+<<<<<<< HEAD
 e9a944a92d5664516ad33f17d487abbd32aad3a5412c9d2de3fe74ff9eab0e0c  tests/v880-r6-dashboard-island.test.mjs
 48929de813e5de5a9e3268fb24a8e8653894d5aeff044b9b9d6bd41d4bf589aa  tests/v880-r62-ui-polish.test.mjs
 cbc3d75ade821442f5e6dc3eb158d62c33ac8fe7519357a35c0a7ebe64c52213  tests/v880-r63-figma-source-toggle.test.mjs
 74d96fc7af276b502a78c5e0af82090ecd4aab6cb831e61d01137ac94c1d6aa1  tests/v880-r64-hero-blend.test.mjs
 b17897b3506beb8fffc5f611233f4a926e73fe04064465506f0b724655f72b79  tests/v880-r65-login-dashboard-cleanup.test.mjs
+=======
+aaf5767e08a880fb8359c2d7f3f3296d71d6dbdb40fb1e1ac77ccf1731e2b2ba  tests/v880-r6-dashboard-island.test.mjs
+981f66e7baf0466f3462945d26e2fe7a8524bbb3a8a4445e799972b5bc2a0b57  tests/v880-r62-ui-polish.test.mjs
+90203dddb2848d4490eb6a5932620a45b9f04f931d9bb853652d3d0aaae0f138  tests/v880-r63-figma-source-toggle.test.mjs
+>>>>>>> parent of 66b0142 (demo 36)
 e3ccd03deb37b4a96c20af169587f0317fc67cb2908490dba48cda4d746eec92  tests/v880-ux-timetable.test.mjs
 c3a383bb7e5926c70f07b8d712eb038df9d096e33a596dd7616fa238493a7157  tests/v880-ux3-corrections.test.mjs
 5a82cb853d144a017d42a0226b2c6465c6b2d16d5c71e3d1e4b706815b62eb3d  tests/v880-week-save-dirty-hardening.test.mjs
