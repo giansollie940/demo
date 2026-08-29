@@ -23,7 +23,7 @@ test('R6.3 dashboard keeps the real data model while matching the Figma visual h
   assert.match(page,/useWeekData/)
   assert.match(page,/buildDashboardMetrics/)
   assert.match(page,/managerQueue/)
-  assert.match(page,/student-group-dashboard\.png/)
+  assert.match(page,/student-group-dashboard(?:-blend)?\.png/)
   assert.match(page,/TỔNG QUAN TUẦN/)
   assert.match(page,/Công việc cần xử lý/)
   assert.match(page,/Tổng quan tiến độ/)
