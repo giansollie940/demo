@@ -3,7 +3,6 @@ import assert from 'node:assert/strict'
 import fs from 'node:fs'
 import crypto from 'node:crypto'
 import path from 'node:path'
-import { execFileSync } from 'node:child_process'
 
 const root = process.cwd()
 const read = (p) => fs.readFileSync(path.join(root, p), 'utf8')
@@ -44,12 +43,15 @@ test('dashboard uses the sharp source artwork and CSS blending instead of a pre-
 })
 
 test('hero assets have enough native pixels for 2x laptop rendering', () => {
-  const identify = (file) => {
-    const out = execFileSync('identify', ['-format', '%w %h', path.join(root, file)], { encoding: 'utf8' }).trim()
-    return out.split(/\s+/).map(Number)
+  const pngDimensions = (file) => {
+    const buffer = fs.readFileSync(path.join(root, file))
+    const signature = buffer.subarray(0, 8).toString('hex')
+    assert.equal(signature, '89504e470d0a1a0a', `${file} must be a PNG`)
+    assert.equal(buffer.subarray(12, 16).toString('ascii'), 'IHDR', `${file} must contain a PNG IHDR header`)
+    return [buffer.readUInt32BE(16), buffer.readUInt32BE(20)]
   }
-  const [loginW, loginH] = identify('public/assets/images/login-hero.png')
-  const [dashW, dashH] = identify('public/assets/images/student-group-dashboard.png')
+  const [loginW, loginH] = pngDimensions('public/assets/images/login-hero.png')
+  const [dashW, dashH] = pngDimensions('public/assets/images/student-group-dashboard.png')
   assert.ok(loginW >= 1600 && loginH >= 900, `login hero is only ${loginW}x${loginH}`)
   assert.ok(dashW >= 1200 && dashH >= 320, `dashboard hero is only ${dashW}x${dashH}`)
 })
