@@ -87,7 +87,7 @@ test('light mode keeps vanilla school image under a subtle soft overlay while da
   assert.match(shell,/\.main::after[\s\S]*var\(--pattern-soft-overlay\)[\s\S]*var\(--pattern-dark-overlay\)/)
   assert.match(shell,/\.main::before[\s\S]*opacity:var\(--pattern-opacity\)/)
   assert.doesNotMatch(shell,/\.main::before[\s\S]*mix-blend-mode:multiply/)
-  assert.match(themes,/--pattern-soft-overlay:rgb\([^;]*\/\s*\.44\)/)
+  assert.match(themes,/--pattern-soft-overlay:rgb\([^;]*\/\s*\.56\)/)
   assert.match(themes,/--pattern-dark-overlay:transparent/)
   assert.match(themes,/\[data-theme='dark'\][\s\S]*--pattern-soft-overlay:transparent/)
   assert.match(themes,/\[data-theme='dark'\][\s\S]*--pattern-dark-overlay:/)

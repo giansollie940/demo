@@ -43,7 +43,7 @@ test('admin timetable builder uses the proxy-safe snapshot clone for load, day o
 test('vanilla background has a dedicated subtle light overlay and preserves the dark overlay',()=>{
   const shell=read('src/layouts/AppShell.vue')
   const themes=read('src/styles/themes.css')
-  assert.match(themes,/--pattern-soft-overlay:\s*rgb\([^;]*\/\s*\.44\)/)
+  assert.match(themes,/--pattern-soft-overlay:\s*rgb\([^;]*\/\s*\.56\)/)
   assert.match(themes,/\[data-theme='dark'\][\s\S]*--pattern-soft-overlay:\s*transparent/)
   assert.match(shell,/\.main::after[\s\S]*var\(--pattern-soft-overlay\)[\s\S]*var\(--pattern-dark-overlay\)/)
 })

@@ -22,9 +22,9 @@
   --wash-pink:#fff0f6;
   --wash-peach:#fff0e4;
   --wash-cream:#fff8e9;
-  --pattern-opacity:.74;
-  --pattern-filter:saturate(.88) contrast(.96);
-  --pattern-soft-overlay:rgb(255 255 255 / .44);
+  --pattern-opacity:.58;
+  --pattern-filter:saturate(.78) contrast(.90);
+  --pattern-soft-overlay:rgb(255 255 255 / .56);
   --pattern-dark-overlay:transparent;
 }
 [data-theme='dark'] {

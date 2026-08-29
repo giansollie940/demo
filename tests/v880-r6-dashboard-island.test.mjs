@@ -32,21 +32,21 @@ test('dashboard R6 keeps real week data and status feedback rather than mock-onl
   assert.match(page,/Đang đồng bộ/)
 })
 
-test('sidebar navigation is wrapped by a vertical island that hugs the visible button count',()=>{
+test('R6.2 uses the original favicon sidebar itself as the single hug-content island',()=>{
   const shell=read('src/layouts/AppShell.vue')
   const nav=read('src/components/layout/SidebarNav.vue')
-  assert.match(shell,/class="nav-island"/)
-  assert.match(shell,/\.nav-island\{[^}]*height:max-content/s)
-  assert.match(shell,/\.nav-island\{[^}]*align-self:start/s)
+  assert.doesNotMatch(shell,/class="nav-island"/)
+  assert.match(shell,/\.sidebar\{[^}]*height:max-content/s)
+  assert.match(shell,/\.sidebar\{[^}]*max-height:calc\(100vh - 24px\)/s)
   assert.match(shell,/\.nav-safe-zone\{[^}]*padding-top:24px/s)
   assert.match(nav,/\.side-nav\{[^}]*padding:/s)
   assert.doesNotMatch(shell,/\.nav-safe-zone :deep\(\.side-nav\)\{height:100%\}/)
 })
 
-test('R6 softens the vanilla pattern more strongly without removing it',()=>{
+test('R6.2 softens the vanilla pattern further without removing it',()=>{
   const themes=read('src/styles/themes.css')
   const shell=read('src/layouts/AppShell.vue')
-  assert.match(themes,/--pattern-opacity:\s*\.7[0-9]/)
-  assert.match(themes,/--pattern-soft-overlay:\s*rgb\([^;]*\/\s*\.4[0-9]\)/)
+  assert.match(themes,/--pattern-opacity:\s*\.58/)
+  assert.match(themes,/--pattern-soft-overlay:\s*rgb\([^;]*\/\s*\.56\)/)
   assert.match(shell,/\.main::before[\s\S]*opacity:var\(--pattern-opacity\)/)
 })
