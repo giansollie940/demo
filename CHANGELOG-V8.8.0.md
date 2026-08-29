@@ -11,7 +11,7 @@
 - `Chưa đăng ký / Có thiết bị / Không thiết bị / Chưa rõ thiết bị` là Quick Report theo **đúng buổi đang chọn**.
 - Không suy diễn HS chưa đăng ký thành `Không thiết bị`.
 - Theo dõi lớp dùng một workspace liền mạch: selector buổi + KPI có thể bấm + báo cáo/danh sách của đúng buổi đang chọn trong cùng một khối.
-- Cột master tuần trên laptop/desktop dùng `clamp(310px,28vw,370px)` và có cuộn dọc thật với scrollbar ổn định.
+- Cột master tuần trên laptop/desktop dùng `clamp(360px,30vw,400px)` và có cuộn dọc thật với scrollbar ổn định.
 - Hạn cụ thể mở bằng popover/bottom sheet có `Hủy / Áp dụng hạn`; sau khi áp dụng, field chính hiển thị ngay ngày giờ thực tế thay vì chữ chung chung “Hạn cụ thể”.
 
 ## UX3 — Builder TKB tự động hơn
@@ -78,8 +78,18 @@
 - Audit hotfix packaging now refuses stale source unless contract v2 and `AUDIT_EDGE_OUTDATED` bridge handling are both present.
 ## Week save dirty-state hardening
 
-- Tăng cột danh sách tuần lên `clamp(310px,28vw,370px)` để cân đối hơn trên laptop/desktop, vẫn giữ chế độ một cột ở màn hình <=1050px.
+- Tăng cột danh sách tuần lên `clamp(360px,30vw,400px)` để cân đối hơn trên laptop/desktop, vẫn giữ chế độ một cột ở màn hình <=1050px.
 - Sau khi lưu cấu hình tuần, baseline được lấy trực tiếp từ canonical state do mutation trả về thay vì chờ watcher của `auth.legacyState`.
 - Dirty registry của trang tuần dùng `flush: 'sync'` để trạng thái điều hướng khớp ngay với draft hiện tại.
 - Reload do realtime trong lúc save không còn chen vào quá trình lập baseline; sau save thành công `weeks` được `markClean()` ngay, tránh cảnh báo sai “Thay đổi chưa được lưu” khi chuyển chức năng.
 
+
+
+## Week management save-action UX hotfix (2026-08-29)
+
+- Xác nhận cảnh báo rời trang khi chưa lưu là hành vi đúng; nguyên nhân trải nghiệm là nút `Lưu thay đổi` nằm xa vùng chỉnh sửa nên dễ bị bỏ sót.
+- Chuyển thao tác lưu từ header xuống ngay footer của thẻ tuần đang chỉnh, cạnh `Xem tuần / Mở TKB tuần này`.
+- Khi draft thay đổi, thẻ tuần hiển thị thanh `Có thay đổi chưa lưu` cùng nút `Lưu thay đổi`; lỗi lưu được hiển thị ngay tại vùng thao tác.
+- Sau khi backend trả canonical state và draft trở về clean, hiển thị `Đã lưu` ngắn khoảng 1.8 giây rồi tự thu gọn.
+- Cột danh sách tuần tăng lên `clamp(360px,30vw,400px)`; breakpoint <=1050px vẫn chuyển về một cột.
+- Không thay SQL, Edge Function hay dirty-navigation contract.

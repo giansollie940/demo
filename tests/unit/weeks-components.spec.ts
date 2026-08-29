@@ -47,6 +47,30 @@ describe('WeekEditorCard', () => {
     expect(html).toContain('Mở TKB tuần này')
   })
 
+  it('keeps the save action in the edited week and clearly marks unsaved changes', async () => {
+    const html = await renderToString(h(WeekEditorCard, {
+      modelValue: draft,
+      operationalStatus: 'open',
+      deadlineTime: '20:00',
+      dirty: true,
+      saveState: 'idle',
+    }))
+    expect(html).toContain('Có thay đổi chưa lưu')
+    expect(html).toContain('Lưu thay đổi')
+  })
+
+  it('shows a compact saved confirmation after the draft is clean', async () => {
+    const html = await renderToString(h(WeekEditorCard, {
+      modelValue: draft,
+      operationalStatus: 'open',
+      deadlineTime: '20:00',
+      dirty: false,
+      saveState: 'success',
+    }))
+    expect(html).toContain('Đã lưu')
+    expect(html).not.toContain('Có thay đổi chưa lưu')
+  })
+
   it('associates an invalid specific deadline with an actionable error', async () => {
     const html = await renderToString(h(WeekEditorCard, {
       modelValue: { ...draft, deadline: '' },

@@ -68,7 +68,7 @@ Kiểm tra thêm sau deploy:
 - Admin → Mẫu TKB: cấu hình cơ sở chỉ cần giờ buổi, duration tiết, nghỉ giữa tiết, nghỉ dài và lựa chọn `Chỉ nghỉ ngắn / Có nghỉ dài` theo từng buổi; preview tự sinh giờ tiết.
 - `Ngoại lệ nâng cao` chỉ dùng cho duration/break đặc biệt; rule thủ công phải override quy luật nghỉ tự động.
 - Theo dõi lớp: selector buổi + KPI + báo cáo nằm trong một `tracking-workspace`; bấm KPI đổi kết quả ngay bên dưới và chỉ dùng dữ liệu của buổi đã chọn.
-- Quản lý tuần: cột trái 280–330px, danh sách có scroll; deadline popover có Hủy/Áp dụng và field chính hiển thị ngày giờ đã chọn.
+- Quản lý tuần: cột trái 360–400px, danh sách có scroll; deadline popover có Hủy/Áp dụng và field chính hiển thị ngày giờ đã chọn.
 - Database đã `overall=true` thì UX3 không yêu cầu migration SQL mới.
 - Edge `admin-manage-classes` phải được deploy lại vì config validator có các trường tự động nghỉ dài theo buổi.
 
@@ -87,8 +87,8 @@ Regression guard: `tests/ci-portability.test.mjs`.
 
 ## UX3 CI quality-gate verification
 
-- `npm test`: 183/183 PASS on the source tree used to create this hotfix.
-- `npm run verify:release`: PASS; 226 files hashed; 10/10 Edge ZIPs valid.
+- `npm test`: 195/195 PASS on the source tree used to create this hotfix.
+- `npm run verify:release`: PASS; 231 files hashed; 10/10 Edge ZIPs valid.
 - Changed `weeks-components.spec.ts` and the `<script setup>` section of `WeekEditorCard.vue` parse with TypeScript 5.8.3 with zero syntax diagnostics.
 - `npm ci` could not complete in the packaging sandbox within the available network timeout, so local Vitest/vue-tsc/build are not claimed as PASS. GitHub Actions is the authoritative dependency-backed quality gate.
 
@@ -113,8 +113,17 @@ The canonical release verifies all of the following:
 - the generated Audit hotfix overlay uses repository-relative paths and contains the matching deployable Audit ZIP.
 ## Week save dirty-state check
 
-- Danh sách tuần desktop/laptop dùng `clamp(310px,28vw,370px)` và vẫn có `overflow-y:auto`.
+- Danh sách tuần desktop/laptop dùng `clamp(360px,30vw,400px)` và vẫn có `overflow-y:auto`.
 - Save tuần phải dùng canonical result của `saveWeekSettingsMutation`, lập lại `drafts/initialDrafts`, và `markClean()` trước khi hiển thị thành công.
 - Dirty watcher của trang tuần chạy `flush: 'sync'`; auth/realtime reload bị bỏ qua khi `status === 'saving'`.
 - Regression: `tests/v880-week-save-dirty-hardening.test.mjs`.
 
+
+
+## Week save-action UX hotfix check (2026-08-29)
+
+- Header `Quản lý tuần` chỉ giữ thao tác `Tuần hiện hành`; không còn nút lưu tách khỏi vùng chỉnh sửa.
+- `WeekEditorCard` nhận `dirty/saveState/saveMessage`, phát sự kiện `save`, và hiển thị `Có thay đổi chưa lưu` ngay khi draft khác baseline.
+- Nút `Lưu thay đổi` nằm trong thẻ tuần; khi lưu thành công hiển thị `Đã lưu` khoảng 1.8 giây.
+- Nếu chưa lưu mà chuyển sang chức năng khác, dirty registry và router guard vẫn cảnh báo như trước.
+- Regression static: `tests/v880-week-save-dirty-hardening.test.mjs`; contract cột tuần liên quan đã cập nhật trong UX3/timetable tests.

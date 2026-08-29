@@ -5,7 +5,7 @@ import fs from 'node:fs'
 const source=fs.readFileSync('src/pages/WeeksPage.vue','utf8')
 
 test('week master column is balanced wider on laptop while remaining bounded',()=>{
-  assert.match(source,/grid-template-columns:clamp\(310px,28vw,370px\) minmax\(0,1fr\)/)
+  assert.match(source,/grid-template-columns:clamp\(360px,30vw,400px\) minmax\(0,1fr\)/)
   assert.match(source,/week-master-scroll\{[^}]*overflow-y:auto/)
 })
 
@@ -18,4 +18,12 @@ test('week save establishes its clean baseline from the canonical mutation resul
 test('week dirty registry is synchronous and server reloads do not race an active save',()=>{
   assert.match(source,/watch\(isDirty,value=>dirtyEditor\.setDirty\(value\),\{immediate:true,flush:'sync'\}\)/)
   assert.match(source,/if\(status\.value==='saving'\)return/)
+})
+
+
+test('week save action lives beside the edited week and exposes dirty feedback',()=>{
+  assert.doesNotMatch(source,/class="header-actions"[^>]*>[\s\S]*?<AppButton[^>]*@click="save"/)
+  assert.match(source,/:dirty="isDirty"/)
+  assert.match(source,/:save-state="status"/)
+  assert.match(source,/@save="save"/)
 })
