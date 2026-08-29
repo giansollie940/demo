@@ -38,8 +38,8 @@ test('sidebar and dashboard use multiple semantic accent colors with warm menu e
   assert.match(sidebar, /--nav-accent:var\(--color-mint\)/)
   assert.match(dashboard, /nth-child\(1\).*--metric-accent:var\(--color-sky\)/s)
   assert.match(dashboard, /nth-child\(2\).*--metric-accent:var\(--color-mint\)/s)
-  assert.match(dashboard, /nth-child\(3\).*--metric-accent:var\(--color-coral\)/s)
-  assert.match(dashboard, /nth-child\(4\).*--metric-accent:var\(--color-sun\)/s)
+  assert.match(dashboard, /nth-child\(3\).*--metric-accent:var\(--color-sun\)/s)
+  assert.match(dashboard, /nth-child\(4\).*--metric-accent:var\(--color-lilac\)/s)
 })
 
 test('student-facing registration and login pages use colorful learning washes', async () => {

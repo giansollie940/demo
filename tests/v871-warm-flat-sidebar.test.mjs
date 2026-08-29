@@ -37,7 +37,7 @@ test('school pattern is an independent layer so content surfaces cannot hide it'
   const shell=read('src/layouts/AppShell.vue')
   assert.match(shell,/\.main::before/)
   assert.match(shell,/background-image:\s*var\(--school-pattern-image\)/)
-  assert.match(shell,/opacity:\s*1/)
+  assert.match(shell,/opacity:\s*var\(--pattern-opacity\)/)
   assert.match(shell,/pointer-events:none/)
   assert.match(shell,/\.content\{[^}]*z-index:10/s)
   assert.doesNotMatch(shell,/background-blend-mode:\s*normal,multiply/)

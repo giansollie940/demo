@@ -35,7 +35,7 @@ test('main surface uses an independent vanilla school-pattern layer above the wa
   assert.match(shell,/\.main::before/)
   assert.match(shell,/background-image:var\(--school-pattern-image\)/)
   assert.match(shell,/background-size:(?:920|1100)px\s+auto/)
-  assert.match(shell,/opacity:1/)
+  assert.match(shell,/opacity:var\(--pattern-opacity\)/)
   assert.doesNotMatch(shell,/mix-blend-mode:multiply/)
   assert.match(shell,/\.main::after[\s\S]*--pattern-dark-overlay/)
 })
@@ -56,13 +56,14 @@ test('sidebar, icon buttons, and profile chip use modern hover micro-interaction
   assert.match(shell,/\.sidebar-edge-toggle:hover\{[^}]*scale\(1\.08\)/s)
 })
 
-test('dashboard makes the selected week the primary visual heading',()=>{
+test('dashboard R6 makes the greeting hero primary while keeping the selected week visible',()=>{
   const page=read('src/pages/DashboardPage.vue')
-  assert.match(page,/class=["']week-title["']/)
-  assert.match(page,/TUẦN\s*\{\{\s*week\?\.number/)
-  assert.match(page,/\.week-title\{[^}]*font-size:\s*clamp\(/s)
-  assert.match(page,/class=["']week-dates["']/)
-  assert.doesNotMatch(page,/\.welcome h1\{/,'generic welcome h1 must not override the prominent week-title typography')
+  assert.match(page,/class="dashboard-hero app-card"/)
+  assert.match(page,/class="hero-copy"/)
+  assert.match(page,/Chào \{\{ auth\.currentUser\?\.name/)
+  assert.match(page,/class="week-pill"/)
+  assert.match(page,/Tuần \{\{ week\?\.number/)
+  assert.match(page,/\.hero-copy h1\{[^}]*font-size:clamp\(/s)
 })
 
 test('statistics loads selected and historical week data through Vue Query before calculating rates',()=>{

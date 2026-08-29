@@ -103,7 +103,7 @@ test('school pattern remains visible as an independent layer through translucent
   assert.match(shell,/--school-pattern-image/)
   assert.match(shell,/\.main::before/)
   assert.match(shell,/background-image:var\(--school-pattern-image\)/)
-  assert.match(shell,/opacity:1/)
+  assert.match(shell,/opacity:var\(--pattern-opacity\)/)
   assert.doesNotMatch(shell,/mix-blend-mode:multiply/)
   assert.match(shell,/\.main::after[\s\S]*--pattern-dark-overlay/)
   assert.match(themes,/--content-glass:/)
