@@ -93,3 +93,12 @@
 - Sau khi backend trả canonical state và draft trở về clean, hiển thị `Đã lưu` ngắn khoảng 1.8 giây rồi tự thu gọn.
 - Cột danh sách tuần tăng lên `clamp(360px,30vw,400px)`; breakpoint <=1050px vẫn chuyển về một cột.
 - Không thay SQL, Edge Function hay dirty-navigation contract.
+
+## Admin TKB + Week UX R4 (2026-08-29)
+
+- Khi chọn mẫu TKB trong Admin, Builder đồng bộ lại theo `templateId + versionId` nên phiên bản vừa tải/đồng bộ không còn để form ở trạng thái trắng hoặc stale.
+- Khu vực gán TKB cho lớp tự chọn phiên bản mới nhất khi danh sách version xuất hiện sau template và hiển thị tóm tắt mẫu đang chọn: khung giờ sáng, chiều và thời lượng mỗi tiết.
+- Tạo/lưu TKB có feedback ngay tại khối TKB (`Đang tạo/lưu…`, thành công, lỗi); mẫu vừa tạo được tự chọn lại sau khi backend trả canonical result.
+- Quản lý tuần có nút `Hủy thay đổi` ngay cạnh `Lưu thay đổi`, phục hồi tuần đang chọn về baseline đã lưu gần nhất mà không ảnh hưởng tuần khác.
+- Nền Vanilla `school-pattern-bg.png` được đưa vào `src/assets` và import qua Vite thay vì ghép public runtime URL, giúp asset được resolve ổn định khi deploy GitHub Pages theo subfolder.
+- Bổ sung regression tests cho tải phiên bản TKB, feedback lưu/tạo, assignment version refresh, hủy thay đổi tuần và asset nền Vanilla.

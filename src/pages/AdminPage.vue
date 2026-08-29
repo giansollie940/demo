@@ -37,6 +37,9 @@ const tab=computed(()=>{const value=String(route.query.tab??'overview');return v
 const busyKey=ref<string|null>(null)
 const status=ref<InlineStatusState>('idle')
 const statusMessage=ref('')
+type TimetableFeedback={schoolYearId:string;state:InlineStatusState;message:string;selectedTemplateId?:string;version?:number;token:number}
+const timetableFeedback=ref<TimetableFeedback|null>(null)
+let timetableFeedbackToken=0
 const showYearForm=ref(false)
 const showClassForm=ref(false)
 const yearForm=reactive({name:'',startDate:'',endDate:'',setActive:true})
@@ -95,12 +98,14 @@ const filteredLearners=computed(()=>{
 function assignedTeachers(classId:string){return data.value.teachers.filter(teacher=>data.value.assignments.some(row=>row.classId===classId&&row.teacherId===teacher.id&&row.active))}
 function assignedClasses(teacherId:string){return data.value.classes.filter(item=>data.value.assignments.some(row=>row.classId===item.id&&row.teacherId===teacherId&&row.active))}
 function runtime():AdminMutationRuntime{return{queryClient,reload:async()=>{await auth.reload(context.selectedClassId,context.selectedSchoolYearId);context.hydrate(auth.legacyState);return auth.legacyState}}}
-async function run(key:string,task:()=>Promise<unknown>,message:string){
+async function run<T>(key:string,task:()=>Promise<T>,message:string):Promise<T>{
   busyKey.value=key;status.value='saving';statusMessage.value='Đang đồng bộ với cơ sở dữ liệu…'
-  try{await task();status.value='success';statusMessage.value=message}
+  try{const result=await task();status.value='success';statusMessage.value=message;return result}
   catch(error){status.value='error';statusMessage.value=error instanceof Error?error.message:'Không thực hiện được thao tác quản trị.';throw error}
   finally{busyKey.value=null}
 }
+function setTimetableFeedback(input:Omit<TimetableFeedback,'token'>){timetableFeedback.value={...input,token:++timetableFeedbackToken}}
+function timetableBusyForYear(yearId:string){const key=busyKey.value;if(!key?.startsWith('timetable:'))return false;const target=key.slice('timetable:'.length);return target===yearId||yearTemplates(yearId).some(item=>item.id===target)}
 
 async function submitYear(){
   const name=yearForm.name.trim();if(!name||!yearForm.startDate||!yearForm.endDate)return
@@ -117,8 +122,17 @@ function yearVersions(yearId:string){const ids=new Set(yearTemplates(yearId).map
 function yearTimetableAssignments(yearId:string){return data.value.timetableAssignments.filter(item=>item.schoolYearId===yearId)}
 function classesForYear(yearId:string){return data.value.classes.filter(item=>item.schoolYearId===yearId)}
 async function saveYearWeek(input:{weekId:string;startDate:string;endDate:string}){try{await run(`week:${input.weekId}`,()=>updateSchoolYearWeek(runtime(),input),'Đã cập nhật lịch tuần chuẩn.')}catch{}}
-async function createYearTimetable(input:{schoolYearId:string;name:string;config:TimetableConfig;generatedDays:GeneratedTimetableDay[]}){try{await run(`timetable:${input.schoolYearId}`,()=>createTimetableTemplate(runtime(),input),'Đã tạo mẫu TKB và phiên bản đầu tiên.')}catch{}}
-async function saveYearTimetableVersion(input:{templateId:string;config:TimetableConfig;generatedDays:GeneratedTimetableDay[]}){try{await run(`timetable:${input.templateId}`,()=>saveTimetableVersion(runtime(),input),'Đã lưu phiên bản TKB mới. Lịch sử phiên bản cũ được giữ nguyên.')}catch{}}
+async function createYearTimetable(input:{schoolYearId:string;name:string;config:TimetableConfig;generatedDays:GeneratedTimetableDay[]}){
+  setTimetableFeedback({schoolYearId:input.schoolYearId,state:'saving',message:'Đang tạo mẫu TKB và lưu phiên bản đầu tiên…'})
+  try{const result=await run(`timetable:${input.schoolYearId}`,()=>createTimetableTemplate(runtime(),input),'Đã tạo mẫu TKB và phiên bản đầu tiên.');const row=result as {template?:{id?:unknown};version?:{version_number?:unknown;version?:unknown}};const selectedTemplateId=String(row.template?.id??'');const version=Number(row.version?.version_number??row.version?.version??1)||1;setTimetableFeedback({schoolYearId:input.schoolYearId,state:'success',message:`Đã tạo TKB · phiên bản v${version}.`,selectedTemplateId:selectedTemplateId||undefined,version})}
+  catch(error){setTimetableFeedback({schoolYearId:input.schoolYearId,state:'error',message:error instanceof Error?error.message:'Không tạo được mẫu TKB.'})}
+}
+async function saveYearTimetableVersion(input:{templateId:string;config:TimetableConfig;generatedDays:GeneratedTimetableDay[]}){
+  const schoolYearId=data.value.timetableTemplates.find(item=>item.id===input.templateId)?.schoolYearId??''
+  setTimetableFeedback({schoolYearId,state:'saving',message:'Đang lưu phiên bản TKB mới…',selectedTemplateId:input.templateId})
+  try{const result=await run(`timetable:${input.templateId}`,()=>saveTimetableVersion(runtime(),input),'Đã lưu phiên bản TKB mới. Lịch sử phiên bản cũ được giữ nguyên.');const row=result as {version?:{version_number?:unknown;version?:unknown}};const version=Number(row.version?.version_number??row.version?.version??0)||undefined;setTimetableFeedback({schoolYearId,state:'success',message:version?`Đã lưu TKB · phiên bản v${version}.`:'Đã lưu phiên bản TKB mới.',selectedTemplateId:input.templateId,version})}
+  catch(error){setTimetableFeedback({schoolYearId,state:'error',message:error instanceof Error?error.message:'Không lưu được phiên bản TKB.',selectedTemplateId:input.templateId})}
+}
 async function assignYearTimetable(input:{classId:string;schoolYearId:string;templateVersionId:string;effectiveFrom:string;effectiveTo:string}){try{await run(`timetable-assignment:${input.classId}`,()=>assignTimetableTemplate(runtime(),input),'Đã gán mẫu TKB theo khoảng hiệu lực.')}catch{}}
 async function submitClass(){const code=classForm.code.trim().toUpperCase(),name=classForm.name.trim();if(!code||!name||!selectedYearId.value)return;try{await run('create-class',()=>createClass(runtime(),{code,name,schoolYearId:selectedYearId.value}),'Đã tạo lớp.')}catch{return};classForm.code='';classForm.name='';showClassForm.value=false}
 function editClass(id:string){editingClass.value=data.value.classes.find(row=>row.id===id)??null;classDialogError.value=''}
@@ -171,7 +185,7 @@ async function permission(payload:{classId:string;teacherId:string;enabled:boole
     <template v-else-if="tab==='years'">
       <div class="section-actions"><div><h2>Năm học</h2><p>{{ schoolYearCount }} năm học. Mỗi năm có thể có nhiều mẫu thời khóa biểu.</p></div><AppButton @click="showYearForm=!showYearForm"><Plus/>Tạo năm học</AppButton></div>
       <AppCard v-if="showYearForm" padding="md"><form class="quick-form year-form" @submit.prevent="submitYear"><label>Tên năm học<input v-model="yearForm.name" required maxlength="40" placeholder="2027–2028"></label><label>Ngày bắt đầu tuần 1<input v-model="yearForm.startDate" type="date" required></label><label>Ngày kết thúc năm học<input v-model="yearForm.endDate" type="date" required></label><label class="check-field"><input v-model="yearForm.setActive" type="checkbox">Đặt là năm học đang hoạt động</label><AppButton type="submit" :loading="busyKey==='create-year'">Tạo năm học</AppButton></form></AppCard>
-      <section class="year-grid"><AdminSchoolYearCard v-for="item in mergedSchoolYears" :key="item.id" :item="item" :weeks="yearWeeks(item.id)" :classes="classesForYear(item.id)" :templates="yearTemplates(item.id)" :versions="yearVersions(item.id)" :assignments="yearTimetableAssignments(item.id)" :busy="busyKey===`year:${item.id}`" :busy-week-id="busyKey?.startsWith('week:')?busyKey.slice(5):null" :busy-timetable="Boolean(busyKey?.startsWith('timetable:'))" :busy-assignment="Boolean(busyKey?.startsWith('timetable-assignment:'))" @activate="activateYear" @save-week="saveYearWeek" @create-template="createYearTimetable" @save-version="saveYearTimetableVersion" @assign-template="assignYearTimetable"/></section>
+      <section class="year-grid"><AdminSchoolYearCard v-for="item in mergedSchoolYears" :key="item.id" :item="item" :weeks="yearWeeks(item.id)" :classes="classesForYear(item.id)" :templates="yearTemplates(item.id)" :versions="yearVersions(item.id)" :assignments="yearTimetableAssignments(item.id)" :busy="busyKey===`year:${item.id}`" :busy-week-id="busyKey?.startsWith('week:')?busyKey.slice(5):null" :busy-timetable="timetableBusyForYear(item.id)" :timetable-feedback="timetableFeedback?.schoolYearId===item.id?timetableFeedback:undefined" :busy-assignment="Boolean(busyKey?.startsWith('timetable-assignment:'))" @activate="activateYear" @save-week="saveYearWeek" @create-template="createYearTimetable" @save-version="saveYearTimetableVersion" @assign-template="assignYearTimetable"/></section>
     </template>
 
     <template v-else-if="tab==='classes'">

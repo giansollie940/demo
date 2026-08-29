@@ -5,12 +5,12 @@ import { useRouter } from 'vue-router'
 import SidebarNav from '../components/layout/SidebarNav.vue'
 import TopBar from '../components/layout/TopBar.vue'
 import WiseOwl from '../components/owl/WiseOwl.vue'
+import schoolPatternUrl from '../assets/images/school-pattern-bg.png'
 import { useAuthStore } from '../stores/auth'
 import { useContextStore } from '../stores/context'
 import { usePreferencesStore } from '../stores/preferences'
 import { useWeekLifecycle } from '../features/weeks/useWeekLifecycle'
 const faviconUrl = `${import.meta.env.BASE_URL}assets/images/favicon.png`
-const schoolPatternUrl = `${import.meta.env.BASE_URL}assets/images/school-pattern-bg.png`
 const auth=useAuthStore();const context=useContextStore();const preferences=usePreferencesStore();const router=useRouter();const mobileOpen=ref(false)
 watch(()=>auth.legacyState,state=>context.hydrate(state),{immediate:true});useWeekLifecycle()
 async function logout(){await auth.logout();context.hydrate(null);await router.replace('/login')}

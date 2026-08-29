@@ -39,6 +39,7 @@ watch(filteredDrafts,rows=>{if(rows.length&&!rows.some(item=>item.id===selectedD
 function loadServerVersion(){dirtyEditor.markClean();loadDrafts()}
 function keepDraft(){dirtyEditor.acknowledgeServerChange();status.value='idle';statusMessage.value=''}
 function replaceSelected(value:WeekEditorDraft){clearStatusReset();if(status.value==='success'){status.value='idle';statusMessage.value=''}const index=drafts.value.findIndex(item=>item.id===value.id);if(index>=0)drafts.value[index]=value}
+function cancelSelected(){const id=selectedDraftId.value;if(!id)return;const baseline=initialDrafts.value.find(item=>item.id===id);if(!baseline)return;clearStatusReset();const index=drafts.value.findIndex(item=>item.id===id);if(index>=0)drafts.value[index]=structuredClone(baseline);status.value='idle';statusMessage.value='';if(!isDirty.value)dirtyEditor.markClean()}
 function errorMessage(error:unknown){return error instanceof Error?error.message:'Chưa lưu được cấu hình tuần.'}
 async function save(){if(!classId.value||!isDirty.value)return;clearStatusReset();status.value='saving';statusMessage.value='Đang lưu cấu hình tuần…';try{const canonical=await saveWeekSettingsMutation(createRuntime(),classId.value,drafts.value);loadDrafts(canonical);dirtyEditor.markClean();status.value='success';statusMessage.value='Đã lưu cấu hình tuần.';statusResetTimer=setTimeout(()=>{status.value='idle';statusMessage.value='';statusResetTimer=null},1800)}catch(error){status.value='error';statusMessage.value=errorMessage(error)}}
 function goCurrentWeek(){context.resumeAutoWeek(lifecycle.value.currentWeekId);const id=lifecycle.value.currentWeekId;if(id)selectedDraftId.value=id}
@@ -78,7 +79,7 @@ onBeforeUnmount(clearStatusReset)
       </AppCard>
 
       <div class="week-detail-panel">
-        <WeekEditorCard v-if="selectedDraft" :model-value="selectedDraft" :operational-status="displayStatus(selectedDraft)" :current="lifecycle.currentWeekId===selectedDraft.id" :viewing="context.selectedWeekId===selectedDraft.id" :deadline-time="deadlineTime" :disabled="status==='saving'" :dirty="isDirty" :save-state="status" :save-message="statusMessage" @update:model-value="replaceSelected" @save="save" @view="viewWeek(selectedDraft.id)" @open-schedule="openSchedule(selectedDraft.id)"/>
+        <WeekEditorCard v-if="selectedDraft" :model-value="selectedDraft" :operational-status="displayStatus(selectedDraft)" :current="lifecycle.currentWeekId===selectedDraft.id" :viewing="context.selectedWeekId===selectedDraft.id" :deadline-time="deadlineTime" :disabled="status==='saving'" :dirty="isDirty" :save-state="status" :save-message="statusMessage" @update:model-value="replaceSelected" @save="save" @cancel="cancelSelected" @view="viewWeek(selectedDraft.id)" @open-schedule="openSchedule(selectedDraft.id)"/>
         <AppCard v-else padding="lg" class="empty-weeks"><h2>Chọn một tuần</h2><p>Chọn tuần ở danh sách bên trái để chỉnh cấu hình vận hành.</p></AppCard>
       </div>
     </section>

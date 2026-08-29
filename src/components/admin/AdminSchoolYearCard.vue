@@ -9,8 +9,9 @@ import type { TimetableConfig } from '../../features/timetable/timetable-types'
 import type { AdminCalendarWeekRecord, AdminClassRecord, AdminSchoolYearRecord, AdminTimetableAssignmentRecord, AdminTimetableTemplateRecord, AdminTimetableVersionRecord } from '../../features/admin/admin-directory'
 
 type GeneratedDay={weekday:number;periods:Array<{number:number;start:string;end:string;session:'morning'|'afternoon'}>}
+type TimetableFeedback={state:'idle'|'saving'|'success'|'error'|'server-changed';message:string;selectedTemplateId?:string;version?:number;token:number}
 const props=defineProps<{
-  item:AdminSchoolYearRecord;weeks:AdminCalendarWeekRecord[];classes:AdminClassRecord[];templates:AdminTimetableTemplateRecord[];versions:AdminTimetableVersionRecord[];assignments:AdminTimetableAssignmentRecord[];busy:boolean;busyWeekId?:string|null;busyTimetable?:boolean;busyAssignment?:boolean
+  item:AdminSchoolYearRecord;weeks:AdminCalendarWeekRecord[];classes:AdminClassRecord[];templates:AdminTimetableTemplateRecord[];versions:AdminTimetableVersionRecord[];assignments:AdminTimetableAssignmentRecord[];busy:boolean;busyWeekId?:string|null;busyTimetable?:boolean;busyAssignment?:boolean;timetableFeedback?:TimetableFeedback
 }>()
 const emit=defineEmits<{
   activate:[id:string];saveWeek:[input:{weekId:string;startDate:string;endDate:string}]
@@ -28,7 +29,7 @@ function save(week:AdminCalendarWeekRecord){const draft=drafts[week.id];if(!draf
   <article class="year-card" :class="{active:item.active}">
     <div class="year-heading"><div class="year-icon"><CalendarDays/></div><div class="year-copy"><div class="year-title"><h3>{{ item.name }}</h3><AppBadge v-if="item.active" tone="success"><CheckCircle2/>Đang hoạt động</AppBadge></div><p>{{ formatDate(item.startDate) }} → {{ formatDate(item.endDate) }}</p></div><AppButton v-if="!item.active" variant="secondary" :loading="busy" @click="emit('activate',item.id)">Đặt đang hoạt động</AppButton></div>
     <div class="calendar-editor"><div class="calendar-editor-title"><b>Lịch tuần chuẩn</b><span>Admin thiết lập ngày; GV chỉ vận hành deadline và trạng thái từng lớp.</span></div><div class="week-grid"><div v-for="week in weeks" :key="week.id" class="week-row"><b>Tuần {{ week.number }}</b><label><span>Bắt đầu</span><input v-model="drafts[week.id].startDate" type="date"></label><label><span>Kết thúc</span><input v-model="drafts[week.id].endDate" type="date"></label><AppButton variant="secondary" size="sm" :disabled="!dirty(week)" :loading="busyWeekId===week.id" @click="save(week)"><Save/>Lưu lịch tuần</AppButton></div></div></div>
-    <AdminTimetableBuilder :school-year-id="item.id" :templates="templates" :versions="versions" :busy="busyTimetable" @create="emit('createTemplate',$event)" @save-version="emit('saveVersion',$event)"/>
+    <AdminTimetableBuilder :school-year-id="item.id" :templates="templates" :versions="versions" :busy="busyTimetable" :feedback="timetableFeedback" @create="emit('createTemplate',$event)" @save-version="emit('saveVersion',$event)"/>
     <AdminTimetableAssignment :school-year-id="item.id" :year-start="item.startDate" :year-end="item.endDate" :classes="classes" :templates="templates" :versions="versions" :assignments="assignments" :busy="busyAssignment" @assign="emit('assignTemplate',$event)"/>
   </article>
 </template>
