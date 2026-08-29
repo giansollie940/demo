@@ -1,12 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import fs from 'node:fs'
-<<<<<<< HEAD
-const read=file=>fs.readFileSync(file,'utf8')
-test('R7 Figma source is represented by panorama login and reference-density dashboard',()=>{const l=read('src/pages/LoginPage.vue');const d=read('src/pages/DashboardPage.vue');assert.match(l,/login-panorama/);assert.match(l,/login-card-float/);assert.match(d,/dashboard-kpi-grid/);assert.match(d,/dashboard-workspace-r7/)})
-test('R7 desktop sidebar toggle remains visible and accessible',()=>{const s=read('src/layouts/AppShell.vue');assert.match(s,/z-index:\s*65/);assert.match(s,/right:\s*-17px/);assert.match(s,/Mở rộng thanh điều hướng/);assert.match(s,/Thu gọn thanh điều hướng/)})
-test('R7 compact state still exposes Mac-like tooltip navigation',()=>{const n=read('src/components/layout/SidebarNav.vue');assert.match(n,/\.collapsed \.nav-item/);assert.match(n,/nav-tooltip/);assert.match(n,/dockScale/)})
-=======
 import path from 'node:path'
 
 const root=path.resolve(new URL('..',import.meta.url).pathname)
@@ -16,7 +10,7 @@ test('R6.3 dashboard treats Figma 6:2 as source of truth for desktop geometry',(
   const page=read('src/pages/DashboardPage.vue')
   assert.match(page,/\.dashboard-page\{[^}]*max-width:1292px/s)
   assert.match(page,/\.dashboard-hero\{[^}]*min-height:190px/s)
-  assert.match(page,/\.dashboard-hero\{[^}]*grid-template-columns:minmax\(0,1fr\)\s+470px/s)
+  assert.match(page,/\.hero-illustration\{[^}]*position:absolute[^}]*width:min\(52%,640px\)[^}]*height:100%/s)
   assert.match(page,/\.dashboard-stat-grid\{[^}]*grid-template-columns:repeat\(4,minmax\(0,1fr\)\)/s)
   assert.match(page,/\.metrics\s+:deep\(\.card\)\{[^}]*min-height:114px/s)
   assert.match(page,/\.dashboard-main-grid\{[^}]*grid-template-columns:minmax\(0,820px\)\s+minmax\(0,454px\)/s)
@@ -54,4 +48,3 @@ test('R6.3 keeps compact Mac-like sidebar and does not replace it with wide refe
   assert.match(nav,/\.collapsed \.nav-item\{[^}]*justify-content:center/s)
   assert.match(nav,/\.nav-tooltip\{/)
 })
->>>>>>> parent of 66b0142 (demo 36)

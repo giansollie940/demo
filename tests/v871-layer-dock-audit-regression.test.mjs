@@ -7,23 +7,25 @@ const read = (p) => fs.readFileSync(new URL(`../${p}`, import.meta.url), 'utf8')
 test('app shell preserves independent topbar owl and content stacking layers', () => {
   const shell = read('src/layouts/AppShell.vue')
   assert.doesNotMatch(shell, /\.main\s*>\s*\*\s*\{[^}]*z-index\s*:\s*1/i)
-  assert.match(shell, /\.content\s*\{[^}]*z-index\s*:\s*10/i)
+  assert.match(shell, /\.content\{[^}]*z-index\s*:\s*10/i)
   const topbar = read('src/components/layout/TopBar.vue')
   assert.match(topbar, /\.topbar\{[^}]*z-index\s*:\s*60/i)
   assert.match(topbar, /\.profile-dropdown\{[^}]*z-index\s*:\s*100/i)
   const owl = read('src/components/owl/WiseOwl.vue')
   assert.match(owl, /\.wise-owl\{[^}]*position\s*:\s*fixed[^}]*z-index\s*:\s*80/i)
 })
-test('R7 desktop dock keeps icon transforms visible while its expanded navigation region can scroll', () => {
+
+test('desktop vertical dock can render outside sidebar without scroll clipping', () => {
   const nav = read('src/components/layout/SidebarNav.vue')
   const baseRule = nav.match(/\.side-nav\{([^}]*)\}/i)?.[1] ?? ''
   assert.match(baseRule, /overflow\s*:\s*visible/i)
+  assert.doesNotMatch(baseRule, /overflow-y\s*:\s*auto/i)
   assert.match(nav, /@media\(max-height:\s*760px\)[^{]*\{[^}]*\.side-nav\{[^}]*overflow-y\s*:\s*auto/i)
   const shell = read('src/layouts/AppShell.vue')
-  assert.match(shell, /\.sidebar-r7\s*\{[^}]*overflow:\s*visible/is)
-  assert.match(shell, /\.nav-safe-zone\s*\{[^}]*overflow-y:\s*auto/is)
-  assert.match(shell, /\.nav-safe-zone\s*\{[^}]*overflow-x:\s*visible/is)
+  assert.match(shell, /\.sidebar\{[^}]*overflow\s*:\s*visible/i)
+  assert.match(shell, /\.nav-safe-zone\{[^}]*overflow\s*:\s*visible/i)
 })
+
 test('audit UI distinguishes backend failure from a truly empty audit log', () => {
   const audit = read('src/components/admin/AdminAuditLog.vue')
   const bridge = read('public/supabase-service.js')

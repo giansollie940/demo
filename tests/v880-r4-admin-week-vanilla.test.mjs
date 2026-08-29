@@ -50,6 +50,6 @@ test('vanilla school background is bundled by Vite and uses the theme opacity to
   assert.ok(exists('src/assets/images/school-pattern-bg.png'))
   assert.match(shell,/import schoolPatternUrl from ['"]\.\.\/assets\/images\/school-pattern-bg\.png['"]/)
   assert.doesNotMatch(shell,/schoolPatternUrl\s*=\s*`\$\{import\.meta\.env\.BASE_URL\}/)
-  assert.match(shell,/background-image:\s*var\(--school-pattern-image\)/)
-  assert.match(shell,/opacity:\s*var\(--pattern-opacity\)/)
+  assert.match(shell,/background-image:var\(--school-pattern-image\)/)
+  assert.match(shell,/opacity:var\(--pattern-opacity\)/)
 })

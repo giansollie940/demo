@@ -1,12 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import fs from 'node:fs'
-<<<<<<< HEAD
-const read=file=>fs.readFileSync(file,'utf8')
-test('R7 login keeps continuous autofill fields and illustration-only motion',()=>{const p=read('src/pages/LoginPage.vue');assert.match(p,/input:-webkit-autofill/);assert.match(p,/login-students-drift/);assert.match(p,/prefers-reduced-motion/);assert.doesNotMatch(p,/GitHub|github/i)})
-test('R7 dashboard uses dedicated high-density student artwork',()=>{const p=read('src/pages/DashboardPage.vue');assert.match(p,/r7-dashboard-students@2x\.png/);assert.doesNotMatch(p,/teacher-dashboard-illustration|student-group-dashboard-blend/)})
-test('R7 sidebar uses original favicon shell and profile block without nested nav island',()=>{const s=read('src/layouts/AppShell.vue');assert.match(s,/class="side-head"/);assert.match(s,/SidebarProfileCard/);assert.doesNotMatch(s,/nav-island/)})
-=======
 import path from 'node:path'
 
 const root=path.resolve(new URL('..',import.meta.url).pathname)
@@ -34,15 +28,15 @@ test('R6.2 login autofill paints the entire field and removes split white ends',
   const login=read('src/pages/LoginPage.vue')
   assert.match(login,/\.field:has\(input:-webkit-autofill\)/)
   assert.match(login,/input:-webkit-autofill/)
-  assert.match(login,/-webkit-box-shadow:0 0 0 1000px/)
-  assert.match(login,/-webkit-text-fill-color:var\(--text\)/)
+  assert.match(login,/-webkit-box-shadow:\s*0 0 0 1000px/)
+  assert.match(login,/-webkit-text-fill-color:\s*var\(--text\)/)
 })
 
 test('R6.2 login illustration uses restrained CSS motion with reduced-motion fallback',()=>{
   const login=read('src/pages/LoginPage.vue')
-  assert.match(login,/animation:login-hero-float/)
-  assert.match(login,/@keyframes login-hero-float/)
-  assert.match(login,/@media\(prefers-reduced-motion:reduce\)[\s\S]*\.hero-card/)
+  assert.match(login,/animation:\s*login-hero-drift/)
+  assert.match(login,/@keyframes login-hero-drift/)
+  assert.match(login,/@media\s*\(prefers-reduced-motion:\s*reduce\)[\s\S]*\.hero-card img/)
 })
 
 test('R6.2 dashboard uses a student study group illustration instead of teacher illustration',()=>{
@@ -51,4 +45,3 @@ test('R6.2 dashboard uses a student study group illustration instead of teacher 
   assert.doesNotMatch(dashboard,/teacher-dashboard-illustration\.png/)
   assert.ok(fs.existsSync(path.join(root,'public/assets/images/student-group-dashboard.png')))
 })
->>>>>>> parent of 66b0142 (demo 36)

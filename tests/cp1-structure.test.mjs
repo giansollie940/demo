@@ -11,7 +11,7 @@ const required=[
   'src/services/legacy-supabase.ts','src/layouts/AppShell.vue','src/layouts/AuthLayout.vue',
   'src/pages/LoginPage.vue','src/pages/DashboardPage.vue',
   'src/styles/tokens.css','src/styles/themes.css','src/styles/base.css',
-  'public/supabase-service.js','public/assets/images/favicon.png','src/assets/images/r7-login-students@2x.png'
+  'public/supabase-service.js','public/assets/images/favicon.png','public/assets/images/login-hero.png'
 ];
 
 test('Vue checkpoint contains required architecture files',()=>{

@@ -38,10 +38,11 @@ test('school pattern is an independent layer so content surfaces cannot hide it'
   assert.match(shell,/\.main::before/)
   assert.match(shell,/background-image:\s*var\(--school-pattern-image\)/)
   assert.match(shell,/opacity:\s*var\(--pattern-opacity\)/)
-  assert.match(shell,/pointer-events:\s*none/)
-  assert.match(shell,/\.content\s*\{[^}]*z-index:\s*10/s)
+  assert.match(shell,/pointer-events:none/)
+  assert.match(shell,/\.content\{[^}]*z-index:10/s)
   assert.doesNotMatch(shell,/background-blend-mode:\s*normal,multiply/)
 })
+
 test('dark mode uses warm charcoal plum surfaces and suppresses the pattern without removing it',()=>{
   const themes=read('src/styles/themes.css')
   assert.match(themes,/\[data-theme='dark'\][\s\S]*--bg:#17151c/i)
