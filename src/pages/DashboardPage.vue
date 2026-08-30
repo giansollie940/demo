@@ -670,7 +670,7 @@ const attentionCount = computed(
    * Đây là giá trị chính để đẩy chữ sang phải.
    * Có thể tăng lên 32px / 36px nếu muốn thêm.
    */
-  padding-left: 48px;
+  padding-left: 72px;
 
   min-height: 84px;
 
