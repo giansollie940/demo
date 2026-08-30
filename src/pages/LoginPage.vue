@@ -1,4 +1,4 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import { computed, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useIntervalFn } from '@vueuse/core'
@@ -232,8 +232,8 @@ async function submit() {
 .hero-card {
   width: min(820px, 100%);
   min-height: 0;
-  margin: -26px 0 -18px auto;
-  justify-self: end;
+  margin: -26px auto -18px auto;
+  justify-self: center;
   overflow: visible;
   border: 0;
   border-radius: 0;
@@ -247,7 +247,7 @@ async function submit() {
   height: 100%;
   max-height: 430px;
   object-fit: contain;
-  object-position: right center;
+  object-position: center center;
   border: 0;
   filter: none;
   -webkit-mask-image: linear-gradient(90deg, transparent 0%, #000 9%, #000 100%);
