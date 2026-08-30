@@ -1,0 +1,72 @@
+import { useQuery, type QueryClient } from '@tanstack/vue-query'
+import { legacyApi } from '../../services/legacy-supabase'
+import type { DirectoryUser, LegacyState, TeacherUserChanges } from '../../types/legacy'
+import type { TimetableConfig } from '../timetable/timetable-types'
+export interface GeneratedTimetableDay {weekday:number;periods:Array<{number:number;start:string;end:string;session:'morning'|'afternoon'}>}
+
+export interface AdminSchoolYearRecord {id:string;name:string;startDate:string;endDate:string;active:boolean}
+export interface AdminCalendarWeekRecord {id:string;schoolYearId:string;number:number;startDate:string;endDate:string;status:string}
+export interface AdminSchoolYearPeriodRecord {schoolYearId:string;number:number;start:string;end:string}
+export interface AdminClassRecord {id:string;schoolYearId:string;code:string;name:string;active:boolean;learnerCount:number;profileCount:number;registrationCount:number;canDelete:boolean;deleteBlockers:Array<{code?:string;message?:string}>}
+export interface AdminTeacherRecord {id:string;code:string;fullName:string;active:boolean}
+export interface AdminAssignmentRecord {classId:string;teacherId:string;active:boolean}
+export interface AdminTimetableTemplateRecord {id:string;schoolYearId:string;name:string;active:boolean;latestVersionId:string|null;latestVersionNumber:number}
+export interface AdminTimetableVersionRecord {id:string;templateId:string;version:number;config:TimetableConfig;createdAt:string}
+export interface AdminTimetableAssignmentRecord {id:string;classId:string;schoolYearId:string;templateVersionId:string;effectiveFrom:string;effectiveTo:string;active:boolean}
+export interface AdminDirectory {
+  schoolYears:AdminSchoolYearRecord[];weeks:AdminCalendarWeekRecord[];periods:AdminSchoolYearPeriodRecord[];classes:AdminClassRecord[];teachers:AdminTeacherRecord[];assignments:AdminAssignmentRecord[];users:DirectoryUser[]
+  timetableTemplates:AdminTimetableTemplateRecord[];timetableVersions:AdminTimetableVersionRecord[];timetableAssignments:AdminTimetableAssignmentRecord[]
+}
+
+const text=(value:unknown)=>String(value??'').trim(),num=(value:unknown)=>Number(value??0)||0,on=(value:unknown)=>value!==false
+function timetableConfig(value:unknown):TimetableConfig{
+  const row=(value&&typeof value==='object'?value:{}) as Record<string,unknown>
+  return{
+    morningStart:(row.morningStart??row.morning_start??null) as string|null,morningEnd:(row.morningEnd??row.morning_end??null) as string|null,
+    afternoonStart:(row.afternoonStart??row.afternoon_start??null) as string|null,afternoonEnd:(row.afternoonEnd??row.afternoon_end??null) as string|null,
+    defaultPeriodMinutes:num(row.defaultPeriodMinutes??row.default_period_minutes)||40,shortBreakMinutes:num(row.shortBreakMinutes??row.short_break_minutes)||5,longBreakMinutes:num(row.longBreakMinutes??row.long_break_minutes)||15,
+    morningLongBreakEnabled:row.morningLongBreakEnabled===undefined?true:row.morningLongBreakEnabled!==false,
+    morningLongBreakAfterPeriod:num(row.morningLongBreakAfterPeriod??row.morning_long_break_after_period)||2,
+    afternoonLongBreakEnabled:row.afternoonLongBreakEnabled===undefined?true:row.afternoonLongBreakEnabled!==false,
+    afternoonLongBreakAfterPeriod:num(row.afternoonLongBreakAfterPeriod??row.afternoon_long_break_after_period)||7,
+    periodOverrides:Array.isArray(row.periodOverrides)?row.periodOverrides as TimetableConfig['periodOverrides']:[],breakRules:Array.isArray(row.breakRules)?row.breakRules as TimetableConfig['breakRules']:[],dayOverrides:(row.dayOverrides&&typeof row.dayOverrides==='object'?row.dayOverrides:{}) as TimetableConfig['dayOverrides'],
+  }
+}
+export function normalizeAdminDirectory(raw:Record<string,unknown>):AdminDirectory{
+  const schoolYears=(Array.isArray(raw.schoolYears)?raw.schoolYears:Array.isArray(raw.school_years)?raw.school_years:[]).map(item=>{const row=item as Record<string,unknown>;return{id:text(row.id),name:text(row.name),startDate:text(row.start_date??row.startDate),endDate:text(row.end_date??row.endDate),active:row.is_active===true||row.active===true}}).filter(row=>row.id)
+  const weeks=(Array.isArray(raw.weeks)?raw.weeks:[]).map(item=>{const row=item as Record<string,unknown>;return{id:text(row.id),schoolYearId:text(row.school_year_id??row.schoolYearId),number:num(row.week_number??row.number),startDate:text(row.start_date??row.startDate),endDate:text(row.end_date??row.endDate),status:text(row.status||'upcoming')}}).filter(row=>row.id&&row.schoolYearId)
+  const periods=(Array.isArray(raw.periods)?raw.periods:Array.isArray(raw.schoolYearPeriods)?raw.schoolYearPeriods:[]).map(item=>{const row=item as Record<string,unknown>;return{schoolYearId:text(row.school_year_id??row.schoolYearId),number:num(row.period_number??row.number),start:text(row.start_time??row.start).slice(0,5),end:text(row.end_time??row.end).slice(0,5)}}).filter(row=>row.schoolYearId&&row.number>0)
+  const classes=(Array.isArray(raw.classes)?raw.classes:[]).map(item=>{const row=item as Record<string,unknown>;return{id:text(row.id),schoolYearId:text(row.school_year_id??row.schoolYearId),code:text(row.code),name:text(row.name??row.code),active:on(row.active),learnerCount:num(row.learnerCount??row.learner_count),profileCount:num(row.profileCount??row.profile_count),registrationCount:num(row.registrationCount??row.registration_count),canDelete:row.canDelete===true||row.can_delete===true,deleteBlockers:(Array.isArray(row.deleteBlockers)?row.deleteBlockers:Array.isArray(row.delete_blockers)?row.delete_blockers:[]) as Array<{code?:string;message?:string}>}}).filter(row=>row.id)
+  const teachers=(Array.isArray(raw.teachers)?raw.teachers:[]).map(item=>{const row=item as Record<string,unknown>;return{id:text(row.id),code:text(row.student_code??row.code),fullName:text(row.full_name??row.fullName??row.name),active:on(row.active)}}).filter(row=>row.id)
+  const assignments=(Array.isArray(raw.assignments)?raw.assignments:[]).map(item=>{const row=item as Record<string,unknown>;return{classId:text(row.class_id??row.classId),teacherId:text(row.teacher_id??row.teacherId),active:on(row.active)}}).filter(row=>row.classId&&row.teacherId)
+  const users=(Array.isArray(raw.users)?raw.users:[]).map(item=>{const row=item as Record<string,unknown>;return{id:text(row.id),code:text(row.code??row.student_code).toUpperCase(),fullName:text(row.fullName??row.full_name??row.name),role:String(row.role??'student') as DirectoryUser['role'],classId:(row.classId??row.class_id??null) as string|null,active:on(row.active),deletedAt:(row.deletedAt??row.deleted_at??null) as string|null}}).filter(row=>row.id)
+  const timetableTemplates=(Array.isArray(raw.timetableTemplates)?raw.timetableTemplates:Array.isArray(raw.timetable_templates)?raw.timetable_templates:[]).map(item=>{const row=item as Record<string,unknown>;return{id:text(row.id),schoolYearId:text(row.school_year_id??row.schoolYearId),name:text(row.name),active:on(row.active),latestVersionId:text(row.latest_version_id??row.latestVersionId)||null,latestVersionNumber:num(row.latest_version_number??row.latestVersionNumber)}}).filter(row=>row.id)
+  const timetableVersions=(Array.isArray(raw.timetableVersions)?raw.timetableVersions:Array.isArray(raw.timetable_versions)?raw.timetable_versions:[]).map(item=>{const row=item as Record<string,unknown>;return{id:text(row.id),templateId:text(row.template_id??row.templateId),version:num(row.version_number??row.version),config:timetableConfig(row.config),createdAt:text(row.created_at??row.createdAt)}}).filter(row=>row.id&&row.templateId)
+  const timetableAssignments=(Array.isArray(raw.timetableAssignments)?raw.timetableAssignments:Array.isArray(raw.timetable_assignments)?raw.timetable_assignments:[]).map(item=>{const row=item as Record<string,unknown>;return{id:text(row.id),classId:text(row.class_id??row.classId),schoolYearId:text(row.school_year_id??row.schoolYearId),templateVersionId:text(row.template_version_id??row.templateVersionId),effectiveFrom:text(row.effective_from??row.effectiveFrom),effectiveTo:text(row.effective_to??row.effectiveTo),active:on(row.active)}}).filter(row=>row.id&&row.classId&&row.templateVersionId)
+  return{schoolYears,weeks,periods,classes,teachers,assignments,users,timetableTemplates,timetableVersions,timetableAssignments}
+}
+
+export const adminDirectoryKey=['admin-directory'] as const
+export function useAdminDirectory(){return useQuery({queryKey:adminDirectoryKey,queryFn:async()=>{const[directory,userResponse]=await Promise.all([legacyApi.adminManageClasses('list'),legacyApi.teacherListUsers(null)]);return normalizeAdminDirectory({...directory,users:Array.isArray(userResponse.users)?userResponse.users:[]})},staleTime:30_000})}
+export interface AdminMutationRuntime{queryClient:QueryClient;reload():Promise<LegacyState|null>}
+async function refresh(runtime:AdminMutationRuntime){await runtime.reload();await runtime.queryClient.invalidateQueries({queryKey:adminDirectoryKey})}
+async function optimistic(runtime:AdminMutationRuntime,patch:(data:AdminDirectory)=>AdminDirectory,task:()=>Promise<unknown>){const before=runtime.queryClient.getQueryData<AdminDirectory>(adminDirectoryKey);if(before)runtime.queryClient.setQueryData<AdminDirectory>(adminDirectoryKey,patch(before));try{const result=await task();await refresh(runtime);return result}catch(error){if(before)runtime.queryClient.setQueryData(adminDirectoryKey,before);throw error}}
+
+export async function assignTeacher(runtime:AdminMutationRuntime,classId:string,teacherId:string,enabled:boolean){return optimistic(runtime,data=>({...data,assignments:enabled?[...data.assignments.filter(row=>!(row.classId===classId&&row.teacherId===teacherId)),{classId,teacherId,active:true}]:data.assignments.map(row=>row.classId===classId&&row.teacherId===teacherId?{...row,active:false}:row)}),()=>legacyApi.adminManageClasses(enabled?'assign_teacher':'unassign_teacher',{classId,teacherId}))}
+export async function createClass(runtime:AdminMutationRuntime,input:{code:string;name:string;schoolYearId:string|null}){await legacyApi.adminManageClasses('create_class',{code:input.code,name:input.name,schoolYearId:input.schoolYearId});await refresh(runtime)}
+export async function updateClass(runtime:AdminMutationRuntime,classId:string,changes:Record<string,unknown>){return optimistic(runtime,data=>({...data,classes:data.classes.map(row=>row.id===classId?{...row,...changes}:row)}),()=>legacyApi.adminManageClasses('update_class',{classId,...changes}))}
+export async function deleteClass(runtime:AdminMutationRuntime,classId:string){await legacyApi.adminManageClasses('delete_class',{classId});await refresh(runtime)}
+export async function createTeacher(runtime:AdminMutationRuntime,input:TeacherUserChanges){const result=await legacyApi.teacherCreateUser(input);await refresh(runtime);return result}
+export async function updateTeacher(runtime:AdminMutationRuntime,userId:string,input:TeacherUserChanges){return optimistic(runtime,data=>({...data,teachers:data.teachers.map(row=>row.id===userId?{...row,code:input.code,fullName:input.fullName,active:input.active!==false}:row),users:data.users.map(row=>row.id===userId?{...row,code:input.code,fullName:input.fullName,active:input.active!==false}:row)}),()=>legacyApi.teacherUpdateUser(userId,input))}
+export async function deleteTeacher(runtime:AdminMutationRuntime,userId:string,confirmCode:string){await legacyApi.teacherDeleteUser(userId,confirmCode);await refresh(runtime)}
+export async function hardDeleteUser(runtime:AdminMutationRuntime,userId:string,confirmCode:string,confirmPhrase:string){await legacyApi.adminHardDeleteUser(userId,confirmCode,confirmPhrase);runtime.queryClient.setQueryData<AdminDirectory>(adminDirectoryKey,data=>data?({...data,users:data.users.filter(row=>row.id!==userId),teachers:data.teachers.filter(row=>row.id!==userId)}):data);await refresh(runtime)}
+export async function resetManagedPassword(userId:string,password:string){return legacyApi.teacherResetPassword(userId,password)}
+export async function createManagedUser(runtime:AdminMutationRuntime,input:TeacherUserChanges){const result=await legacyApi.teacherCreateUser(input);await refresh(runtime);return result}
+export async function updateManagedUser(runtime:AdminMutationRuntime,userId:string,input:TeacherUserChanges){return optimistic(runtime,data=>({...data,users:data.users.map(row=>row.id===userId?{...row,code:input.code,fullName:input.fullName,role:input.role,classId:input.classId??null,active:input.active!==false}:row)}),()=>legacyApi.teacherUpdateUser(userId,input))}
+export async function createSchoolYear(runtime:AdminMutationRuntime,input:{name:string;startDate:string;endDate:string;setActive:boolean}){const result=await legacyApi.adminManageClasses('create_school_year',input);await refresh(runtime);return result}
+export async function setActiveSchoolYear(runtime:AdminMutationRuntime,schoolYearId:string){const result=await legacyApi.adminManageClasses('set_active_school_year',{schoolYearId});await refresh(runtime);return result}
+export async function updateSchoolYearWeek(runtime:AdminMutationRuntime,input:{weekId:string;startDate:string;endDate:string}){const result=await legacyApi.adminManageClasses('update_school_year_week',input);await refresh(runtime);return result}
+export async function updateSchoolYearPeriods(runtime:AdminMutationRuntime,input:{schoolYearId:string;periods:Array<{number:number;start:string;end:string}>}){const result=await legacyApi.adminManageClasses('update_school_year_periods',input);await refresh(runtime);return result}
+export async function createTimetableTemplate(runtime:AdminMutationRuntime,input:{schoolYearId:string;name:string;config:TimetableConfig;generatedDays:GeneratedTimetableDay[]}){const result=await legacyApi.adminManageClasses('create_timetable_template',input);await refresh(runtime);return result}
+export async function saveTimetableVersion(runtime:AdminMutationRuntime,input:{templateId:string;config:TimetableConfig;generatedDays:GeneratedTimetableDay[]}){const result=await legacyApi.adminManageClasses('save_timetable_version',input);await refresh(runtime);return result}
+export async function assignTimetableTemplate(runtime:AdminMutationRuntime,input:{classId:string;schoolYearId:string;templateVersionId:string;effectiveFrom:string;effectiveTo:string}){const result=await legacyApi.adminManageClasses('assign_timetable_template',input);await refresh(runtime);return result}
