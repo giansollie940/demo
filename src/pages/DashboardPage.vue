@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
+import { RouterLink } from 'vue-router'
 import {
   AlertCircle,
   CheckCircle2,
@@ -34,7 +35,7 @@ const isStudent = computed(() => auth.currentUser?.role === 'student')
 const isMonitor = computed(() => auth.currentUser?.role === 'monitor')
 const isLearner = computed(() => isStudent.value || isMonitor.value)
 
-const slots = computed(() => {
+const scheduleSlots = computed(() => {
   const state = auth.legacyState
 
   if (!state) return []
@@ -59,7 +60,7 @@ const slots = computed(() => {
 const registrations = computed(
   () =>
     weekQuery.data.value?.registrations ??
-    auth.legacyState?.registrations.filter(
+    auth.legacyState?.registrations?.filter(
       row => row.weekId === weekId.value
     ) ??
     []
@@ -77,7 +78,7 @@ const classMetrics = computed(() =>
   buildDashboardMetrics({
     users: auth.legacyState?.users ?? [],
     registrations: registrations.value,
-    slots: slots.value,
+    slots: scheduleSlots.value,
     week: week.value,
     periods: auth.legacyState?.periods ?? [],
     nowMs: nowMs.value
@@ -88,7 +89,7 @@ const personalMetrics = computed(() =>
   buildDashboardMetrics({
     users: auth.currentUser ? [auth.currentUser] : [],
     registrations: personalRegistrations.value,
-    slots: slots.value,
+    slots: scheduleSlots.value,
     week: week.value,
     periods: auth.legacyState?.periods ?? [],
     nowMs: nowMs.value
@@ -127,7 +128,9 @@ const attentionCount = computed(
     <!-- HERO -->
     <section class="dashboard-hero app-card">
 
+      <!-- CHỮ BÊN TRÁI -->
       <div class="hero-copy">
+
         <span class="hero-kicker">
           TỔNG QUAN TUẦN
         </span>
@@ -148,12 +151,13 @@ const attentionCount = computed(
 
         <p v-else>
           {{
-            auth.legacyState?.settings.announcement ||
+            auth.legacyState?.settings?.announcement ||
             'Theo dõi tiến độ tự học và các mục cần xử lý của lớp.'
           }}
         </p>
 
         <div class="hero-meta">
+
           <span class="week-pill">
             Tuần {{ week?.number ?? '–' }}
 
@@ -169,20 +173,25 @@ const attentionCount = computed(
                 : 'Đã đồng bộ'
             }}
           </AppBadge>
+
         </div>
+
       </div>
 
+      <!-- HÌNH BÊN PHẢI -->
       <div class="hero-illustration">
         <img
           :src="dashboardIllustrationUrl"
           alt=""
         />
       </div>
+
     </section>
 
 
     <!-- STUDENT -->
     <template v-if="isStudent">
+
       <section class="role-section">
 
         <div class="role-heading">
@@ -219,7 +228,9 @@ const attentionCount = computed(
           </AppCard>
 
         </div>
+
       </section>
+
     </template>
 
 
@@ -262,6 +273,7 @@ const attentionCount = computed(
           </AppCard>
 
         </div>
+
       </section>
 
 
@@ -299,6 +311,7 @@ const attentionCount = computed(
           </AppCard>
 
         </div>
+
       </section>
 
     </template>
@@ -340,13 +353,14 @@ const attentionCount = computed(
     <!-- MAIN PANELS -->
     <section class="dashboard-main-grid">
 
-      <!-- WORK -->
+      <!-- WORK PANEL -->
       <AppCard
         padding="lg"
         class="work-panel"
       >
 
         <div class="panel-heading">
+
           <div>
             <span class="panel-kicker">
               ƯU TIÊN
@@ -360,7 +374,9 @@ const attentionCount = computed(
               Những mục cần phản hồi trong tuần đang xem.
             </p>
           </div>
+
         </div>
+
 
         <div class="task-list">
 
@@ -368,12 +384,14 @@ const attentionCount = computed(
             v-if="!isLearner"
             class="task-row"
           >
+
             <span class="task-dot task-warning"></span>
 
             <div>
               <b>
                 Đăng ký cần giáo viên xử lý
               </b>
+
               <small>
                 Ưu tiên duyệt hoặc phản hồi
               </small>
@@ -382,6 +400,7 @@ const attentionCount = computed(
             <strong>
               {{ managerQueue }}
             </strong>
+
           </div>
 
 
@@ -393,6 +412,7 @@ const attentionCount = computed(
               <b>
                 Đăng ký cần chỉnh sửa
               </b>
+
               <small>
                 Đang chờ học sinh cập nhật
               </small>
@@ -401,6 +421,7 @@ const attentionCount = computed(
             <strong>
               {{ activeMetrics.needsRevision }}
             </strong>
+
           </div>
 
 
@@ -412,6 +433,7 @@ const attentionCount = computed(
               <b>
                 Báo cáo lỗi
               </b>
+
               <small>
                 Cần kiểm tra tình trạng quá hạn
               </small>
@@ -420,6 +442,7 @@ const attentionCount = computed(
             <strong>
               {{ activeMetrics.issues }}
             </strong>
+
           </div>
 
         </div>
@@ -436,13 +459,14 @@ const attentionCount = computed(
       </AppCard>
 
 
-      <!-- OVERVIEW -->
+      <!-- OVERVIEW PANEL -->
       <AppCard
         padding="lg"
         class="overview-panel"
       >
 
         <div class="panel-heading">
+
           <div>
 
             <span class="panel-kicker">
@@ -462,6 +486,7 @@ const attentionCount = computed(
             </p>
 
           </div>
+
         </div>
 
 
@@ -475,6 +500,7 @@ const attentionCount = computed(
           >
 
             <div>
+
               <strong>
                 {{ activeMetrics.completion }}%
               </strong>
@@ -482,6 +508,7 @@ const attentionCount = computed(
               <span>
                 đã đăng ký
               </span>
+
             </div>
 
           </div>
@@ -562,31 +589,38 @@ const attentionCount = computed(
 
 /* =========================================================
    HERO
-   Hình bên trái — chữ được đẩy sang phải hơn
+   Chữ trái — hình phải
    ========================================================= */
 
 .dashboard-hero {
-  min-height: 132px;
+  /*
+   * Khống chế chiều cao để Hero gọn hơn.
+   */
+  height: 190px;
+  min-height: 190px;
+
+  box-sizing: border-box;
 
   display: grid;
 
   /*
-   * Cột hình rộng hơn cột chữ.
-   * Điểm bắt đầu của vùng chữ vì vậy được đẩy sang phải.
+   * Chữ 47% — hình 53%
+   * Hình được ưu tiên thêm một chút diện tích.
    */
   grid-template-columns:
-    minmax(0, 1.08fr)
-    minmax(0, .92fr);
+    minmax(0, .98fr)
+    minmax(0, 1.02fr);
 
   column-gap: 32px;
 
   align-items: center;
 
   padding:
-    24px
+    14px
     32px;
 
   overflow: hidden;
+
   position: relative;
 
   background:
@@ -651,7 +685,7 @@ const attentionCount = computed(
 
 
 /* =========================================================
-   HERO COPY
+   HERO COPY — BÊN TRÁI
    ========================================================= */
 
 .hero-copy {
@@ -660,19 +694,21 @@ const attentionCount = computed(
 
   display: grid;
 
-  gap: 7px;
+  gap: 6px;
 
   align-content: center;
 
   width: 100%;
 
   /*
-   * Đây là giá trị chính để đẩy chữ sang phải.
-   * Có thể tăng lên 32px / 36px nếu muốn thêm.
+   * Căn vào trong một chút,
+   * tránh chữ quá sát mép trái Hero.
    */
-  padding-left: 72px;
+  padding-left: 22px;
 
-  min-height: 84px;
+  box-sizing: border-box;
+
+  min-width: 0;
 
   justify-self: stretch;
 }
@@ -681,7 +717,8 @@ const attentionCount = computed(
 .hero-kicker,
 .role-heading span,
 .panel-kicker {
-  color: var(--color-primary);
+  color:
+    var(--color-primary);
 
   font-size:
     var(--font-size-ui-min);
@@ -704,7 +741,8 @@ const attentionCount = computed(
 
   line-height: 1.08;
 
-  color: var(--text);
+  color:
+    var(--text);
 
   letter-spacing: -.035em;
 }
@@ -713,7 +751,10 @@ const attentionCount = computed(
 .hero-copy p {
   margin: 0;
 
-  max-width: 58ch;
+  /*
+   * Giữ dòng mô tả gọn.
+   */
+  max-width: 52ch;
 
   color:
     var(--text-muted);
@@ -733,7 +774,7 @@ const attentionCount = computed(
 
   flex-wrap: wrap;
 
-  margin-top: 5px;
+  margin-top: 3px;
 }
 
 
@@ -772,7 +813,7 @@ const attentionCount = computed(
 
 
 /* =========================================================
-   HERO ILLUSTRATION
+   HERO ILLUSTRATION — BÊN PHẢI
    ========================================================= */
 
 .hero-illustration {
@@ -781,17 +822,17 @@ const attentionCount = computed(
   width: 100%;
   height: 100%;
 
-  min-height: 132px;
+  min-width: 0;
 
   z-index: 1;
 
   overflow: hidden;
 
   /*
-   * Illustration nằm ở cột đầu tiên.
+   * Không còn order:-1.
+   * Trong template image đứng sau copy
+   * nên Grid tự đặt ảnh ở cột phải.
    */
-  order: -1;
-
   background: transparent;
 
   border: 0;
@@ -804,13 +845,16 @@ const attentionCount = computed(
 
 
 .hero-illustration img {
+  display: block;
+
   width: 100%;
   height: 100%;
 
   object-fit: contain;
 
   /*
-   * Căn giữa artwork trong riêng vùng hình.
+   * Căn artwork giữa vùng bên phải
+   * và bám đáy.
    */
   object-position:
     center bottom;
@@ -822,24 +866,28 @@ const attentionCount = computed(
   image-rendering: auto;
 
   /*
-   * Fade về phía phần chữ.
+   * Vì hình hiện nằm bên phải:
+   * fade ở cạnh TRÁI của artwork
+   * để chuyển mềm sang vùng chữ.
    */
   -webkit-mask-image:
     linear-gradient(
       90deg,
-      #000 58%,
-      rgba(0, 0, 0, .48) 82%,
-      rgba(0, 0, 0, .16) 94%,
-      transparent 100%
+      transparent 0%,
+      rgba(0, 0, 0, .18) 7%,
+      rgba(0, 0, 0, .65) 17%,
+      #000 30%,
+      #000 100%
     );
 
   mask-image:
     linear-gradient(
       90deg,
-      #000 58%,
-      rgba(0, 0, 0, .48) 82%,
-      rgba(0, 0, 0, .16) 94%,
-      transparent 100%
+      transparent 0%,
+      rgba(0, 0, 0, .18) 7%,
+      rgba(0, 0, 0, .65) 17%,
+      #000 30%,
+      #000 100%
     );
 }
 
@@ -866,7 +914,6 @@ const attentionCount = computed(
 
 .metrics {
   display: grid;
-
   gap: 14px;
 }
 
@@ -1468,21 +1515,30 @@ const attentionCount = computed(
     max-width: 1220px;
   }
 
-  /*
-   * Vẫn giữ vùng ảnh rộng hơn
-   * để chữ không chạy ngược sang trái.
-   */
-  .dashboard-hero {
-    grid-template-columns:
-      minmax(0, 1.05fr)
-      minmax(0, .95fr);
 
-    column-gap: 26px;
+  .dashboard-hero {
+    /*
+     * Hero thấp hơn desktop một chút.
+     */
+    height: 178px;
+    min-height: 178px;
+
+    grid-template-columns:
+      minmax(0, 1fr)
+      minmax(0, 1fr);
+
+    column-gap: 24px;
+
+    padding:
+      12px
+      28px;
   }
+
 
   .hero-copy {
     padding-left: 18px;
   }
+
 
   .dashboard-main-grid {
     grid-template-columns:
@@ -1521,15 +1577,21 @@ const attentionCount = computed(
 
 
   /*
-   * Khi chuyển sang 1 cột,
-   * bỏ khoảng đẩy chữ desktop.
+   * Hero chuyển thành một cột.
+   * Chữ ở trên, hình ở dưới.
    */
   .dashboard-hero {
+    height: auto;
+    min-height: 0;
+
     grid-template-columns: 1fr;
 
     column-gap: 0;
 
-    padding-bottom: 0;
+    padding:
+      22px
+      28px
+      0;
   }
 
 
@@ -1541,11 +1603,9 @@ const attentionCount = computed(
 
 
   .hero-illustration {
-    order: 0;
-
     height: 172px;
 
-    min-height: auto;
+    min-height: 0;
 
     margin-top: 12px;
 
@@ -1558,10 +1618,10 @@ const attentionCount = computed(
 
     height: 172px;
 
-    object-fit: cover;
+    object-fit: contain;
 
     object-position:
-      center 45%;
+      center bottom;
 
     -webkit-mask-image: none;
 
@@ -1590,7 +1650,7 @@ const attentionCount = computed(
 
   .dashboard-hero {
     padding:
-      22px
+      20px
       20px
       0;
   }
@@ -1629,3 +1689,4 @@ const attentionCount = computed(
 }
 
 </style>
+
