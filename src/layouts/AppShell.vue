@@ -52,6 +52,10 @@ async function logout() {
     :class="{
       collapsed: preferences.sidebarCollapsed
     }"
+    :style="{
+      '--school-pattern-image':
+        `url(${schoolPatternUrl})`
+    }"
   >
 
     <!-- =====================================================
@@ -156,10 +160,6 @@ async function logout() {
           ? 'true'
           : undefined
       "
-      :style="{
-        '--school-pattern-image':
-          `url(${schoolPatternUrl})`
-      }"
     >
 
       <TopBar
@@ -183,9 +183,14 @@ async function logout() {
 
 /* =========================================================
    APP SHELL
+   Nền chung cho SIDEBAR + MAIN
    ========================================================= */
 
 .shell {
+  position: relative;
+
+  isolation: isolate;
+
   min-height: 100vh;
 
   display: grid;
@@ -197,11 +202,8 @@ async function logout() {
     minmax(0, 1fr);
 
   /*
-   * QUAN TRỌNG:
-   * phần phía dưới island sidebar sử dụng
-   * cùng nền với toàn bộ ứng dụng.
-   *
-   * Điều này loại bỏ dải đen trong Dark Mode.
+   * Màu nền gốc.
+   * Pattern + overlay được đặt ở ::before / ::after.
    */
   background:
     var(--bg);
@@ -228,11 +230,91 @@ async function logout() {
 
 
 /* =========================================================
+   GLOBAL SCHOOL PATTERN
+
+   QUAN TRỌNG:
+   Pattern phủ toàn bộ shell,
+   kể cả vùng bên dưới sidebar.
+   ========================================================= */
+
+.shell::before {
+  content: "";
+
+  position: absolute;
+
+  z-index: 0;
+
+  inset: 0;
+
+  background-image:
+    var(--school-pattern-image);
+
+  background-position:
+    center top;
+
+  background-size:
+    920px auto;
+
+  background-repeat:
+    repeat;
+
+  opacity:
+    var(--pattern-opacity);
+
+  filter:
+    var(--pattern-filter);
+
+  pointer-events:
+    none;
+
+  transition:
+    filter
+      var(--theme-transition);
+}
+
+
+/* =========================================================
+   GLOBAL BACKGROUND OVERLAY
+
+   Cũng phủ toàn bộ shell.
+   ========================================================= */
+
+.shell::after {
+  content: "";
+
+  position: absolute;
+
+  z-index: 0;
+
+  inset: 0;
+
+  background:
+    linear-gradient(
+      var(--pattern-soft-overlay),
+      var(--pattern-soft-overlay)
+    ),
+    var(--pattern-dark-overlay);
+
+  pointer-events:
+    none;
+
+  transition:
+    background
+      var(--theme-transition),
+
+    opacity
+      var(--theme-transition);
+}
+
+
+/* =========================================================
    SIDEBAR ISLAND
    ========================================================= */
 
 .sidebar {
   position: sticky;
+
+  z-index: 40;
 
   top: 12px;
 
@@ -240,10 +322,8 @@ async function logout() {
     var(--sidebar-expanded);
 
   /*
-   * GIỮ max-content.
-   *
-   * Không đổi thành 100vh vì sidebar
-   * phải giữ dạng vertical island.
+   * GIỮ dạng vertical island.
+   * Không kéo sidebar xuống hết màn hình.
    */
   height: max-content;
 
@@ -258,7 +338,6 @@ async function logout() {
     0
     12px;
 
-
   display: grid;
 
   grid-template-rows:
@@ -266,9 +345,7 @@ async function logout() {
     auto
     auto;
 
-
   overflow: visible;
-
 
   border:
     1px solid
@@ -278,10 +355,8 @@ async function logout() {
       var(--border)
     );
 
-
   border-radius:
     26px;
-
 
   background:
     linear-gradient(
@@ -304,11 +379,9 @@ async function logout() {
       )
     );
 
-
   backdrop-filter:
     blur(22px)
     saturate(1.18);
-
 
   box-shadow:
     0
@@ -334,10 +407,6 @@ async function logout() {
     1px
     0
     rgb(255 255 255 / .48);
-
-
-  z-index: 40;
-
 
   transition:
     width
@@ -401,9 +470,7 @@ async function logout() {
 
   z-index: 30;
 
-
   height: 74px;
-
 
   display: flex;
 
@@ -411,18 +478,15 @@ async function logout() {
 
   gap: 10px;
 
-
   padding:
     10px
     12px;
-
 
   border-radius:
     25px
     25px
     18px
     18px;
-
 
   background:
     linear-gradient(
@@ -441,7 +505,6 @@ async function logout() {
       )
     );
 
-
   transition:
     background
       var(--theme-transition),
@@ -456,7 +519,6 @@ async function logout() {
 
   height: 40px;
 
-
   filter:
     drop-shadow(
       0
@@ -468,7 +530,6 @@ async function logout() {
         transparent
       )
     );
-
 
   transition:
     transform
@@ -485,7 +546,6 @@ img {
     translateY(-1px)
     rotate(-2deg)
     scale(1.04);
-
 
   filter:
     drop-shadow(
@@ -504,7 +564,6 @@ img {
 .side-head strong {
   white-space: nowrap;
 
-
   background:
     linear-gradient(
       100deg,
@@ -512,21 +571,17 @@ img {
       var(--color-coral)
     );
 
-
   -webkit-background-clip:
     text;
 
   background-clip:
     text;
 
-
   color:
     transparent;
 
-
   font-weight:
     900;
-
 
   letter-spacing:
     .03em;
@@ -534,7 +589,7 @@ img {
 
 
 /* =========================================================
-   EDGE TOGGLE
+   SIDEBAR EDGE TOGGLE
    ========================================================= */
 
 .sidebar-edge-toggle {
@@ -544,13 +599,11 @@ img {
   z-index:
     65;
 
-
   top:
     20px;
 
   right:
     -17px;
-
 
   width:
     34px;
@@ -558,13 +611,11 @@ img {
   height:
     34px;
 
-
   display:
     grid;
 
   place-items:
     center;
-
 
   border:
     1px solid
@@ -574,10 +625,8 @@ img {
       var(--border)
     );
 
-
   border-radius:
     999px;
-
 
   background:
     linear-gradient(
@@ -592,10 +641,8 @@ img {
       )
     );
 
-
   color:
     var(--color-primary);
-
 
   box-shadow:
     0
@@ -607,10 +654,8 @@ img {
       transparent
     );
 
-
   cursor:
     pointer;
-
 
   transition:
     transform
@@ -638,7 +683,6 @@ svg {
   height:
     17px;
 
-
   transition:
     transform
       var(--transition-fast);
@@ -649,14 +693,12 @@ svg {
   transform:
     scale(1.08);
 
-
   border-color:
     color-mix(
       in srgb,
       var(--color-primary) 50%,
       var(--border)
     );
-
 
   background:
     linear-gradient(
@@ -670,7 +712,6 @@ svg {
         var(--surface)
       )
     );
-
 
   box-shadow:
     0
@@ -716,10 +757,8 @@ svg {
   z-index:
     1;
 
-
   min-height:
     0;
-
 
   padding:
     0
@@ -729,10 +768,8 @@ svg {
   padding-top:
     24px;
 
-
   overflow:
     visible;
-
 
   display:
     grid;
@@ -753,7 +790,6 @@ svg {
   gap:
     4px;
 
-
   padding:
     8px;
 }
@@ -769,19 +805,15 @@ svg {
   gap:
     8px;
 
-
   margin:
     0
     2px;
 
-
   padding:
     10px;
 
-
   border-radius:
     13px;
-
 
   background:
     linear-gradient(
@@ -789,7 +821,6 @@ svg {
       var(--wash-cream),
       var(--wash-peach)
     );
-
 
   border:
     1px solid
@@ -799,22 +830,17 @@ svg {
       var(--border)
     );
 
-
   color:
     var(--text-muted);
-
 
   font-size:
     var(--font-size-ui-min);
 
-
   font-weight:
     750;
 
-
   line-height:
     1.35;
-
 
   transition:
     background
@@ -843,15 +869,18 @@ svg {
 
 /* =========================================================
    MAIN
+
+   QUAN TRỌNG:
+   Main không còn background riêng.
+   Nó nhìn xuyên xuống nền chung của shell.
    ========================================================= */
 
 .main {
   position:
     relative;
 
-  isolation:
-    isolate;
-
+  z-index:
+    1;
 
   min-width:
     0;
@@ -859,115 +888,14 @@ svg {
   min-height:
     100vh;
 
-
   overflow:
     hidden;
 
-
   background:
-    var(--bg);
-
+    transparent;
 
   transition:
-    background
-      var(--theme-transition),
-
     color
-      var(--theme-transition);
-}
-
-
-/* =========================================================
-   SCHOOL PATTERN
-   ========================================================= */
-
-.main::before {
-  content:
-    "";
-
-
-  position:
-    absolute;
-
-  z-index:
-    0;
-
-
-  inset:
-    0;
-
-
-  background-image:
-    var(--school-pattern-image);
-
-
-  background-position:
-    center top;
-
-
-  background-size:
-    920px auto;
-
-
-  background-repeat:
-    repeat;
-
-
-  opacity:
-    var(--pattern-opacity);
-
-
-  filter:
-    var(--pattern-filter);
-
-
-  pointer-events:
-    none;
-
-
-  transition:
-    filter
-      var(--theme-transition);
-}
-
-
-/* =========================================================
-   BACKGROUND OVERLAY
-   ========================================================= */
-
-.main::after {
-  content:
-    "";
-
-
-  position:
-    absolute;
-
-  z-index:
-    0;
-
-
-  inset:
-    0;
-
-
-  background:
-    linear-gradient(
-      var(--pattern-soft-overlay),
-      var(--pattern-soft-overlay)
-    ),
-    var(--pattern-dark-overlay);
-
-
-  pointer-events:
-    none;
-
-
-  transition:
-    background
-      var(--theme-transition),
-
-    opacity
       var(--theme-transition);
 }
 
@@ -983,14 +911,11 @@ svg {
   z-index:
     10;
 
-
   padding:
     24px;
 
-
   max-width:
     1600px;
-
 
   margin:
     0 auto;
@@ -1023,7 +948,6 @@ and (
       calc(
         100vh - 24px
       );
-
 
     grid-template-rows:
       auto
@@ -1058,19 +982,26 @@ and (
   }
 
 
+  /*
+   * Pattern nhỏ hơn trên mobile.
+   */
+  .shell::before {
+    background-size:
+      760px auto;
+  }
+
+
   .sidebar,
   .shell.collapsed
   .sidebar {
     position:
       fixed;
 
-
     left:
       12px;
 
     top:
       12px;
-
 
     width:
       min(
@@ -1080,16 +1011,13 @@ and (
         )
       );
 
-
     height:
       calc(
         100vh - 24px
       );
 
-
     margin:
       0;
-
 
     transform:
       translateX(
@@ -1097,7 +1025,6 @@ and (
           -100% - 24px
         )
       );
-
 
     transition:
       transform
@@ -1130,18 +1057,14 @@ and (
     display:
       block;
 
-
     position:
       fixed;
-
 
     inset:
       0;
 
-
     background:
       var(--overlay);
-
 
     z-index:
       30;
@@ -1152,12 +1075,6 @@ and (
     padding:
       16px
       12px;
-  }
-
-
-  .main::before {
-    background-size:
-      760px auto;
   }
 
 }
