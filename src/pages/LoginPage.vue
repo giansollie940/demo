@@ -151,10 +151,12 @@ async function submit() {
 </template>
 
 <style scoped>
+/* ===== FIX 1: Căn giữa khung hình ===== */
 .login-shell {
   position: relative;
   width: min(1500px, calc(100vw - 48px));
   min-height: min(820px, calc(100vh - 48px));
+  margin: auto;                        /* ← căn giữa ngang + dọc (nếu parent là flex/grid) */
   display: grid;
   grid-template-columns: 1fr;
   overflow: hidden;
@@ -164,9 +166,10 @@ async function submit() {
   box-shadow: var(--shadow-md);
 }
 
+/* ===== FIX 2: padding-right dùng calc linh hoạt hơn ===== */
 .login-visual {
   position: relative;
-  padding: 30px clamp(420px, 30vw, 456px) 28px 38px;
+  padding: 30px clamp(400px, 28vw, 456px) 28px 38px;
   display: grid;
   grid-template-rows: auto auto minmax(360px, 1fr) auto auto;
   gap: 16px;
@@ -295,6 +298,7 @@ async function submit() {
 .benefits span:nth-child(3) b { color: var(--color-coral); }
 .benefits b { margin-right: 4px; }
 
+/* ===== FIX 3: login-panel căn giữa dọc chính xác hơn ===== */
 .login-panel {
   position: absolute;
   z-index: 4;
@@ -413,6 +417,7 @@ async function submit() {
   border-radius: 8px;
   background: transparent;
   color: var(--text-muted);
+  cursor: pointer;           /* ← FIX: thêm cursor pointer cho nút bấm */
 }
 
 .reveal:hover {
@@ -449,6 +454,7 @@ async function submit() {
   }
 }
 
+/* ===== FIX 4: Breakpoint tablet – dọn sạch thuộc tính thừa ===== */
 @media (max-width: 980px) {
   .login-shell {
     grid-template-columns: 1fr;
@@ -458,10 +464,11 @@ async function submit() {
 
   .login-visual {
     padding: 28px 32px;
-    grid-template-rows: auto auto 280px auto;
+    grid-template-rows: auto auto 280px auto auto; /* ← FIX: 5 hàng (brand, copy, hero, slogan, benefits) */
   }
+
   .login-panel {
-    position: static;
+    position: static;       /* ghi đè absolute */
     width: auto;
     margin: 0;
     padding: 32px;
@@ -470,8 +477,11 @@ async function submit() {
     box-shadow: none;
     backdrop-filter: none;
     -webkit-backdrop-filter: none;
-    transform: none;
+    transform: none;        /* ghi đè translateY(-50%) */
+    top: auto;              /* ← FIX: dọn sạch top kế thừa */
+    right: auto;            /* ← FIX: dọn sạch right kế thừa */
   }
+
   .benefits { display: none; }
   .visual-copy h1 { font-size: 2.65rem; }
 }
@@ -479,7 +489,7 @@ async function submit() {
 @media (max-width: 560px) {
   .login-visual {
     padding: 20px;
-    grid-template-rows: auto auto 190px auto;
+    grid-template-rows: auto auto 190px auto auto; /* ← FIX: giữ đủ 5 hàng */
   }
 
   .visual-copy p { display: none; }
@@ -488,3 +498,4 @@ async function submit() {
   .login-shell { border-radius: 20px; }
 }
 </style>
+
