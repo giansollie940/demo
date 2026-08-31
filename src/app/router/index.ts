@@ -17,7 +17,7 @@ router.beforeEach(async(to,from)=>{
     return auth.currentUser?.role==='admin'?'/admin':'/dashboard'
   }
   if(!auth.isAuthenticated)return{path:'/login',query:{redirect:to.fullPath}}
-  if(auth.currentUser?.role==='admin'&&to.path!=='/admin')return'/admin'
+  if(auth.currentUser?.role==='admin'&&to.path!=='/admin'&&to.path!=='/settings')return'/admin'
   const roles=to.meta.roles as UserRole[]|undefined
   if(roles&&!roles.includes(auth.currentUser!.role))return auth.currentUser?.role==='admin'?'/admin':'/dashboard'
   return true

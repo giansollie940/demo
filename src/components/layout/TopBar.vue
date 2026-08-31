@@ -22,7 +22,7 @@ const operationalWeekId=computed(()=>state.value?getWeekLifecycle({weeks:state.v
 const roleLabels:Record<UserRole,string>={student:'Học sinh',monitor:'Cán sự lớp',teacher:'Giáo viên',admin:'Quản trị viên'}
 const roleLabel=computed(()=>auth.currentUser?roleLabels[auth.currentUser.role]:'')
 const profileRoleLine=computed(()=>{const user=auth.currentUser;if(!user)return'';const classCode=context.selectedClass?.code||String(state.value?.settings.className??'');return user.role==='student'||user.role==='monitor'?`${roleLabel.value}${classCode?` · ${classCode}`:''}`:roleLabel.value})
-const personalSettingsTarget=computed(()=>auth.currentUser?.role==='teacher'?{path:'/settings',query:{view:'personal'}}:{path:'/settings'})
+const personalSettingsTarget=computed(()=>({path:'/settings',query:{view:'personal'}}))
 function confirmContextChange(){if(!dirtyRegistry.hasDirty())return true;if(!window.confirm('Thay đổi chưa được lưu sẽ bị bỏ. Tiếp tục?'))return false;dirtyRegistry.discardAll();return true}
 async function changeClass(event:Event){const select=event.target as HTMLSelectElement;const id=select.value;if(!confirmContextChange()){select.value=context.selectedClassId??'';return}context.selectClass(id);await auth.reload(id,context.selectedSchoolYearId);context.hydrate(auth.legacyState)}
 async function changeSchoolYear(event:Event){const select=event.target as HTMLSelectElement;const id=select.value;if(!confirmContextChange()){select.value=context.selectedSchoolYearId??'';return}context.selectSchoolYear(id);await auth.reload(null,id);context.hydrate(auth.legacyState)}
