@@ -87,6 +87,61 @@ revoke all on function public.can_view_profile(uuid) from public;
 revoke all on function public.can_view_profile(uuid) from anon;
 grant execute on function public.can_view_profile(uuid) to authenticated;
 
+create or replace function public.visible_class_people()
+returns table(id uuid, student_code text, full_name text, role text)
+language plpgsql
+stable
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+  viewer_id uuid := auth.uid();
+  viewer_role text;
+  viewer_class_id uuid;
+begin
+  if viewer_id is null then
+    return;
+  end if;
+
+  select p.role::text, p.class_id
+    into viewer_role, viewer_class_id
+  from public.profiles p
+  where p.id = viewer_id and p.active = true;
+
+  if viewer_role not in ('student','monitor') or viewer_class_id is null then
+    return;
+  end if;
+
+  return query
+  select
+    p.id,
+    case when p.role::text = 'teacher' then null else p.student_code end,
+    p.full_name,
+    p.role::text
+  from public.profiles p
+  where p.active = true
+    and (
+      (p.role::text in ('student','monitor') and p.class_id = viewer_class_id)
+      or
+      (p.role::text = 'teacher' and exists(
+        select 1
+        from public.class_teachers ct
+        join public.classes c on c.id = ct.class_id and c.active = true
+        where ct.teacher_id = p.id
+          and ct.class_id = viewer_class_id
+          and ct.active = true
+      ))
+    )
+  order by
+    case when p.role::text = 'teacher' then 0 when p.role::text = 'monitor' then 1 else 2 end,
+    p.full_name;
+end;
+$$;
+
+revoke all on function public.visible_class_people() from public;
+revoke all on function public.visible_class_people() from anon;
+grant execute on function public.visible_class_people() to authenticated;
+
 drop policy if exists profiles_select_v840 on public.profiles;
 drop policy if exists profiles_select_v841 on public.profiles;
 create policy profiles_select_v841
