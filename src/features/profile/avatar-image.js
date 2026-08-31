@@ -1,12 +1,12 @@
 export const AVATAR_MAX_BYTES = 5 * 1024 * 1024
 export const AVATAR_OUTPUT_SIZE = 512
-export const AVATAR_SUPPORTED_TYPES = Object.freeze(['image/jpeg', 'image/png', 'image/webp'])
+export const AVATAR_SUPPORTED_TYPES = Object.freeze(['image/jpeg', 'image/png', 'image/webp', 'image/gif'])
 
 export function validateAvatarFile(file) {
   const type = String(file?.type || '').toLowerCase()
   const size = Number(file?.size || 0)
   if (!AVATAR_SUPPORTED_TYPES.includes(type)) {
-    return { ok: false, message: 'Chỉ hỗ trợ JPG, PNG hoặc WEBP.' }
+    return { ok: false, message: 'Chỉ hỗ trợ JPG, PNG, WEBP hoặc GIF.' }
   }
   if (!Number.isFinite(size) || size <= 0 || size > AVATAR_MAX_BYTES) {
     return { ok: false, message: 'Ảnh đại diện tối đa 5 MB.' }
