@@ -51,3 +51,16 @@ test('existing class/admin people lists render the shared remote avatar',async()
     assert.match(source,/RemoteUserAvatar/,`${file} must render permitted avatars`)
   }
 })
+
+test('learner dashboard exposes a class people panel with assigned teachers and permitted avatars',async()=>{
+  const migration=await read('database/upgrade/05-UPGRADE-V8.8.0-AVATAR-VISIBILITY.sql')
+  assert.match(migration,/create\s+or\s+replace\s+function\s+public\.visible_class_people\s*\(/i)
+  assert.match(migration,/class_teachers/i)
+  const panel='src/components/profile/ClassPeoplePanel.vue'
+  assert.equal(existsSync(path(panel)),true,'ClassPeoplePanel must exist')
+  const source=await read(panel)
+  assert.match(source,/visible_class_people/)
+  assert.match(source,/RemoteUserAvatar/)
+  const dashboard=await read('src/pages/DashboardPage.vue')
+  assert.match(dashboard,/ClassPeoplePanel/)
+})
