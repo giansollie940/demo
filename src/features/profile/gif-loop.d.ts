@@ -1,1 +1,1 @@
-export function ensureGifInfiniteLoop(input: Uint8Array | ArrayBuffer): Uint8Array
+export function ensureGifInfiniteLoop(input: Uint8Array<ArrayBuffer> | ArrayBuffer): Uint8Array<ArrayBuffer>
