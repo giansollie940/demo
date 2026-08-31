@@ -6,16 +6,24 @@ import { resolve } from 'node:path'
 const root=resolve(import.meta.dirname,'..')
 const read=(path)=>readFileSync(resolve(root,path),'utf8')
 
-test('admin can navigate to personal settings instead of being forced back to admin',()=>{
+test('personal settings remain reachable from the profile menu for every role',()=>{
   const router=read('src/app/router/index.ts')
   assert.match(router,/auth\.currentUser\?\.role==='admin'&&to\.path!==\'\/admin\'&&to\.path!==\'\/settings\'/)
 
   const topbar=read('src/components/layout/TopBar.vue')
   assert.match(topbar,/const personalSettingsTarget=computed\(\(\)=>\(\{path:'\/settings',query:\{view:'personal'\}\}\)\)/)
+})
 
+test('admin sidebar does not expose personal settings',()=>{
   const navigation=read('src/features/navigation/navigation.ts')
-  assert.match(navigation,/item\('Tùy chọn cá nhân','\/settings\?view=personal','Settings',admins\)/)
-  assert.match(navigation,/admin:\[[^\]]*'Tùy chọn cá nhân'/)
+  assert.doesNotMatch(navigation,/item\('Tùy chọn cá nhân','\/settings\?view=personal','Settings',admins\)/)
+  assert.doesNotMatch(navigation,/admin:\[[^\]]*'Tùy chọn cá nhân'/)
+})
+
+test('teacher settings page does not show a personal/application mode switch',()=>{
+  const page=read('src/pages/SettingsPage.vue')
+  assert.doesNotMatch(page,/teacher-settings-switch/)
+  assert.doesNotMatch(page,/aria-label="Chế độ cài đặt"/)
 })
 
 test('teacher application settings no longer duplicate Owl controls',()=>{
