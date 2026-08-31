@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { computed, ref, shallowRef } from 'vue'
 import { legacyApi, isBackendConfigured } from '../services/legacy-supabase'
+import { deleteOwnAvatarFiles, uploadOwnAvatarBlob } from '../features/profile/avatar-storage'
 import type { CurrentUser, LegacyState, RealtimeChange, RegistrationRecord, TeacherNotificationRecord } from '../types/legacy'
 
 function messageOf(error:unknown){return error instanceof Error?error.message:'Không thể hoàn tất yêu cầu.'}
@@ -44,7 +45,7 @@ export const useAuthStore=defineStore('auth',()=>{
     if(!currentUser.value)throw new Error('Bạn cần đăng nhập để đổi ảnh đại diện.')
     avatarBusy.value=true
     try{
-      const result=await legacyApi.uploadOwnAvatar(blob)
+      const result=await uploadOwnAvatarBlob(currentUser.value.id,blob)
       currentUser.value={...currentUser.value,avatarPath:result.avatarPath}
       await refreshAvatar(true)
       return result
@@ -55,7 +56,7 @@ export const useAuthStore=defineStore('auth',()=>{
     if(!currentUser.value)throw new Error('Bạn cần đăng nhập để xóa ảnh đại diện.')
     avatarBusy.value=true
     try{
-      const result=await legacyApi.deleteOwnAvatar()
+      const result=await deleteOwnAvatarFiles(currentUser.value.id)
       currentUser.value={...currentUser.value,avatarPath:null}
       clearAvatarUrl()
       return result
