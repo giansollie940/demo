@@ -1,6 +1,6 @@
 import type { RouteRecordRaw } from 'vue-router'
 import AppShell from '../../layouts/AppShell.vue'
-import DashboardPage from '../../pages/DashboardPage.vue'
+import DashboardWithPeoplePage from '../../pages/DashboardWithPeoplePage.vue'
 import LoginPage from '../../pages/LoginPage.vue'
 import RegistrationPage from '../../pages/RegistrationPage.vue'
 import ApprovalPage from '../../pages/ApprovalPage.vue'
@@ -27,7 +27,7 @@ export const routes: RouteRecordRaw[] = [
     component: AppShell,
     children: [
       { path: '', redirect: '/dashboard' },
-      { path: 'dashboard', component: DashboardPage, meta: { title: 'Tổng quan', roles: classUsers } },
+      { path: 'dashboard', component: DashboardWithPeoplePage, meta: { title: 'Tổng quan', roles: classUsers } },
       { path: 'register', component: RegistrationPage, meta: { title: 'Đăng ký tự học', roles: learners } },
       { path: 'review', component: ApprovalPage, meta: { title: 'Duyệt đăng ký', roles: teachers } },
       { path: 'issues', component: IssuesPage, meta: { title: 'Báo cáo lỗi', roles: classUsers } },
