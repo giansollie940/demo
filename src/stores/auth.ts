@@ -11,8 +11,56 @@ export const useAuthStore=defineStore('auth',()=>{
   const ready=ref(false)
   const loading=ref(false)
   const error=ref('')
+  const avatarUrl=ref<string|null>(null)
+  const avatarBusy=ref(false)
+  let loadedAvatarPath:string|null=null
   const isAuthenticated=computed(()=>Boolean(currentUser.value))
   const role=computed(()=>currentUser.value?.role??null)
+
+
+  function clearAvatarUrl(){
+    if(avatarUrl.value)URL.revokeObjectURL(avatarUrl.value)
+    avatarUrl.value=null
+    loadedAvatarPath=null
+  }
+
+  async function refreshAvatar(force=false){
+    const path=currentUser.value?.avatarPath??null
+    if(!path){clearAvatarUrl();return}
+    if(!force&&loadedAvatarPath===path&&avatarUrl.value)return
+    try{
+      const blob=await legacyApi.downloadAvatar(path)
+      if(!blob){clearAvatarUrl();return}
+      const nextUrl=URL.createObjectURL(blob)
+      if(avatarUrl.value)URL.revokeObjectURL(avatarUrl.value)
+      avatarUrl.value=nextUrl
+      loadedAvatarPath=path
+    }catch{
+      clearAvatarUrl()
+    }
+  }
+
+  async function uploadAvatar(blob:Blob){
+    if(!currentUser.value)throw new Error('Bạn cần đăng nhập để đổi ảnh đại diện.')
+    avatarBusy.value=true
+    try{
+      const result=await legacyApi.uploadOwnAvatar(blob)
+      currentUser.value={...currentUser.value,avatarPath:result.avatarPath}
+      await refreshAvatar(true)
+      return result
+    }finally{avatarBusy.value=false}
+  }
+
+  async function deleteAvatar(){
+    if(!currentUser.value)throw new Error('Bạn cần đăng nhập để xóa ảnh đại diện.')
+    avatarBusy.value=true
+    try{
+      const result=await legacyApi.deleteOwnAvatar()
+      currentUser.value={...currentUser.value,avatarPath:null}
+      clearAvatarUrl()
+      return result
+    }finally{avatarBusy.value=false}
+  }
 
   async function bootstrap(preferredClassId:string|null=null,preferredSchoolYearId:string|null=null){
     if(loading.value)return
@@ -25,6 +73,7 @@ export const useAuthStore=defineStore('auth',()=>{
       const result=await legacyApi.loadState(preferredClassId,preferredSchoolYearId)
       currentUser.value=result.currentUser
       legacyState.value=result.state
+      await refreshAvatar()
     }catch(err){
       currentUser.value=null;legacyState.value=null;error.value=messageOf(err)
     }finally{loading.value=false;ready.value=true}
@@ -39,6 +88,7 @@ export const useAuthStore=defineStore('auth',()=>{
       if(!result.currentUser||!result.state)throw new Error('Không tải được hồ sơ sau khi đăng nhập.')
       currentUser.value=result.currentUser
       legacyState.value=result.state
+      await refreshAvatar()
     }catch(err){
       error.value=messageOf(err)
       throw err
@@ -52,6 +102,7 @@ export const useAuthStore=defineStore('auth',()=>{
       const result=await legacyApi.loadState(preferredClassId,preferredSchoolYearId)
       currentUser.value=result.currentUser
       legacyState.value=result.state
+      await refreshAvatar()
     }catch(err){error.value=messageOf(err);throw err}
     finally{loading.value=false}
   }
@@ -91,8 +142,8 @@ export const useAuthStore=defineStore('auth',()=>{
   async function logout(){
     loading.value=true
     try{await legacyApi.signOut()}
-    finally{currentUser.value=null;legacyState.value=null;error.value='';loading.value=false;ready.value=true}
+    finally{clearAvatarUrl();currentUser.value=null;legacyState.value=null;error.value='';loading.value=false;ready.value=true}
   }
 
-  return{currentUser,legacyState,ready,loading,error,isAuthenticated,role,bootstrap,login,reload,applyRealtimeChange,logout}
+  return{currentUser,legacyState,ready,loading,error,avatarUrl,avatarBusy,isAuthenticated,role,bootstrap,login,reload,refreshAvatar,uploadAvatar,deleteAvatar,applyRealtimeChange,logout}
 })

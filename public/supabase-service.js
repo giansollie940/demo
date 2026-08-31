@@ -23,6 +23,8 @@
     "device_detection_source","device_detection_confidence","revision_overdue_at","updated_at","approved_at","class_id"
   ].join(",");
   const WEEK_OVERRIDE_COLUMNS="id,class_id,week_id,weekday,period_number,is_study_period,reason";
+  const AVATAR_BUCKET="avatars";
+  const AVATAR_MAX_BYTES=5*1024*1024;
 
   const sessionAuthStorage={
     getItem:key=>window.sessionStorage.getItem(key),
@@ -119,6 +121,54 @@
     const { data,error }=await sb.auth.updateUser({password:next});
     if(error) throw error;
     return data.user;
+  }
+
+  function avatarPathFor(userId){
+    if(!isUuid(userId))throw new Error("Không xác định được tài khoản hiện tại.");
+    return `${userId}/avatar.webp`;
+  }
+
+  async function downloadAvatar(path){
+    const value=String(path||"").trim();
+    if(!value)return null;
+    const sb=requireClient();
+    const {data,error}=await sb.storage.from(AVATAR_BUCKET).download(value);
+    if(error)throw error;
+    return data||null;
+  }
+
+  async function uploadOwnAvatar(blob){
+    if(!(blob instanceof Blob))throw new Error("Ảnh đại diện không hợp lệ.");
+    if(blob.type!=="image/webp")throw new Error("Ảnh đại diện sau khi cắt phải ở định dạng WEBP.");
+    if(!blob.size||blob.size>AVATAR_MAX_BYTES)throw new Error("Ảnh đại diện tối đa 5 MB.");
+    const sb=requireClient();
+    const user=await authUser();
+    if(!user)throw new Error("Phiên đăng nhập đã hết hạn.");
+    const path=avatarPathFor(user.id);
+    const {error:uploadError}=await sb.storage.from(AVATAR_BUCKET).upload(path,blob,{
+      cacheControl:"3600",
+      contentType:"image/webp",
+      upsert:true
+    });
+    if(uploadError)throw uploadError;
+    const {data,error}=await sb.rpc("set_own_avatar_path",{p_avatar_path:path});
+    if(error){
+      try{await sb.storage.from(AVATAR_BUCKET).remove([path]);}catch{}
+      throw error;
+    }
+    return {avatarPath:String(data||path)};
+  }
+
+  async function deleteOwnAvatar(){
+    const sb=requireClient();
+    const user=await authUser();
+    if(!user)throw new Error("Phiên đăng nhập đã hết hạn.");
+    const path=avatarPathFor(user.id);
+    const {error:removeError}=await sb.storage.from(AVATAR_BUCKET).remove([path]);
+    if(removeError)throw removeError;
+    const {error}=await sb.rpc("set_own_avatar_path",{p_avatar_path:null});
+    if(error)throw error;
+    return {avatarPath:null};
   }
 
   async function edgeFunctionErrorMessage(error,fallback="Edge Function bị lỗi"){
@@ -599,7 +649,8 @@
       role:p.role,
       classId:p.class_id || p.classId || null,
       active:p.active !== false,
-      deletedAt:p.deleted_at || p.deletedAt || null
+      deletedAt:p.deleted_at || p.deletedAt || null,
+      avatarPath:p.avatar_path || p.avatarPath || null
     };
   }
   function toLocalInput(iso){
@@ -736,7 +787,7 @@
     if(!user)return {currentUser:null,state:null};
 
     const {data:profile,error:profileErr}=await sb.from("profiles")
-      .select("id,student_code,full_name,role,class_id,active,deleted_at")
+      .select("id,student_code,full_name,role,class_id,active,deleted_at,avatar_path")
       .eq("id",user.id).single();
     if(profileErr)throw profileErr;
     if(profile.active===false)throw new Error("Tài khoản đang bị khóa.");
@@ -795,7 +846,7 @@
         users=(directory.users||[]).map(u=>mapProfile({id:u.id,student_code:u.code,full_name:u.fullName,role:u.role,class_id:u.classId,active:u.active,deleted_at:u.deletedAt}));
       }
     }else if(profile.role==="monitor"&&activeClassId){
-      const {data,error}=await sb.from("profiles").select("id,student_code,full_name,role,class_id,active,deleted_at").eq("class_id",activeClassId).in("role",["student","monitor"]).order("full_name");
+      const {data,error}=await sb.from("profiles").select("id,student_code,full_name,role,class_id,active,deleted_at,avatar_path").eq("class_id",activeClassId).in("role",["student","monitor"]).order("full_name");
       if(error)throw error;users=(data||[]).map(mapProfile);
     }else users=[mapProfile(profile)];
 
@@ -1120,6 +1171,9 @@
     syncState,
     resetSnapshot,
     changeOwnPassword,
+    downloadAvatar,
+    uploadOwnAvatar,
+    deleteOwnAvatar,
     teacherResetPassword,
     teacherUpdateUser,
     teacherDeleteUser,

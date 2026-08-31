@@ -8,6 +8,7 @@ export interface CurrentUser {
   classId: string | null
   active: boolean
   deletedAt?: string | null
+  avatarPath?: string | null
 }
 
 
@@ -221,6 +222,9 @@ export interface LegacySupabaseService {
   syncState(state: LegacyState, currentUser: CurrentUser): Promise<void>
   teacherRebaseWeeks(firstWeekStart: string, deadlineTime?: string, schoolYearId?: string | null): Promise<unknown>
   changeOwnPassword(currentPassword: string, newPassword: string): Promise<unknown>
+  downloadAvatar(path: string): Promise<Blob | null>
+  uploadOwnAvatar(blob: Blob): Promise<{ avatarPath: string }>
+  deleteOwnAvatar(): Promise<{ avatarPath: null }>
   teacherResetPassword(userId: string, newPassword: string): Promise<unknown>
   teacherUpdateUser(userId: string, changes: TeacherUserChanges): Promise<unknown>
   teacherDeleteUser(userId: string, confirmCode: string): Promise<unknown>
