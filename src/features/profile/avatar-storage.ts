@@ -1,5 +1,6 @@
 import { legacyApi } from '../../services/legacy-supabase'
 import { AVATAR_MAX_BYTES } from './avatar-image.js'
+import { ensureGifInfiniteLoop } from './gif-loop.js'
 
 const AVATAR_BUCKET='avatars'
 const GIF_TYPE='image/gif'
@@ -31,13 +32,24 @@ function assertAvatarBlob(blob:Blob):AvatarMime{
 function avatarPath(userId:string,type:AvatarMime){return `${userId}/avatar.${extensionFor(type)}`}
 function otherAvatarPath(userId:string,type:AvatarMime){return `${userId}/avatar.${type===GIF_TYPE?'webp':'gif'}`}
 
+async function prepareUploadBlob(blob:Blob,type:AvatarMime){
+  if(type!==GIF_TYPE)return blob
+  const sourceBytes=new Uint8Array(await blob.arrayBuffer())
+  const normalizedBytes=ensureGifInfiniteLoop(sourceBytes)
+  if(normalizedBytes===sourceBytes)return blob
+  const normalizedBlob=new Blob([normalizedBytes],{type:GIF_TYPE})
+  if(normalizedBlob.size>AVATAR_MAX_BYTES)throw new Error('Ảnh đại diện tối đa 5 MB.')
+  return normalizedBlob
+}
+
 export async function uploadOwnAvatarBlob(userId:string,blob:Blob){
   const type=assertAvatarBlob(blob)
+  const uploadBlob=await prepareUploadBlob(blob,type)
   const client=clientFrom(await legacyApi.init())
   const bucket=client.storage.from(AVATAR_BUCKET)
   const path=avatarPath(userId,type)
   const stalePath=otherAvatarPath(userId,type)
-  const {error:uploadError}=await bucket.upload(path,blob,{cacheControl:'3600',contentType:type,upsert:true})
+  const {error:uploadError}=await bucket.upload(path,uploadBlob,{cacheControl:'3600',contentType:type,upsert:true})
   if(uploadError)throw uploadError
   const {data,error}=await client.rpc('set_own_avatar_path',{p_avatar_path:path})
   if(error){
