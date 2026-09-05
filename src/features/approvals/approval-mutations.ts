@@ -3,7 +3,7 @@ import { registrationManagerActions } from '../registrations/registration-model'
 import { commitStateMutation, refreshMutationRuntime, type LegacyMutationRuntime } from '../shared/legacy-mutation'
 
 export interface ApprovalMutationRuntime extends Omit<LegacyMutationRuntime, 'service'> {
-  service: Pick<LegacySupabaseService, 'syncState' | 'teacherRebaseWeeks' | 'requestRegistrationRevision' | 'rejectOverdueRegistration' | 'deleteRegistration' | 'markNotificationsRead'>
+  service: Pick<LegacySupabaseService, 'syncState' | 'teacherRebaseWeeks' | 'requestRegistrationRevision' | 'deleteRegistration' | 'markNotificationsRead'>
 }
 
 function handledNotificationIds(state:LegacyState,registrationIds:string[]):string[]{
@@ -77,19 +77,6 @@ export async function requestManagedRevision(
   const value = comment.trim()
   if (!value) throw new Error('Vui lòng nhập nội dung yêu cầu chỉnh sửa.')
   await runtime.service.requestRegistrationRevision(registrationId, value)
-  await markHandledRegistrationNotificationsRead(runtime,[registrationId])
-  return refreshMutationRuntime(runtime, classId)
-}
-
-export async function rejectOverdueRegistration(
-  runtime: ApprovalMutationRuntime,
-  classId: string,
-  registrationId: string,
-  comment: string,
-): Promise<LegacyState> {
-  const value = comment.trim()
-  if (!value) throw new Error('Vui lòng nhập lý do không duyệt.')
-  await runtime.service.rejectOverdueRegistration(registrationId, value)
   await markHandledRegistrationNotificationsRead(runtime,[registrationId])
   return refreshMutationRuntime(runtime, classId)
 }
