@@ -11,6 +11,7 @@ import AdminTeacherCard from '../components/admin/AdminTeacherCard.vue'
 import AdminStudentCard from '../components/admin/AdminStudentCard.vue'
 import AdminSchoolYearCard from '../components/admin/AdminSchoolYearCard.vue'
 import AdminAuditLog from '../components/admin/AdminAuditLog.vue'
+import AdminRecycleBin from '../components/admin/AdminRecycleBin.vue'
 import AdminUserDialog from '../components/admin/AdminUserDialog.vue'
 import AdminPasswordDialog from '../components/admin/AdminPasswordDialog.vue'
 import AdminClassDialog from '../components/admin/AdminClassDialog.vue'
@@ -32,7 +33,7 @@ const context=useContextStore()
 const queryClient=useQueryClient()
 const route=useRoute()
 const directory=useAdminDirectory()
-const validTabs=['overview','years','classes','students','teachers','permissions','audit']
+const validTabs=['overview','years','classes','students','teachers','permissions','recycle','audit']
 const tab=computed(()=>{const value=String(route.query.tab??'overview');return validTabs.includes(value)?value:'overview'})
 
 const busyKey=ref<string|null>(null)
@@ -175,7 +176,7 @@ async function permission(payload:{classId:string;teacherId:string;enabled:boole
 
 <template>
   <div class="page-stack admin-page">
-    <header class="admin-header"><div><span class="page-context"><ShieldCheck/>ROOT ADMIN · QUẢN TRỊ HỆ THỐNG</span><h1>{{ tab==='overview'?'Tổng quan hệ thống':tab==='years'?'Năm học':tab==='classes'?'Lớp học':tab==='students'?'Học sinh':tab==='teachers'?'Giáo viên':tab==='permissions'?'Phân quyền':'Nhật ký hệ thống' }}</h1><p>Admin quản lý cấu trúc, tài khoản và quyền hệ thống; nghiệp vụ vận hành lớp thuộc Giáo viên.</p></div><AppButton v-if="tab!=='audit'" variant="secondary" :loading="directory.isFetching.value" @click="directory.refetch()"><RefreshCw/>Làm mới</AppButton></header>
+    <header class="admin-header"><div><span class="page-context"><ShieldCheck/>ROOT ADMIN · QUẢN TRỊ HỆ THỐNG</span><h1>{{ tab==='overview'?'Tổng quan hệ thống':tab==='years'?'Năm học':tab==='classes'?'Lớp học':tab==='students'?'Học sinh':tab==='teachers'?'Giáo viên':tab==='permissions'?'Phân quyền':tab==='recycle'?'Thùng rác':'Nhật ký hệ thống' }}</h1><p>Admin quản lý cấu trúc, tài khoản và quyền hệ thống; nghiệp vụ vận hành lớp thuộc Giáo viên.</p></div><AppButton v-if="tab!=='audit'" variant="secondary" :loading="directory.isFetching.value" @click="directory.refetch()"><RefreshCw/>Làm mới</AppButton></header>
     <InlineStatus :state="status" :message="statusMessage"/>
 
     <template v-if="tab==='overview'">
@@ -209,6 +210,8 @@ async function permission(payload:{classId:string;teacherId:string;enabled:boole
     <template v-else-if="tab==='permissions'">
       <div class="section-actions"><div><h2>Phân quyền · {{ selectedYear?.name||'—' }}</h2><p>Bật/tắt quyền phụ trách từng lớp trong năm học đang chọn.</p></div></div><AppCard padding="lg"><PermissionMatrix :classes="activeClasses" :teachers="data.teachers" :assignments="data.assignments" :busy-key="busyKey" @change="permission"/></AppCard>
     </template>
+
+    <AdminRecycleBin v-else-if="tab==='recycle'"/>
 
     <AdminAuditLog v-else-if="tab==='audit'"/>
 
