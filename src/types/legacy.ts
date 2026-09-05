@@ -212,34 +212,6 @@ export interface RealtimeChange {
   [key: string]: unknown
 }
 
-export interface DeletedRegistrationRecord {
-  id: string
-  classId: string | null
-  studentId: string | null
-  studentCode: string
-  studentName: string
-  weekNumber: number | null
-  dow: number
-  period: number
-  content: string
-  status: string
-  deletedAt: string | null
-  deletedByName: string
-  /** false khi HS đã có đăng ký khác đang hoạt động ở đúng tiết đó. */
-  canRestore: boolean
-  blockedReason: string
-}
-
-export interface DeletedUserRecord {
-  id: string
-  code: string
-  fullName: string
-  role: string
-  classId: string | null
-  classCode: string
-  deletedAt: string | null
-}
-
 export interface LegacySupabaseService {
   enabled(): boolean
   init(): Promise<unknown>
@@ -262,10 +234,6 @@ export interface LegacySupabaseService {
   teacherListUsers(classId?: string | null): Promise<TeacherDirectoryResponse>
   adminManageClasses(action: string, payload?: Record<string, unknown>): Promise<Record<string, unknown>>
   requestRegistrationRevision(registrationId: string, teacherComment: string): Promise<boolean>
-  adminListDeletedRegistrations(limit?: number): Promise<DeletedRegistrationRecord[]>
-  adminRestoreRegistration(registrationId: string): Promise<boolean>
-  adminListDeletedUsers(limit?: number): Promise<DeletedUserRecord[]>
-  adminRestoreUser(userId: string): Promise<boolean>
   emergencyRegister(input: EmergencyRegistrationInput): Promise<RegistrationRecord | null>
   requestAiReview(registrationId: string): Promise<unknown>
   prepareSessionAiRereview(input: { classId: string; weekId: string; dow: number; period: number }): Promise<string[]>

@@ -69,7 +69,7 @@ async function removeAvatar(){if(!auth.currentUser?.avatarPath)return;if(!await 
             <div><dt>Mã đăng nhập</dt><dd>{{ auth.currentUser?.code }}</dd></div>
           </dl>
         </div>
-        <form class="password-form" novalidate @submit.prevent="changePassword">
+        <form class="password-form" @submit.prevent="changePassword">
           <div class="choice-label"><KeyRound/><b>Đổi mật khẩu</b></div>
           <div class="password-grid"><label>Mật khẩu hiện tại<input v-model="currentPassword" type="password" autocomplete="current-password"></label><label>Mật khẩu mới<input v-model="newPassword" type="password" autocomplete="new-password" minlength="8"></label></div>
           <AppButton type="submit" variant="secondary" :loading="passwordBusy">Đổi mật khẩu</AppButton>
