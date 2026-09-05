@@ -31,11 +31,15 @@ export const navigation:NavigationItem[]=[
   item('Cài đặt','/settings','Settings',teachers),
 ]
 
+// orders vừa sắp thứ tự vừa là danh sách trắng: visibleNavigation chỉ lấy những
+// nhãn có tên ở đây. Thêm mục vào `navigation` mà quên thêm vào đây thì mục đó
+// biến mất khỏi sidebar — đúng lỗi đã xảy ra với "Thùng rác". Test
+// navigation-source giữ hai danh sách khớp nhau.
 const orders:Record<UserRole,string[]>={
   student:['Tổng quan','Đăng ký tự học','Báo cáo lỗi','Lịch sử','Nhận xét GV','Thống kê của tôi'],
   monitor:['Tổng quan','Đăng ký tự học','Báo cáo lỗi','Theo dõi lớp','Lịch sử','Nhận xét GV','Thống kê của tôi'],
   teacher:['Tổng quan','Duyệt đăng ký','Báo cáo lỗi','Theo dõi cả lớp','Quản lý tuần','Thời khóa biểu','Học sinh','Thống kê','Cài đặt'],
-  admin:['Tổng quan','Năm học','Lớp học','Học sinh','Giáo viên','Phân quyền','Nhật ký hệ thống'],
+  admin:['Tổng quan','Năm học','Lớp học','Học sinh','Giáo viên','Phân quyền','Thùng rác','Nhật ký hệ thống'],
 }
 
 export function visibleNavigation(role:UserRole|null|undefined):NavigationItem[]{

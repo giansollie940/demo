@@ -35,10 +35,22 @@ const users = useQuery({
 
 const active = computed(() => (kind.value === 'registrations' ? registrations : users))
 const loading = computed(() => active.value.isFetching.value)
-const errorMessage = computed(() => {
-  const error = active.value.error.value
-  return error instanceof Error && error.message ? error.message : ''
-})
+
+// supabase-js ném thẳng PostgrestError — một object thường, không phải Error —
+// nên `error instanceof Error` là false và trang sẽ im lặng như thể thùng rác
+// trống. Đọc message theo kiểu vịt để lỗi nào cũng nói ra được.
+// Riêng PGRST202 nghĩa là đã cập nhật frontend nhưng chưa chạy phần SQL: nói
+// đúng việc cần làm thay vì ném câu tiếng Anh của PostgREST.
+const MISSING_SQL = 'Chưa cài phần database của Thùng rác. Hãy mở Supabase → SQL Editor và chạy 2-THUNG-RAC-ADMIN.sql, rồi tải lại trang.'
+function describeError(error: unknown, fallback: string): string {
+  if (!error) return ''
+  const source = error as { message?: unknown; code?: unknown; hint?: unknown }
+  const raw = typeof error === 'string' ? error : String(source.message ?? '')
+  const code = String(source.code ?? '')
+  if (code === 'PGRST202' || /could not find the function|schema cache/i.test(raw)) return MISSING_SQL
+  return raw || fallback
+}
+const errorMessage = computed(() => describeError(active.value.error.value, 'Không tải được danh sách đã xoá.'))
 
 function matches(haystack: Array<string | number | null | undefined>) {
   const q = search.value.trim().toLowerCase()
@@ -83,7 +95,7 @@ async function restoreRegistration(row: DeletedRegistrationRecord) {
     statusMessage.value = `Đã khôi phục đăng ký của ${row.studentName}.`
   } catch (error) {
     status.value = 'error'
-    statusMessage.value = error instanceof Error ? error.message : 'Không khôi phục được đăng ký.'
+    statusMessage.value = describeError(error, 'Không khôi phục được đăng ký.')
   } finally {
     busyId.value = null
   }
@@ -106,7 +118,7 @@ async function restoreUser(row: DeletedUserRecord) {
     statusMessage.value = `Đã khôi phục tài khoản ${row.code}.`
   } catch (error) {
     status.value = 'error'
-    statusMessage.value = error instanceof Error ? error.message : 'Không khôi phục được tài khoản.'
+    statusMessage.value = describeError(error, 'Không khôi phục được tài khoản.')
   } finally {
     busyId.value = null
   }
