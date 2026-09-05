@@ -18,7 +18,7 @@ import { useWeekData } from '../features/weeks/queries'
 import { buildDashboardMetrics } from '../features/dashboard/dashboard-model'
 import { useDailyQuote } from '../features/owl/daily-quote'
 import { useNowTicker } from '../features/shared/useNowTicker'
-import { needsTeacherAction } from '../features/registrations/registration-model'
+import { isTeacherQueueItem, needsTeacherAction } from '../features/registrations/registration-model'
 
 const dashboardIllustrationUrl =
   `${import.meta.env.BASE_URL}assets/images/student-group-dashboard.png`
@@ -96,12 +96,19 @@ const personalMetrics = computed(() =>
   })
 )
 
-const managerQueue = computed(
-  () =>
-    registrations.value.filter(row =>
-      needsTeacherAction(row)
-    ).length
-)
+// Ô "Cần GV xử lý" phải trừ đăng ký đã sang Báo cáo lỗi vì buổi học đã bắt
+// đầu — GV không còn bấm được nút nào cho chúng, đếm vào đây là hàng đợi không
+// bao giờ về 0. Thiếu tuần thì không suy ra được giờ bắt đầu, đành giữ cách
+// đếm cũ cho tới khi tuần được chọn.
+const managerQueue = computed(() => {
+  const currentWeek = week.value
+  const periods = auth.legacyState?.periods ?? []
+  return registrations.value.filter(row =>
+    currentWeek
+      ? isTeacherQueueItem(row, { week: currentWeek, periods, nowMs: nowMs.value })
+      : needsTeacherAction(row),
+  ).length
+})
 
 const dailyQuoteQuery = useDailyQuote()
 const dailyQuote = computed(() => dailyQuoteQuery.data.value)

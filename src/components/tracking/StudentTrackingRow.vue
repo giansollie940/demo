@@ -9,6 +9,15 @@ const emit=defineEmits<{approve:[];revision:[];comment:[];delete:[];aiRereview:[
 const statusText=()=>props.row.bucket==='missing'?'Chưa đăng ký':props.row.registration?.revisionOverdueAt?'Báo cáo lỗi':props.row.registration?.status==='approved'?'Đã duyệt':props.row.registration?.status==='needs_revision'?'Cần chỉnh sửa':props.actions?.started&&props.row.registration?.status==='submitted'?'Không duyệt':'Chờ duyệt'
 const aiText=()=>aiReviewHistoryLabel(props.row.registration)
 const aiMismatch=()=>aiOutcomeMismatch(props.row.registration)
+// Buổi đã bắt đầu mà đăng ký vẫn "chờ duyệt" thì nó đã sang Báo cáo lỗi và GV
+// không còn nút nào để bấm — nói "cần giáo viên kiểm tra" ở đây là sai, GV sẽ
+// đi tìm một việc không tồn tại.
+const notApproved=()=>Boolean(props.actions?.started&&props.row.registration?.status==='submitted')
+const attentionNote=()=>aiMismatch()
+  ?'Kết quả AI chưa được áp dụng vào trạng thái đăng ký.'
+  :notApproved()
+    ?'Đăng ký không được duyệt trước giờ bắt đầu tiết nên đã chuyển sang Báo cáo lỗi; không còn chờ giáo viên xử lý.'
+    :'Đăng ký cần giáo viên kiểm tra.'
 </script>
 <template>
   <article class="tracking-row" :class="{busy}" :data-bucket="row.bucket">
@@ -29,7 +38,7 @@ const aiMismatch=()=>aiOutcomeMismatch(props.row.registration)
       <AppButton v-if="actions.canDelete" variant="danger" :disabled="busy" @click="emit('delete')"><Trash2 aria-hidden="true"/>Xóa</AppButton>
     </div>
     <div v-if="row.bucket==='missing'" class="missing-note"><UserRoundX aria-hidden="true"/>Học sinh chưa có đăng ký cho buổi này.</div>
-    <div v-else-if="row.bucket==='attention'" class="attention-note"><AlertTriangle aria-hidden="true"/>{{ aiMismatch()?'Kết quả AI chưa được áp dụng vào trạng thái đăng ký.':'Đăng ký cần giáo viên kiểm tra.' }}</div>
+    <div v-else-if="row.bucket==='attention'" class="attention-note"><AlertTriangle aria-hidden="true"/>{{ attentionNote() }}</div>
   </article>
 </template>
 <style scoped>

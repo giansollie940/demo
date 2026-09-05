@@ -1,5 +1,5 @@
 import type { CurrentUser, LegacyState, RegistrationRecord } from '../../types/legacy'
-import { isRevisionOverdue, needsTeacherAction, sessionStartMs } from '../registrations/registration-model'
+import { isRegistrationIssue, isRevisionOverdue, isTeacherQueueItem, needsTeacherAction, sessionStartMs } from '../registrations/registration-model'
 import { effectiveScheduleForWeek } from '../schedule/schedule-model'
 
 export interface OwlQuote { id?: string; text: string; author: string; url?: string }
@@ -65,6 +65,25 @@ function overdue(row: RegistrationRecord, state: LegacyState, nowMs: number): bo
   const week = state.weeks.find(item => item.id === row.weekId)
   if (!week) return Boolean(row.revisionOverdueAt)
   return isRevisionOverdue(row, { week, periods: state.periods, nowMs })
+}
+/**
+ * Cả hai loại của mục Báo cáo lỗi: HS không sửa kịp, và GV/AI không duyệt kịp
+ * trước giờ buổi tự học bắt đầu.
+ */
+function reported(row: RegistrationRecord, state: LegacyState, nowMs: number): boolean {
+  const week = state.weeks.find(item => item.id === row.weekId)
+  if (!week) return Boolean(row.revisionOverdueAt)
+  return isRegistrationIssue(row, { week, periods: state.periods, nowMs })
+}
+/**
+ * Cú chỉ được nhắc những việc GV còn bấm được nút. Đăng ký đã sang Báo cáo lỗi
+ * vì buổi học bắt đầu mất rồi thì duyệt cũng vô nghĩa; đếm nó vào lời nhắc thì
+ * chấm đỏ không bao giờ tắt và GV không có cách nào làm nó tắt.
+ */
+function pendingForTeacher(row: RegistrationRecord, state: LegacyState, nowMs: number): boolean {
+  const week = state.weeks.find(item => item.id === row.weekId)
+  if (!week) return needsTeacherAction(row)
+  return isTeacherQueueItem(row, { week, periods: state.periods, nowMs })
 }
 
 function slotKey(dow: number, period: number): string { return `${Number(dow)}-${Number(period)}` }
@@ -145,7 +164,7 @@ export function buildOwlContextMessages({ state, user, path, weekId = state.curr
   const messages: OwlMessage[] = []
   if (manager) {
     const current = weekRegistrations(state, weekId)
-    const unresolved = current.filter(row => needsTeacherAction(row))
+    const unresolved = current.filter(row => pendingForTeacher(row, state, nowMs))
     const waiting = unresolved.length
     // The red dot represents actionable work, never a generic unread-notification count.
     // This prevents an already-approved registration from keeping the owl in alert state
@@ -154,7 +173,7 @@ export function buildOwlContextMessages({ state, user, path, weekId = state.curr
     if (route === 'students') messages.push({ kind:'page', text:`Lớp hiện có ${learnerCount(state)} học sinh/cán sự đang hoạt động.` })
     else if (route === 'review') messages.push({ kind:'page', text: waiting ? `Mở từng đăng ký để xem lý do AI và phản hồi học sinh.` : `Danh sách duyệt của ${weekLabel} hiện đã gọn.` })
     else if (route === 'tracking') messages.push({ kind:'page', text:`Theo dõi từng buổi bằng bộ lọc để tìm nhanh học sinh chưa đăng ký hoặc cần xử lý.` })
-    else if (route === 'issues') messages.push({ kind:'page', text:`Báo cáo lỗi chỉ giữ các yêu cầu sửa đã quá giờ bắt đầu tiết; chúng không còn nằm trong hàng chờ giáo viên.` })
+    else if (route === 'issues') messages.push({ kind:'page', text:`Báo cáo lỗi giữ hai loại đã quá giờ bắt đầu tiết: học sinh chưa sửa kịp, và đăng ký không được duyệt kịp. Cả hai đều không còn nằm trong hàng chờ giáo viên.` })
     else if (route === 'weeks') messages.push({ kind:'page', text:`Bạn đang quản lý ${weekLabel}. Tuần kế tiếp được mở sớm để học sinh đăng ký trước.` })
     else if (route === 'schedule') messages.push({ kind:'page', text:`Thời khóa biểu hiện có ${state.schedule.length} tiết mặc định; tuần có lịch riêng sẽ dùng override.` })
     else if (route === 'statistics') messages.push({ kind:'page', text:`Thống kê đang so sánh đăng ký hợp lệ, cần xử lý và chưa đăng ký theo tuần.` })
@@ -166,12 +185,19 @@ export function buildOwlContextMessages({ state, user, path, weekId = state.curr
     messages.push(...learnerScheduleMessages({ state, user, weekId, nowMs }))
     if (user.role === 'monitor') messages.push(...monitorClassSupportMessages({ state, weekId, nowMs }))
     const needs = own.filter(row => row.status === 'needs_revision' && !overdue(row, state, nowMs)).length
-    const issues = own.filter(row => overdue(row, state, nowMs)).length
-    const submitted = own.filter(row => row.status === 'submitted').length
+    // Đăng ký "không duyệt" đã hết đường chờ duyệt, nên không được đếm là
+    // "đang chờ duyệt" nữa — nếu không HS sẽ ngồi đợi một kết quả không tới.
+    // Tách hai loại: HS không sửa kịp là việc của HS, còn không được duyệt kịp
+    // thì HS đã nộp đúng hạn — không được nói như thể HS làm sai.
+    const lateRevision = own.filter(row => overdue(row, state, nowMs)).length
+    const notApproved = own.filter(row => reported(row, state, nowMs) && !overdue(row, state, nowMs)).length
+    const issues = lateRevision + notApproved
+    const submitted = own.filter(row => row.status === 'submitted' && !reported(row, state, nowMs)).length
     if (needs) messages.push({ kind:'urgent', urgent:true, text:`Bạn có ${needs} đăng ký được giáo viên hoặc AI yêu cầu chỉnh sửa.` })
-    if (issues) messages.push({ kind:'page', text:`Bạn có ${issues} đăng ký đã chuyển sang Báo cáo lỗi vì chưa sửa trước giờ bắt đầu tiết.` })
+    if (lateRevision) messages.push({ kind:'page', text:`Bạn có ${lateRevision} đăng ký đã chuyển sang Báo cáo lỗi vì chưa sửa trước giờ bắt đầu tiết.` })
+    if (notApproved) messages.push({ kind:'page', text:`Bạn có ${notApproved} đăng ký không được duyệt kịp trước giờ bắt đầu tiết. Bạn đã nộp đúng hạn nên đây không phải lỗi của bạn.` })
     if (route === 'register' || route === 'dashboard') messages.push({ kind:'page', text: submitted ? `${weekLabel}: ${submitted} đăng ký của bạn đang chờ duyệt.` : `${weekLabel}: hãy hoàn thiện nội dung trước deadline từng buổi.` })
-    else if (route === 'issues') messages.push({ kind:'page', text: issues ? `Mở từng mục để xem yêu cầu sửa đã bị quá hạn.` : `${weekLabel} chưa có Báo cáo lỗi.` })
+    else if (route === 'issues') messages.push({ kind:'page', text: issues ? `Mở từng mục để xem đăng ký quá hạn sửa và đăng ký không được duyệt kịp.` : `${weekLabel} chưa có Báo cáo lỗi.` })
     else if (route === 'history') messages.push({ kind:'page', text:`Lịch sử của bạn có ${state.registrations.filter(row=>row.studentId===user.id).length} lượt đăng ký.` })
     else if (route === 'comments') messages.push({ kind:'page', text:`Bạn có ${state.registrations.filter(row=>row.studentId===user.id&&row.teacherComment).length} đăng ký từng nhận phản hồi giáo viên.` })
   }

@@ -307,6 +307,21 @@ export function registrationManagerActions({
   }
 }
 
+/**
+ * Việc thật sự còn chờ giáo viên: chờ duyệt, AI không giữ, và buổi tự học
+ * **chưa bắt đầu**. Khác với needsTeacherAction() — hàm đó không biết tuần nên
+ * không biết buổi đã bắt đầu chưa, và dùng nó để đếm hàng đợi thì đăng ký đã
+ * chuyển sang Báo cáo lỗi vẫn nằm mãi trong hàng chờ GV, đồng thời Cú vẫn nhắc.
+ * Mọi ô đếm "cần GV xử lý" và mọi lời nhắc của Cú phải đi qua đây.
+ */
+export function isTeacherQueueItem(
+  registration: RegistrationRecord | null | undefined,
+  options: { week: WeekRecord; periods: PeriodRecord[]; nowMs: number },
+): boolean {
+  if (!registration) return false
+  return registrationManagerActions({ registration, ...options }).canApprove
+}
+
 export function matchesApprovalFilter(
   registration: RegistrationRecord,
   filter: ApprovalFilter,
