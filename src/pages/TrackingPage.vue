@@ -13,6 +13,7 @@ import { approveRegistrationsMutation, deleteManagedRegistration, markHandledReg
 import { useLegacyMutationRuntime } from '../features/shared/useLegacyMutationRuntime'
 import { useWeekData } from '../features/weeks/queries'
 import { legacyApi } from '../services/legacy-supabase'
+import { appDialog } from '../features/shared/app-dialog'
 import { useAuthStore } from '../stores/auth'
 import { useContextStore } from '../stores/context'
 import type { RegistrationRecord, ScheduleSlot } from '../types/legacy'
@@ -46,16 +47,16 @@ const sessionAiCandidates=computed(()=>selectedSummary.value?.rows.map(row=>row.
 function canAiRereview(row:(typeof visibleRows.value)[number]){return manager.value&&aiEnabled.value&&aiCandidate(row.registration)}
 async function run(id:string,task:()=>Promise<unknown>,message:string){if(!classId.value)return;busyId.value=id;status.value='saving';statusMessage.value='Đang xử lý và đồng bộ với cơ sở dữ liệu…';try{await task();status.value='success';statusMessage.value=message}catch(error){status.value='error';statusMessage.value=error instanceof Error?error.message:'Không hoàn tất được thao tác.'}finally{busyId.value=null}}
 async function approve(id:string){await run(id,()=>approveRegistrationsMutation(runtime(),classId.value!,[id]),'Đã duyệt đăng ký.')}
-async function revise(id:string){const comment=window.prompt('Nhập hướng dẫn cần chỉnh sửa:')?.trim();if(!comment)return;await run(id,()=>requestManagedRevision(runtime(),classId.value!,id,comment),'Đã yêu cầu chỉnh sửa.')}
-async function comment(id:string){const row=registrations.value.find(item=>item.id===id);const value=window.prompt('Nhận xét giáo viên:',String(row?.teacherComment??''))?.trim();if(!value)return;await run(id,()=>saveTeacherCommentMutation(runtime(),classId.value!,id,value),'Đã lưu nhận xét.')}
-async function remove(id:string){if(!window.confirm('Xóa đăng ký này?'))return;await run(id,()=>deleteManagedRegistration(runtime(),classId.value!,id),'Đã xóa đăng ký.')}
+async function revise(id:string){const comment=await appDialog.prompt({title:'Yêu cầu học sinh chỉnh sửa',label:'Hướng dẫn cần chỉnh sửa',placeholder:'Ghi rõ phần cần sửa để học sinh biết làm gì.',multiline:true,confirmLabel:'Gửi yêu cầu sửa'});if(!comment)return;await run(id,()=>requestManagedRevision(runtime(),classId.value!,id,comment),'Đã yêu cầu chỉnh sửa.')}
+async function comment(id:string){const row=registrations.value.find(item=>item.id===id);const value=await appDialog.prompt({title:'Nhận xét giáo viên',label:'Nội dung nhận xét',placeholder:'Nhận xét hoặc hướng dẫn cụ thể cho học sinh.',multiline:true,initialValue:String(row?.teacherComment??''),confirmLabel:'Lưu nhận xét'});if(!value)return;await run(id,()=>saveTeacherCommentMutation(runtime(),classId.value!,id,value),'Đã lưu nhận xét.')}
+async function remove(id:string){if(!await appDialog.confirm({title:'Xóa đăng ký',body:'Xóa đăng ký này? Thao tác dùng cơ chế xóa an toàn, lịch sử vẫn được giữ.',confirmLabel:'Xóa đăng ký',danger:true}))return;await run(id,()=>deleteManagedRegistration(runtime(),classId.value!,id),'Đã xóa đăng ký.')}
 async function refreshAfterAi(){if(!classId.value)return;await auth.reload(classId.value,context.selectedSchoolYearId);context.hydrate(auth.legacyState);await weekQuery.refetch()}
 function refreshedRegistration(id:string){return registrations.value.find(item=>item.id===id)??auth.legacyState?.registrations.find(item=>item.id===id)??null}
 function aiOutcomeMessage(row:RegistrationRecord|null){if(!row)return{state:'server-changed' as InlineStatusState,message:'AI đã phản hồi nhưng chưa đọc được trạng thái đăng ký mới.'};if(aiOutcomeMismatch(row))return{state:'error' as InlineStatusState,message:`${aiReviewHistoryLabel(row)}. Kết quả AI chưa được backend áp dụng vào trạng thái đăng ký; đăng ký được giữ trong hàng GV để không bỏ sót.`};if(row.status==='approved'&&row.approvalSource==='ai')return{state:'success' as InlineStatusState,message:'AI đã duyệt đăng ký.'};if(row.status==='needs_revision')return{state:'server-changed' as InlineStatusState,message:'AI yêu cầu học sinh chỉnh sửa đăng ký.'};if(needsTeacherAction(row))return{state:'server-changed' as InlineStatusState,message:'AI đã chuyển đăng ký cho giáo viên xử lý.'};return{state:'success' as InlineStatusState,message:'AI đã xử lý đăng ký.'}}
 async function markOldNotificationRead(ids:string[]){if(!ids.length)return;await markHandledRegistrationNotificationsRead(runtime(),ids)}
 async function rerunRegistrationAi(id:string){
   if(!aiEnabled.value||!classId.value)return
-  if(!window.confirm('Gọi AI duyệt lại đăng ký này? Trạng thái hiện tại có thể chuyển về chờ AI xử lý.'))return
+  if(!await appDialog.confirm({title:'AI duyệt lại đăng ký',body:'Gọi AI duyệt lại đăng ký này? Trạng thái hiện tại có thể chuyển về chờ AI xử lý.',confirmLabel:'Gọi AI duyệt lại'}))return
   busyId.value=id;status.value='saving';statusMessage.value='Đang chuẩn bị AI duyệt lại...'
   try{
     await markOldNotificationRead([id])
@@ -73,7 +74,7 @@ async function rerunSessionAi(){
   const candidates=sessionAiCandidates.value
   if(!candidates.length){status.value='error';statusMessage.value='Buổi này không có đăng ký phù hợp để AI duyệt lại.';return}
   const approvedCount=candidates.filter(row=>row.status==='approved').length
-  if(!window.confirm(`Gọi AI duyệt lại ${candidates.length} đăng ký của ${label(selectedSummary.value.session)}?${approvedCount?`\n${approvedCount} đăng ký đã duyệt sẽ tạm chuyển về chờ AI.`:''}\nBản nháp, Cần chỉnh sửa và Báo cáo lỗi được giữ nguyên.`))return
+  if(!await appDialog.confirm({title:'AI duyệt lại cả buổi',body:`Gọi AI duyệt lại ${candidates.length} đăng ký của ${label(selectedSummary.value.session)}?${approvedCount?` ${approvedCount} đăng ký đã duyệt sẽ tạm chuyển về chờ AI.`:''} Bản nháp, Cần chỉnh sửa và Báo cáo lỗi được giữ nguyên.`,confirmLabel:'Gọi AI duyệt lại'}))return
   aiBusy.value=true;aiProgress.value='Đang chuẩn bị hàng đợi AI...';status.value='idle';statusMessage.value=''
   let success=0,manualFallback=0,skipped=0,failed=0,ids:string[]=[]
   try{

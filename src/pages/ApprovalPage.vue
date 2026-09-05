@@ -13,6 +13,7 @@ import { registrationManagerActions, type ApprovalFilter } from '../features/reg
 import { useLegacyMutationRuntime } from '../features/shared/useLegacyMutationRuntime'
 import { useDirtyEditor } from '../features/shared/dirty-registry'
 import { useWeekData } from '../features/weeks/queries'
+import { appDialog } from '../features/shared/app-dialog'
 import { useAuthStore } from '../stores/auth'
 import { useContextStore } from '../stores/context'
 import type { RegistrationRecord } from '../types/legacy'
@@ -41,7 +42,7 @@ async function approveVisible(){if(!classId.value||!eligibleVisibleIds.value.len
 async function saveComment(value:string){if(!selected.value||!classId.value)return;await run(()=>saveTeacherCommentMutation(runtime(),classId.value!,selected.value!.id,value),'Đã lưu nhận xét giáo viên.')}
 async function requestRevision(value:string){if(!selected.value||!classId.value)return;await run(()=>requestManagedRevision(runtime(),classId.value!,selected.value!.id,value),'Đã yêu cầu học sinh chỉnh sửa.')}
 async function markAiWrong(value:string){if(!selected.value||!classId.value)return;await run(()=>requestManagedRevision(runtime(),classId.value!,selected.value!.id,value),'Đã ghi nhận AI chưa đúng và chuyển yêu cầu sửa.')}
-async function remove(){if(!selected.value||!classId.value)return;if(!window.confirm('Xóa đăng ký này? Hành động dùng cơ chế xóa an toàn hiện có.'))return;const id=selected.value.id;await run(()=>deleteManagedRegistration(runtime(),classId.value!,id),'Đã xóa đăng ký.');selectedId.value=null}
+async function remove(){if(!selected.value||!classId.value)return;if(!await appDialog.confirm({title:'Xóa đăng ký',body:'Xóa đăng ký này? Hành động dùng cơ chế xóa an toàn hiện có.',confirmLabel:'Xóa đăng ký',danger:true}))return;const id=selected.value.id;await run(()=>deleteManagedRegistration(runtime(),classId.value!,id),'Đã xóa đăng ký.');selectedId.value=null}
 </script>
 
 <template>

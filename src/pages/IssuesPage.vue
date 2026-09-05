@@ -6,7 +6,7 @@ import RegistrationStatusBadge from '../components/registrations/RegistrationSta
 import { useAuthStore } from '../stores/auth'
 import { useContextStore } from '../stores/context'
 import { useWeekData } from '../features/weeks/queries'
-import { dateForDow, isRevisionOverdue, sessionStartMs } from '../features/registrations/registration-model'
+import { dateForDow, effectiveRegistrationStatus, isRegistrationIssue, sessionStartMs } from '../features/registrations/registration-model'
 import { useNowTicker } from '../features/shared/useNowTicker'
 import type { RegistrationRecord } from '../types/legacy'
 
@@ -20,15 +20,27 @@ const reports=computed(()=>{
   const selectedWeek=week.value
   if(!selectedWeek)return[]
   return registrations.value
-    .filter(row=>row.isDeleted!==true&&isRevisionOverdue(row,{week:selectedWeek,periods:periods.value,nowMs:nowMs.value}))
+    .filter(row=>row.isDeleted!==true&&isRegistrationIssue(row,{week:selectedWeek,periods:periods.value,nowMs:nowMs.value}))
     .filter(row=>canViewClass.value||row.studentId===auth.currentUser?.id)
     .slice()
     .sort((a,b)=>reportTime(b)-reportTime(a))
 })
+// Hai loại cùng nằm ở đây nhưng nhãn khác nhau: 'revision_overdue' = HS không
+// sửa kịp trước giờ học; 'not_approved' = HS nộp đúng hạn nhưng GV/AI không
+// duyệt kịp. Nhãn lấy từ effectiveRegistrationStatus() để chỉ có một nguồn.
+function issueStatus(row:RegistrationRecord){
+  const selectedWeek=week.value
+  if(!selectedWeek)return'revision_overdue'
+  return effectiveRegistrationStatus(row,{week:selectedWeek,periods:periods.value,nowMs:nowMs.value})
+}
+const unapprovedCount=computed(()=>reports.value.filter(row=>issueStatus(row)==='not_approved').length)
+const overdueCount=computed(()=>reports.value.length-unapprovedCount.value)
 function student(row:RegistrationRecord){return auth.legacyState?.users.find(user=>user.id===row.studentId)??null}
 function period(row:RegistrationRecord){return periods.value.find(item=>Number(item.n)===Number(row.period))??null}
 function reportTime(row:RegistrationRecord){
-  if(row.revisionOverdueAt){const parsed=new Date(row.revisionOverdueAt).getTime();if(Number.isFinite(parsed))return parsed}
+  // Đăng ký "Không duyệt" không có mốc ghi nhận trong DB (không ai bấm gì cả),
+  // nên mốc chính là giờ bắt đầu buổi tự học.
+  if(row.status!=='submitted'&&row.revisionOverdueAt){const parsed=new Date(row.revisionOverdueAt).getTime();if(Number.isFinite(parsed))return parsed}
   const selectedWeek=week.value
   if(!selectedWeek)return 0
   const start=sessionStartMs({week:selectedWeek,dow:row.dow,period:row.period,periods:periods.value})
@@ -42,23 +54,23 @@ const days=['Thứ 2','Thứ 3','Thứ 4','Thứ 5','Thứ 6']
 <template>
   <div class="page-stack issues-page">
     <header class="issues-header">
-      <div><span class="page-context"><TriangleAlert aria-hidden="true"/> Theo dõi quá hạn chỉnh sửa</span><h1>Báo cáo lỗi</h1><p>Tuần {{ week?.number??'–' }} · các yêu cầu sửa chưa được hoàn tất trước giờ bắt đầu tiết.</p></div>
+      <div><span class="page-context"><TriangleAlert aria-hidden="true"/> Theo dõi quá hạn chỉnh sửa</span><h1>Báo cáo lỗi</h1><p>Tuần {{ week?.number??'–' }} · đăng ký chưa xong trước giờ bắt đầu tiết: {{ overdueCount }} quá hạn chỉnh sửa · {{ unapprovedCount }} chưa được duyệt.</p></div>
       <span class="issue-count">{{ reports.length }} mục</span>
     </header>
 
-    <AppCard padding="md" class="explain"><TriangleAlert aria-hidden="true"/><div><b>Đây không còn là yêu cầu chỉnh sửa đang chờ.</b><p>Khi buổi tự học đã bắt đầu, đăng ký chưa sửa được chuyển sang Báo cáo lỗi và chỉ giữ lại để theo dõi.</p></div></AppCard>
+    <AppCard padding="md" class="explain"><TriangleAlert aria-hidden="true"/><div><b>Đây không còn là việc đang chờ xử lý.</b><p>Khi buổi tự học đã bắt đầu, đăng ký chưa hoàn tất được chuyển sang Báo cáo lỗi và chỉ giữ lại để theo dõi. <b>Cần chỉnh sửa</b> quá hạn là học sinh chưa sửa kịp; <b>Không duyệt</b> là học sinh đã nộp đúng hạn nhưng chưa được duyệt trước giờ học.</p></div></AppCard>
 
     <section v-if="reports.length" class="issue-grid">
       <AppCard v-for="row in reports" :key="row.id" padding="lg" class="issue-card">
-        <header><div><span class="slot">{{ days[row.dow] }} · {{ week?formatDate(dateForDow(week,row.dow)):'' }} · Tiết {{ row.period }}</span><h2>{{ canViewClass ? (student(row)?.name||student(row)?.code||'Học sinh') : 'Đăng ký của bạn' }}</h2><small v-if="canViewClass">{{ student(row)?.code||'' }}</small></div><RegistrationStatusBadge status="revision_overdue"/></header>
+        <header><div><span class="slot">{{ days[row.dow] }} · {{ week?formatDate(dateForDow(week,row.dow)):'' }} · Tiết {{ row.period }}</span><h2>{{ canViewClass ? (student(row)?.name||student(row)?.code||'Học sinh') : 'Đăng ký của bạn' }}</h2><small v-if="canViewClass">{{ student(row)?.code||'' }}</small></div><RegistrationStatusBadge :status="issueStatus(row)"/></header>
         <div class="content-block"><small>Nội dung đăng ký</small><b>{{ row.content }}</b><p v-if="row.note">{{ row.note }}</p></div>
-        <div v-if="row.teacherComment" class="feedback teacher"><MessageSquareText aria-hidden="true"/><div><small>Yêu cầu sửa của giáo viên</small><p>{{ row.teacherComment }}</p></div></div>
+        <div v-if="row.teacherComment" class="feedback teacher"><MessageSquareText aria-hidden="true"/><div><small>{{ issueStatus(row)==='not_approved'?'Nhận xét của giáo viên':'Yêu cầu sửa của giáo viên' }}</small><p>{{ row.teacherComment }}</p></div></div>
         <div v-if="row.aiReason" class="feedback ai"><span>AI</span><div><small>Phản hồi / lý do của AI</small><p>{{ row.aiReason }}</p></div></div>
         <footer><span><Clock3 aria-hidden="true"/> Ghi nhận: {{ formatDateTime(reportTime(row)) }}</span><span v-if="canViewClass"><UserRound aria-hidden="true"/> {{ student(row)?.name||'Học sinh' }}</span></footer>
       </AppCard>
     </section>
 
-    <AppCard v-else padding="lg" class="empty"><TriangleAlert aria-hidden="true"/><h2>Chưa có Báo cáo lỗi</h2><p>Không có đăng ký nào bị quá hạn chỉnh sửa trong tuần đang xem.</p></AppCard>
+    <AppCard v-else padding="lg" class="empty"><TriangleAlert aria-hidden="true"/><h2>Chưa có Báo cáo lỗi</h2><p>Mọi đăng ký trong tuần đang xem đều được xử lý xong trước giờ bắt đầu tiết.</p></AppCard>
   </div>
 </template>
 

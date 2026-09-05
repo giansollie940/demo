@@ -15,6 +15,7 @@ import { useLegacyMutationRuntime } from '../features/shared/useLegacyMutationRu
 import { useDirtyEditor } from '../features/shared/dirty-registry'
 import { useNowTicker } from '../features/shared/useNowTicker'
 import type { PeriodRecord, RegistrationRecord, ScheduleSlot } from '../types/legacy'
+import { appDialog } from '../features/shared/app-dialog'
 
 const auth=useAuthStore(),context=useContextStore(),createRuntime=useLegacyMutationRuntime(),dirtyEditor=useDirtyEditor('registration-dialog'),nowMs=useNowTicker(30_000)
 const classId=computed(()=>context.selectedClassId),weekId=computed(()=>context.selectedWeekId),week=computed(()=>context.selectedWeek)
@@ -37,7 +38,7 @@ function runtime(){return createRuntime() as RegistrationMutationRuntime}
 function messageOf(value:unknown){return value instanceof Error?value.message:'Không hoàn tất được đăng ký.'}
 async function saveDraft(payload:{content:string;note:string;usesElectronicDevice:boolean}){if(!selected.value||!classId.value||!weekId.value)return;saving.value=true;error.value='';try{await saveRegistrationMutation(runtime(),{classId:classId.value,weekId:weekId.value,dow:selected.value.slot.dow,period:selected.value.slot.period,...payload,status:'draft'});close();status.value='success';statusMessage.value='Đã lưu bản nháp.'}catch(value){error.value=messageOf(value)}finally{saving.value=false}}
 async function submit(payload:{content:string;note:string;usesElectronicDevice:boolean;reason:string}){if(!selected.value||!classId.value||!weekId.value)return;saving.value=true;error.value='';try{const base={classId:classId.value,weekId:weekId.value,dow:selected.value.slot.dow,period:selected.value.slot.period,content:payload.content,note:payload.note,usesElectronicDevice:payload.usesElectronicDevice};const result=dialogMode.value==='emergency'?await createEmergencyRegistrationWithAi(runtime(),{...base,reason:payload.reason}):await submitRegistrationWithAi(runtime(),base);close();status.value=result.aiError?'error':'success';statusMessage.value=result.aiError?'Đã lưu; AI chưa phản hồi nên giáo viên sẽ duyệt.':result.registration.status==='approved'&&result.registration.approvalSource==='ai'?'AI đã duyệt đăng ký.':'Đã gửi đăng ký.'}catch(value){error.value=messageOf(value)}finally{saving.value=false}}
-async function cancelEmergency(id:string){if(!classId.value)return;if(!window.confirm('Hủy đăng ký bổ sung này?'))return;try{await cancelEmergencyRegistration(runtime(),classId.value,id);status.value='success';statusMessage.value='Đã hủy đăng ký bổ sung.'}catch(value){status.value='error';statusMessage.value=messageOf(value)}}
+async function cancelEmergency(id:string){if(!classId.value)return;if(!await appDialog.confirm({title:'Hủy đăng ký bổ sung',body:'Hủy đăng ký bổ sung này?',confirmLabel:'Hủy đăng ký',danger:true}))return;try{await cancelEmergencyRegistration(runtime(),classId.value,id);status.value='success';statusMessage.value='Đã hủy đăng ký bổ sung.'}catch(value){status.value='error';statusMessage.value=messageOf(value)}}
 </script>
 
 <template>

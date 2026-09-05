@@ -57,6 +57,29 @@ export function isRevisionOverdue(
   return Number.isFinite(start) && nowMs >= start
 }
 
+/**
+ * Đăng ký vẫn đang "chờ duyệt" khi buổi tự học đã bắt đầu: GV/AI không kịp
+ * duyệt và cũng không kịp yêu cầu HS sửa trước giờ học. Không ai bấm nút nào
+ * cả — chỉ cần qua giờ bắt đầu tiết là đăng ký tự rơi vào diện này, giống cách
+ * isRevisionOverdue() vốn hoạt động cho ca "HS không sửa kịp".
+ *
+ * Phía GV, đăng ký này hiện trong mục Báo cáo lỗi. Phía HS/cán sự, nhãn là
+ * "Không duyệt" (không phải "Báo cáo lỗi") vì đây không phải lỗi của HS: HS đã
+ * nộp đúng hạn, chỉ là không được duyệt kịp.
+ *
+ * 'draft' cố ý không tính: bản nháp chưa từng được gửi đi nên thuộc diện
+ * "chưa đăng ký", không phải chuyện duyệt hay không duyệt.
+ */
+export function isUnapprovedAtSessionStart(
+  registration: RegistrationRecord | null,
+  { week, periods, nowMs }: { week: WeekRecord; periods: PeriodRecord[]; nowMs: number },
+): boolean {
+  if (!registration || registration.isDeleted === true) return false
+  if (registration.status !== 'submitted') return false
+  const start = sessionStartMs({ week, dow: registration.dow, period: registration.period, periods })
+  return Number.isFinite(start) && nowMs >= start
+}
+
 export interface RegistrationEligibility {
   regularNewAllowed: boolean
   editable: boolean
@@ -124,7 +147,21 @@ export function effectiveRegistrationStatus(
   options: { week: WeekRecord; periods: PeriodRecord[]; nowMs: number },
 ): string {
   if (!registration) return 'missing'
-  return isRevisionOverdue(registration, options) ? 'revision_overdue' : registration.status
+  if (isRevisionOverdue(registration, options)) return 'revision_overdue'
+  if (isUnapprovedAtSessionStart(registration, options)) return 'not_approved'
+  return registration.status
+}
+
+/**
+ * Hai loại cùng nằm trong mục Báo cáo lỗi của GV, nhưng giữ nhãn riêng để HS
+ * biết trách nhiệm thuộc về ai: 'revision_overdue' là HS không sửa kịp,
+ * 'not_approved' là không được duyệt kịp.
+ */
+export function isRegistrationIssue(
+  registration: RegistrationRecord | null,
+  options: { week: WeekRecord; periods: PeriodRecord[]; nowMs: number },
+): boolean {
+  return isRevisionOverdue(registration, options) || isUnapprovedAtSessionStart(registration, options)
 }
 
 

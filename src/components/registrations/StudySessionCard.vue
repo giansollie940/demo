@@ -16,11 +16,17 @@ const props = defineProps<{
 }>()
 const emit = defineEmits<{ open: [mode: 'regular' | 'emergency']; 'cancel-emergency': [id: string] }>()
 const days = ['Thứ 2', 'Thứ 3', 'Thứ 4', 'Thứ 5', 'Thứ 6']
-const status = computed(() => props.eligibility.reported ? 'revision_overdue' : props.registration?.status ?? 'missing')
+const status = computed(() => {
+  if (props.eligibility.reported) return 'revision_overdue'
+  // Nộp rồi nhưng buổi học đã bắt đầu mà chưa được duyệt.
+  if (props.registration?.status === 'submitted' && props.eligibility.started) return 'not_approved'
+  return props.registration?.status ?? 'missing'
+})
 const actionLabel = computed(() => {
   const row = props.registration
   if (row) {
     if (props.eligibility.reported) return 'Xem báo cáo lỗi'
+    if (row.status === 'submitted' && props.eligibility.started) return 'Xem lý do'
     if (row.status === 'approved' && props.eligibility.editable) return 'Sửa đăng ký'
     if (row.status === 'needs_revision' && props.eligibility.editable) return 'Sửa theo yêu cầu'
     return props.eligibility.editable ? 'Xem / sửa' : 'Xem'

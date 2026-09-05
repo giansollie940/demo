@@ -24,6 +24,7 @@ import {
 import { useLegacyMutationRuntime } from '../features/shared/useLegacyMutationRuntime'
 import { useDirtyEditor } from '../features/shared/dirty-registry'
 import type { ScheduleSlot } from '../types/legacy'
+import { appDialog } from '../features/shared/app-dialog'
 
 const auth = useAuthStore()
 const context = useContextStore()
@@ -80,9 +81,9 @@ watch([weekId, classId], loadDraft, { immediate: true })
 watch(() => auth.legacyState, () => { if (!(isDirty.value && serverChanged.value)) loadDraft() })
 watch(isDirty, value => dirtyEditor.setDirty(value), { immediate: true })
 
-function changeMode(next:'default'|'week') {
+async function changeMode(next:'default'|'week') {
   if (readOnly.value || next === mode.value) return
-  if (isDirty.value && !window.confirm('Bỏ thay đổi chưa lưu và đổi chế độ TKB?')) return
+  if (isDirty.value && !await appDialog.confirm({title:'Thay đổi chưa lưu',body:'Bỏ thay đổi chưa lưu và đổi chế độ TKB?',confirmLabel:'Bỏ thay đổi',danger:true})) return
   dirtyEditor.markClean()
   mode.value = next
   loadDraft()

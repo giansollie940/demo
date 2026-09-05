@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { AlertTriangle, CheckCircle2, Clock3, FilePenLine, MinusCircle } from 'lucide-vue-next'
+import { AlertTriangle, CheckCircle2, CircleSlash, Clock3, FilePenLine, MinusCircle } from 'lucide-vue-next'
 import { computed } from 'vue'
 
 const props = defineProps<{ status: string }>()
@@ -10,6 +10,9 @@ const config = computed(() => ({
   approved: { label: 'Đã duyệt', icon: CheckCircle2, tone: 'success' },
   needs_revision: { label: 'Cần chỉnh sửa', icon: FilePenLine, tone: 'warning' },
   revision_overdue: { label: 'Báo cáo lỗi', icon: AlertTriangle, tone: 'danger' },
+  // HS nộp đúng hạn nhưng buổi học đã bắt đầu mà chưa được duyệt. Không phải
+  // lỗi của HS nên không dùng nhãn "Báo cáo lỗi" như ca quá hạn chỉnh sửa.
+  not_approved: { label: 'Không duyệt', icon: CircleSlash, tone: 'danger' },
 }[props.status] ?? { label: props.status || 'Chưa đăng ký', icon: MinusCircle, tone: 'neutral' }))
 </script>
 
