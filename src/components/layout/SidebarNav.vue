@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, type Component } from 'vue'
 import { useRoute } from 'vue-router'
-import { Building2, CalendarClock, CalendarRange, ChartNoAxesCombined, ClipboardCheck, GraduationCap, History, LayoutDashboard, MessagesSquare, NotebookPen, Settings, ShieldCheck, TriangleAlert, UsersRound } from 'lucide-vue-next'
+import { Building2, CalendarClock, CalendarRange, ChartNoAxesCombined, ClipboardCheck, GraduationCap, History, LayoutDashboard, MessagesSquare, NotebookPen, Settings, ShieldCheck, Trash2, TriangleAlert, UsersRound } from 'lucide-vue-next'
 import { useAuthStore } from '../../stores/auth'
 import { visibleNavigation } from '../../features/navigation/navigation'
 
@@ -9,7 +9,7 @@ const props=defineProps<{collapsed:boolean}>()
 const route=useRoute()
 const auth=useAuthStore()
 const hoveredIndex=ref<number|null>(null)
-const icons:Record<string,Component>={LayoutDashboard,NotebookPen,ClipboardCheck,UsersRound,CalendarRange,CalendarClock,GraduationCap,ChartNoAxesCombined,History,MessagesSquare,ShieldCheck,TriangleAlert,Settings,Building2}
+const icons:Record<string,Component>={LayoutDashboard,NotebookPen,ClipboardCheck,UsersRound,CalendarRange,CalendarClock,GraduationCap,ChartNoAxesCombined,History,MessagesSquare,ShieldCheck,TriangleAlert,Settings,Building2,Trash2}
 const items=computed(()=>visibleNavigation(auth.currentUser?.role))
 
 function dockScale(index:number){

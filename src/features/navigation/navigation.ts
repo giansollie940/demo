@@ -26,6 +26,7 @@ export const navigation:NavigationItem[]=[
   item('Học sinh','/admin?tab=students','GraduationCap',admins),
   item('Giáo viên','/admin?tab=teachers','UsersRound',admins),
   item('Phân quyền','/admin?tab=permissions','ShieldCheck',admins),
+  item('Thùng rác','/admin?tab=recycle','Trash2',admins),
   item('Nhật ký hệ thống','/admin?tab=audit','History',admins),
   item('Cài đặt','/settings','Settings',teachers),
 ]

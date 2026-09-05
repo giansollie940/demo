@@ -292,8 +292,13 @@ export function registrationManagerActions({
   const start = sessionStartMs({ week, dow: registration.dow, period: registration.period, periods })
   const started = Number.isFinite(start) && nowMs >= start
   const reported = isRevisionOverdue(registration, { week, periods, nowMs })
+  // Buổi học đã bắt đầu mà đăng ký vẫn "chờ duyệt" thì nó đã thành mục Báo cáo
+  // lỗi, không còn là việc đang chờ GV xử lý nữa -- duyệt một buổi đã diễn ra
+  // xong là vô nghĩa. Bộ lọc "Cần xử lý" và ô đếm của trang Duyệt đăng ký đều
+  // đi qua canApprove nên chỉ cần chặn ở đây là cả hai chỗ cùng đúng.
+  const unapprovedAtStart = isUnapprovedAtSessionStart(registration, { week, periods, nowMs })
   return {
-    canApprove: !reported && needsTeacherAction(registration),
+    canApprove: !reported && !unapprovedAtStart && needsTeacherAction(registration),
     canRequestRevision: !reported && !started && ['submitted', 'needs_revision', 'approved'].includes(registration.status),
     canComment: true,
     canDelete: true,

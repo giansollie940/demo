@@ -22,6 +22,9 @@ const code = ref('')
 const password = ref('')
 const showPassword = ref(false)
 const submitError = ref('')
+const touched = ref(false)
+const codeInvalid = computed(() => touched.value && !code.value.trim())
+const passwordInvalid = computed(() => touched.value && !password.value)
 
 const slogans = [
   'Học chủ động. Tiến bộ mỗi ngày.',
@@ -39,6 +42,16 @@ useIntervalFn(() => {
 const slogan = computed(() => slogans[sloganIndex.value])
 
 async function submit() {
+  // novalidate trên form: bong bóng kiểm tra của trình duyệt không theo theme và
+  // hiện bằng ngôn ngữ của trình duyệt. Trang này đã có sẵn chỗ báo lỗi riêng
+  // (submitError) nên dùng luôn chỗ đó cho cả trường hợp bỏ trống.
+  touched.value = true
+  if (!code.value.trim() || !password.value) {
+    submitError.value = !code.value.trim()
+      ? 'Hãy nhập mã đăng nhập.'
+      : 'Hãy nhập mật khẩu.'
+    return
+  }
   submitError.value = ''
   try {
     await auth.login(code.value, password.value)
@@ -94,7 +107,7 @@ async function submit() {
           <p>Dùng mã đăng nhập được nhà trường cấp.</p>
         </div>
 
-        <form class="login-form" @submit.prevent="submit">
+        <form class="login-form" novalidate @submit.prevent="submit">
           <label>
             <span>Mã đăng nhập</span>
             <div class="field">
@@ -104,6 +117,7 @@ async function submit() {
                 autocomplete="username"
                 placeholder="Ví dụ: gv-7a9"
                 required
+                :aria-invalid="codeInvalid"
               />
             </div>
           </label>
@@ -118,6 +132,7 @@ async function submit() {
                 autocomplete="current-password"
                 placeholder="Nhập mật khẩu"
                 required
+                :aria-invalid="passwordInvalid"
               />
               <button
                 type="button"
