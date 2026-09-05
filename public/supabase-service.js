@@ -349,6 +349,20 @@
     return data===true;
   }
 
+  async function rejectOverdueRegistration(registrationId,teacherComment){
+    const sb=requireClient();
+    const comment=String(teacherComment||"").trim();
+    if(!isUuid(registrationId)) throw new Error("Đăng ký không hợp lệ.");
+    if(!comment) throw new Error("Vui lòng nhập lý do không duyệt.");
+
+    const {data,error}=await sb.rpc("reject_overdue_registration",{
+      p_registration_id:registrationId,
+      p_teacher_comment:comment
+    });
+    if(error) throw error;
+    return data===true;
+  }
+
   async function teacherRebaseWeeks(firstWeekStart, deadlineTime="20:00", schoolYearId=null){
     const sb=requireClient();
     if(!/^\d{4}-\d{2}-\d{2}$/.test(String(firstWeekStart||""))) throw new Error("Ngày bắt đầu tuần 1 không hợp lệ.");
@@ -1183,6 +1197,7 @@
     teacherListUsers,
     adminManageClasses,
     requestRegistrationRevision,
+    rejectOverdueRegistration,
     setActiveClassId,
     teacherRebaseWeeks,
     emergencyRegister,

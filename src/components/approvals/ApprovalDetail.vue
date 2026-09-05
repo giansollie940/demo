@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import { AlertTriangle, Bot, Check, Laptop2, MessageSquareText, PencilLine, Trash2, UserRound, XCircle } from 'lucide-vue-next'
+import { AlertTriangle, Ban, Bot, Check, Laptop2, MessageSquareText, PencilLine, Trash2, UserRound, XCircle } from 'lucide-vue-next'
 import AppButton from '../ui/AppButton.vue'
 import InlineStatus from '../ui/InlineStatus.vue'
 import type { CurrentUser, RegistrationRecord } from '../../types/legacy'
@@ -18,6 +18,7 @@ const emit = defineEmits<{
   comment: [value:string]
   revision: [value:string]
   aiWrong: [value:string]
+  rejectOverdue: [value:string]
   delete: []
   dirty: [value:boolean]
 }>()
@@ -59,10 +60,13 @@ const approvalLabel = computed(()=>{if(props.registration.status==='approved')re
       </div>
     </section>
 
+    <InlineStatus v-if="actions.canRejectOverdue" state="error" message="Buổi tự học đã bắt đầu nhưng đăng ký này chưa được xử lý; không thể yêu cầu học sinh sửa nữa. Dùng &quot;Không duyệt&quot; để đóng lại đăng ký với lý do bên trên." />
+
     <footer class="action-bar">
       <AppButton v-if="actions.canApprove" variant="success" :loading="saving" @click="emit('approve')"><Check aria-hidden="true" />Duyệt</AppButton>
       <AppButton v-if="actions.canRequestRevision" variant="warning" :disabled="!comment.trim()" :loading="saving" @click="emit('revision',comment)"><PencilLine aria-hidden="true" />Yêu cầu sửa</AppButton>
       <AppButton v-if="actions.canRequestRevision" variant="secondary" :disabled="!comment.trim()" :loading="saving" @click="emit('aiWrong',comment)"><XCircle aria-hidden="true" />AI chưa đúng</AppButton>
+      <AppButton v-if="actions.canRejectOverdue" variant="danger" :disabled="!comment.trim()" :loading="saving" @click="emit('rejectOverdue',comment)"><Ban aria-hidden="true" />Không duyệt</AppButton>
       <AppButton v-if="actions.canDelete" variant="danger" :loading="saving" @click="emit('delete')"><Trash2 aria-hidden="true" />Xóa đăng ký</AppButton>
     </footer>
   </article>
