@@ -235,6 +235,7 @@ export function aiReviewHistoryLabel(registration: RegistrationRecord | null | u
 export interface RegistrationManagerActions {
   canApprove: boolean
   canRequestRevision: boolean
+  canRejectOverdue: boolean
   canComment: boolean
   canDelete: boolean
   started: boolean
@@ -258,6 +259,11 @@ export function registrationManagerActions({
   return {
     canApprove: !reported && needsTeacherAction(registration),
     canRequestRevision: !reported && !started && ['submitted', 'needs_revision', 'approved'].includes(registration.status),
+    // "Chờ duyệt" nhưng buổi học đã bắt đầu trước khi GV/AI kịp xử lý:
+    // request_registration_revision() tự chặn một khi đã started (không thể
+    // yêu cầu HS sửa cho buổi đã qua), nên GV cần một lối "Không duyệt" dứt
+    // điểm riêng thay vì chỉ còn Duyệt (không hợp lý) hoặc Xóa (mất dấu vết).
+    canRejectOverdue: started && needsTeacherAction(registration),
     canComment: true,
     canDelete: true,
     started,

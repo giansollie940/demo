@@ -8,7 +8,7 @@ import ApprovalFilters from '../components/approvals/ApprovalFilters.vue'
 import ApprovalList from '../components/approvals/ApprovalList.vue'
 import ApprovalDetail from '../components/approvals/ApprovalDetail.vue'
 import { buildApprovalModel, filterApprovals } from '../features/approvals/approval-model'
-import { approveRegistrationsMutation, deleteManagedRegistration, requestManagedRevision, saveTeacherCommentMutation, type ApprovalMutationRuntime } from '../features/approvals/approval-mutations'
+import { approveRegistrationsMutation, deleteManagedRegistration, rejectOverdueRegistration, requestManagedRevision, saveTeacherCommentMutation, type ApprovalMutationRuntime } from '../features/approvals/approval-mutations'
 import { registrationManagerActions, type ApprovalFilter } from '../features/registrations/registration-model'
 import { useLegacyMutationRuntime } from '../features/shared/useLegacyMutationRuntime'
 import { useDirtyEditor } from '../features/shared/dirty-registry'
@@ -30,7 +30,7 @@ const filtered=computed(()=>week.value?filterApprovals(registrations.value,filte
 watch(filtered,(rows)=>{if(!rows.some(row=>row.id===selectedId.value))selectedId.value=rows[0]?.id??null},{immediate:true})
 const selected=computed<RegistrationRecord|null>(()=>registrations.value.find(row=>row.id===selectedId.value)??null)
 const selectedUser=computed(()=>selected.value?users.value.find(user=>user.id===selected.value!.studentId)??null:null)
-const selectedActions=computed(()=>selected.value&&week.value?registrationManagerActions({registration:selected.value,week:week.value,periods:auth.legacyState?.periods??[],nowMs:Date.now()}):{canApprove:false,canRequestRevision:false,canComment:false,canDelete:false,started:false,reported:false})
+const selectedActions=computed(()=>selected.value&&week.value?registrationManagerActions({registration:selected.value,week:week.value,periods:auth.legacyState?.periods??[],nowMs:Date.now()}):{canApprove:false,canRequestRevision:false,canRejectOverdue:false,canComment:false,canDelete:false,started:false,reported:false})
 const eligibleVisibleIds=computed(()=>filtered.value.filter(row=>week.value&&registrationManagerActions({registration:row,week:week.value,periods:auth.legacyState?.periods??[],nowMs:Date.now()}).canApprove).map(row=>row.id))
 function runtime(){return createRuntime() as ApprovalMutationRuntime}
 function messageOf(value:unknown){return value instanceof Error?value.message:'Không hoàn tất được thao tác duyệt.'}
@@ -41,6 +41,7 @@ async function approveVisible(){if(!classId.value||!eligibleVisibleIds.value.len
 async function saveComment(value:string){if(!selected.value||!classId.value)return;await run(()=>saveTeacherCommentMutation(runtime(),classId.value!,selected.value!.id,value),'Đã lưu nhận xét giáo viên.')}
 async function requestRevision(value:string){if(!selected.value||!classId.value)return;await run(()=>requestManagedRevision(runtime(),classId.value!,selected.value!.id,value),'Đã yêu cầu học sinh chỉnh sửa.')}
 async function markAiWrong(value:string){if(!selected.value||!classId.value)return;await run(()=>requestManagedRevision(runtime(),classId.value!,selected.value!.id,value),'Đã ghi nhận AI chưa đúng và chuyển yêu cầu sửa.')}
+async function rejectOverdue(value:string){if(!selected.value||!classId.value)return;await run(()=>rejectOverdueRegistration(runtime(),classId.value!,selected.value!.id,value),'Đã từ chối đăng ký quá hạn xử lý.')}
 async function remove(){if(!selected.value||!classId.value)return;if(!window.confirm('Xóa đăng ký này? Hành động dùng cơ chế xóa an toàn hiện có.'))return;const id=selected.value.id;await run(()=>deleteManagedRegistration(runtime(),classId.value!,id),'Đã xóa đăng ký.');selectedId.value=null}
 </script>
 
@@ -67,7 +68,7 @@ async function remove(){if(!selected.value||!classId.value)return;if(!window.con
     <section class="approval-workspace">
       <AppCard padding="sm" class="list-pane"><ApprovalList :registrations="filtered" :users="users" :selected-id="selectedId" @select="selectedId=$event" /></AppCard>
       <AppCard padding="lg" class="detail-pane">
-        <ApprovalDetail v-if="selected" :registration="selected" :user="selectedUser" :actions="selectedActions" :saving="saving" :error="error" @approve="approveSelected" @comment="saveComment" @revision="requestRevision" @ai-wrong="markAiWrong" @delete="remove" @dirty="dirtyEditor.setDirty" />
+        <ApprovalDetail v-if="selected" :registration="selected" :user="selectedUser" :actions="selectedActions" :saving="saving" :error="error" @approve="approveSelected" @comment="saveComment" @revision="requestRevision" @ai-wrong="markAiWrong" @reject-overdue="rejectOverdue" @delete="remove" @dirty="dirtyEditor.setDirty" />
         <div v-else class="empty-detail"><ShieldCheck aria-hidden="true" /><h2>Chọn một đăng ký</h2><p>Thông tin AI, nội dung và thao tác duyệt sẽ xuất hiện tại đây.</p></div>
       </AppCard>
     </section>

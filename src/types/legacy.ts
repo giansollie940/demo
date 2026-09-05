@@ -234,6 +234,7 @@ export interface LegacySupabaseService {
   teacherListUsers(classId?: string | null): Promise<TeacherDirectoryResponse>
   adminManageClasses(action: string, payload?: Record<string, unknown>): Promise<Record<string, unknown>>
   requestRegistrationRevision(registrationId: string, teacherComment: string): Promise<boolean>
+  rejectOverdueRegistration(registrationId: string, teacherComment: string): Promise<boolean>
   emergencyRegister(input: EmergencyRegistrationInput): Promise<RegistrationRecord | null>
   requestAiReview(registrationId: string): Promise<unknown>
   prepareSessionAiRereview(input: { classId: string; weekId: string; dow: number; period: number }): Promise<string[]>
