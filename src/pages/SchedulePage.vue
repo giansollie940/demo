@@ -7,6 +7,7 @@ import ConfirmDialog from '../components/ui/ConfirmDialog.vue'
 import InlineStatus, { type InlineStatusState } from '../components/ui/InlineStatus.vue'
 import ScheduleGrid from '../components/schedule/ScheduleGrid.vue'
 import ScheduleModeTabs from '../components/schedule/ScheduleModeTabs.vue'
+import PageArtwork from '../components/ui/PageArtwork.vue'
 import { useAuthStore } from '../stores/auth'
 import { useContextStore } from '../stores/context'
 import {
@@ -154,11 +155,11 @@ async function resetToDefault() {
 <template>
   <div class="page-stack schedule-page">
     <header class="schedule-header">
-      <div>
+      <div class="page-head-lead"><PageArtwork name="schedule" tone="lilac"/><div>
         <span class="page-context"><CalendarClock /> Lịch học theo lớp</span>
         <h1>Thời khóa biểu</h1>
         <p>{{ context.selectedClass?.name || context.selectedClass?.code || 'Lớp đang chọn' }} · Tuần {{ weekNumber }}</p>
-      </div>
+      </div></div>
       <div v-if="!readOnly" class="header-actions">
         <AppButton variant="secondary" :disabled="!isDirty || status === 'saving'" @click="cancelChanges"><RotateCcw /> Hủy thay đổi</AppButton>
         <AppButton :loading="status === 'saving'" :disabled="!isDirty || (mode === 'week' && !canEditWeek)" @click="save"><Save /> Lưu TKB</AppButton>

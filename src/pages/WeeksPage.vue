@@ -7,6 +7,8 @@ import AppCard from '../components/ui/AppCard.vue'
 import InlineStatus, { type InlineStatusState } from '../components/ui/InlineStatus.vue'
 import WeekEditorCard from '../components/weeks/WeekEditorCard.vue'
 import WeekStatusBadge from '../components/weeks/WeekStatusBadge.vue'
+import PageArtwork from '../components/ui/PageArtwork.vue'
+import PageBannerArt from '../components/ui/PageBannerArt.vue'
 import { useAuthStore } from '../stores/auth'
 import { useContextStore } from '../stores/context'
 import { getWeekLifecycle } from '../features/weeks/week-lifecycle'
@@ -51,8 +53,8 @@ onBeforeUnmount(clearStatusReset)
 
 <template>
   <div class="page-stack weeks-page">
-    <header class="weeks-header">
-      <div><span class="page-context"><CalendarRange/> Tuần học theo lớp</span><h1>Quản lý tuần</h1><p>{{ context.selectedClass?.name||context.selectedClass?.code||'Lớp đang chọn' }} · chọn một tuần để vận hành deadline, trạng thái và TKB.</p></div>
+    <header class="weeks-header"><PageBannerArt tone="coral"/>
+      <div class="page-head-lead"><PageArtwork name="weeks" tone="coral"/><div><span class="page-context"><CalendarRange/> Tuần học theo lớp</span><h1>Quản lý tuần</h1><p>{{ context.selectedClass?.name||context.selectedClass?.code||'Lớp đang chọn' }} · chọn một tuần để vận hành deadline, trạng thái và TKB.</p></div></div>
       <div class="header-actions"><AppButton variant="secondary" @click="goCurrentWeek"><LocateFixed/>Tuần hiện hành</AppButton></div>
     </header>
 

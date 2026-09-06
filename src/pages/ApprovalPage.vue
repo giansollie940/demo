@@ -7,6 +7,8 @@ import InlineStatus, { type InlineStatusState } from '../components/ui/InlineSta
 import ApprovalFilters from '../components/approvals/ApprovalFilters.vue'
 import ApprovalList from '../components/approvals/ApprovalList.vue'
 import ApprovalDetail from '../components/approvals/ApprovalDetail.vue'
+import PageArtwork from '../components/ui/PageArtwork.vue'
+import PageBannerArt from '../components/ui/PageBannerArt.vue'
 import { buildApprovalModel, filterApprovals } from '../features/approvals/approval-model'
 import { approveRegistrationsMutation, deleteManagedRegistration, requestManagedRevision, saveTeacherCommentMutation, type ApprovalMutationRuntime } from '../features/approvals/approval-mutations'
 import { registrationManagerActions, type ApprovalFilter } from '../features/registrations/registration-model'
@@ -47,8 +49,8 @@ async function remove(){if(!selected.value||!classId.value)return;if(!await appD
 
 <template>
   <div class="page-stack approval-page">
-    <header class="approval-header">
-      <div><span class="page-context"><ShieldCheck aria-hidden="true" />Duyệt đăng ký</span><h1>Hàng chờ giáo viên</h1><p>Tuần {{ week?.number ?? '–' }} · chọn học sinh để xem và xử lý chi tiết.</p></div>
+    <header class="approval-header"><PageBannerArt tone="primary"/>
+      <div class="page-head-lead"><PageArtwork name="review" tone="primary"/><div><span class="page-context"><ShieldCheck aria-hidden="true" />Duyệt đăng ký</span><h1>Hàng chờ giáo viên</h1><p>Tuần {{ week?.number ?? '–' }} · chọn học sinh để xem và xử lý chi tiết.</p></div></div>
       <span v-if="weekQuery.isFetching.value" class="syncing"><RefreshCw aria-hidden="true" />Đang đồng bộ</span>
     </header>
 

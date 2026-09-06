@@ -5,6 +5,8 @@ import AppCard from '../components/ui/AppCard.vue'
 import InlineStatus, { type InlineStatusState } from '../components/ui/InlineStatus.vue'
 import StudySessionCard from '../components/registrations/StudySessionCard.vue'
 import RegistrationDialog from '../components/registrations/RegistrationDialog.vue'
+import PageArtwork from '../components/ui/PageArtwork.vue'
+import PageBannerArt from '../components/ui/PageBannerArt.vue'
 import { useAuthStore } from '../stores/auth'
 import { useContextStore } from '../stores/context'
 import { useWeekData } from '../features/weeks/queries'
@@ -43,7 +45,7 @@ async function cancelEmergency(id:string){if(!classId.value)return;if(!await app
 
 <template>
   <div class="page-stack registration-page">
-    <header class="registration-header"><div><span class="page-context"><NotebookPen /> Kế hoạch cá nhân</span><h1>Đăng ký tự học</h1><p>Tuần {{ week?.number??'–' }} · hoàn thiện nội dung trước từng deadline.</p></div><span v-if="weekQuery.isFetching.value" class="syncing"><RefreshCw />Đang đồng bộ</span></header>
+    <header class="registration-header"><PageBannerArt tone="mint"/><div class="page-head-lead"><PageArtwork name="register" tone="mint"/><div><span class="page-context"><NotebookPen /> Kế hoạch cá nhân</span><h1>Đăng ký tự học</h1><p>Tuần {{ week?.number??'–' }} · hoàn thiện nội dung trước từng deadline.</p></div></div><span v-if="weekQuery.isFetching.value" class="syncing"><RefreshCw />Đang đồng bộ</span></header>
     <InlineStatus :state="status" :message="statusMessage" />
     <AppCard v-if="!studentRole" padding="lg"><h2>Chế độ xem dành cho giáo viên</h2><p class="muted">Giáo viên có thể xem lịch nhưng không tạo đăng ký thay học sinh tại trang này.</p></AppCard>
     <section v-if="slots.length" class="session-grid">

@@ -16,6 +16,8 @@ import AdminUserDialog from '../components/admin/AdminUserDialog.vue'
 import AdminPasswordDialog from '../components/admin/AdminPasswordDialog.vue'
 import AdminClassDialog from '../components/admin/AdminClassDialog.vue'
 import PermissionMatrix from '../components/admin/PermissionMatrix.vue'
+import PageArtwork from '../components/ui/PageArtwork.vue'
+import PageBannerArt from '../components/ui/PageBannerArt.vue'
 import {
   assignTeacher, createClass, createManagedUser, createSchoolYear, createTeacher, deleteClass, hardDeleteUser,
   resetManagedPassword, setActiveSchoolYear, updateClass, updateManagedUser, updateSchoolYearWeek,
@@ -35,6 +37,19 @@ const route=useRoute()
 const directory=useAdminDirectory()
 const validTabs=['overview','years','classes','students','teachers','permissions','recycle','audit']
 const tab=computed(()=>{const value=String(route.query.tab??'overview');return validTabs.includes(value)?value:'overview'})
+// Mỗi tab một hình minh họa riêng: thanh tiêu đề của trang Quản trị dùng chung
+// một <header>, nên hình phải đi theo tab đang mở chứ không cố định.
+const ARTWORK:Record<string,{name:string;tone:'primary'|'coral'|'sky'|'lilac'|'pink'|'info'|'warning'|'success'}>={
+  overview:{name:'admin-overview',tone:'primary'},
+  years:{name:'admin-years',tone:'coral'},
+  classes:{name:'admin-classes',tone:'info'},
+  students:{name:'admin-students',tone:'success'},
+  teachers:{name:'admin-teachers',tone:'lilac'},
+  permissions:{name:'admin-permissions',tone:'primary'},
+  recycle:{name:'admin-recycle',tone:'warning'},
+  audit:{name:'admin-audit',tone:'sky'},
+}
+const artwork=computed(()=>ARTWORK[tab.value]??ARTWORK.overview)
 
 const busyKey=ref<string|null>(null)
 const status=ref<InlineStatusState>('idle')
@@ -179,7 +194,7 @@ async function permission(payload:{classId:string;teacherId:string;enabled:boole
 
 <template>
   <div class="page-stack admin-page">
-    <header class="admin-header"><div><span class="page-context"><ShieldCheck/>ROOT ADMIN · QUẢN TRỊ HỆ THỐNG</span><h1>{{ tab==='overview'?'Tổng quan hệ thống':tab==='years'?'Năm học':tab==='classes'?'Lớp học':tab==='students'?'Học sinh':tab==='teachers'?'Giáo viên':tab==='permissions'?'Phân quyền':tab==='recycle'?'Thùng rác':'Nhật ký hệ thống' }}</h1><p>Admin quản lý cấu trúc, tài khoản và quyền hệ thống; nghiệp vụ vận hành lớp thuộc Giáo viên.</p></div><AppButton v-if="tab!=='audit'" variant="secondary" :loading="directory.isFetching.value" @click="directory.refetch()"><RefreshCw/>Làm mới</AppButton></header>
+    <header class="admin-header"><PageBannerArt :tone="artwork.tone"/><div class="page-head-lead"><PageArtwork :name="artwork.name" :tone="artwork.tone"/><div><span class="page-context"><ShieldCheck/>ROOT ADMIN · QUẢN TRỊ HỆ THỐNG</span><h1>{{ tab==='overview'?'Tổng quan hệ thống':tab==='years'?'Năm học':tab==='classes'?'Lớp học':tab==='students'?'Học sinh':tab==='teachers'?'Giáo viên':tab==='permissions'?'Phân quyền':tab==='recycle'?'Thùng rác':'Nhật ký hệ thống' }}</h1><p>Admin quản lý cấu trúc, tài khoản và quyền hệ thống; nghiệp vụ vận hành lớp thuộc Giáo viên.</p></div></div><AppButton v-if="tab!=='audit'" variant="secondary" :loading="directory.isFetching.value" @click="directory.refetch()"><RefreshCw/>Làm mới</AppButton></header>
     <InlineStatus :state="status" :message="statusMessage"/>
 
     <template v-if="tab==='overview'">
