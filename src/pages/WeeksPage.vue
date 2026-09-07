@@ -7,8 +7,6 @@ import AppCard from '../components/ui/AppCard.vue'
 import InlineStatus, { type InlineStatusState } from '../components/ui/InlineStatus.vue'
 import WeekEditorCard from '../components/weeks/WeekEditorCard.vue'
 import WeekStatusBadge from '../components/weeks/WeekStatusBadge.vue'
-import PageArtwork from '../components/ui/PageArtwork.vue'
-import PageBannerArt from '../components/ui/PageBannerArt.vue'
 import { useAuthStore } from '../stores/auth'
 import { useContextStore } from '../stores/context'
 import { getWeekLifecycle } from '../features/weeks/week-lifecycle'
@@ -24,7 +22,6 @@ const drafts=ref<WeekEditorDraft[]>([]),initialDrafts=ref<WeekEditorDraft[]>([])
 const filter=ref<WeekFilter>('all'),search=ref(''),status=ref<InlineStatusState>('idle'),statusMessage=ref('')
 let statusResetTimer:ReturnType<typeof setTimeout>|null=null
 const state=computed(()=>auth.legacyState),classId=computed(()=>context.selectedClassId)
-const defaultDeadlineMode=computed(()=>state.value?.settings.registrationDeadlineMode==='week_before_20'?'week_before_20':'per_session_20')
 const deadlineTime=computed(()=>String(state.value?.settings.registrationDeadlineTime||'20:00'))
 const lifecycle=computed(()=>{const current=state.value;if(!current)return{currentWeekId:null,statuses:{} as Record<string,WeekOperationalStatus>,nextBoundaryMs:null};return getWeekLifecycle({weeks:current.weeks,periods:current.periods,getSlots(weekId){const rows=current.overrides.filter(row=>row.weekId===weekId);return rows.length?rows.filter(row=>row.active!==false):current.schedule},getPeriod(week,dow,period){return resolvedPeriodForWeekSlot(current,week,dow,period)}})})
 const summary=computed(()=>summarizeWeekStatuses(drafts.value,lifecycle.value.statuses))
@@ -54,14 +51,14 @@ onBeforeUnmount(clearStatusReset)
 
 <template>
   <div class="page-stack weeks-page">
-    <header class="weeks-header"><PageBannerArt tone="coral"/>
-      <div class="page-head-lead"><PageArtwork name="weeks" tone="coral"/><div><span class="page-context"><CalendarRange/> Tuần học theo lớp</span><h1>Quản lý tuần</h1><p>{{ context.selectedClass?.name||context.selectedClass?.code||'Lớp đang chọn' }} · chọn một tuần để vận hành deadline, trạng thái và TKB.</p></div></div>
+    <header class="weeks-header">
+      <div><span class="page-context"><CalendarRange/> Tuần học theo lớp</span><h1>Quản lý tuần</h1><p>{{ context.selectedClass?.name||context.selectedClass?.code||'Lớp đang chọn' }} · chọn một tuần để vận hành deadline, trạng thái và TKB.</p></div>
       <div class="header-actions"><AppButton variant="secondary" @click="goCurrentWeek"><LocateFixed/>Tuần hiện hành</AppButton></div>
     </header>
 
     <section class="week-summary">
       <AppCard><span>Đang mở</span><b>{{ summary.open }}</b></AppCard><AppCard><span>Đã khóa</span><b>{{ summary.locked }}</b></AppCard><AppCard><span>Sắp tới</span><b>{{ summary.upcoming }}</b></AppCard><AppCard><span>Tuần nghỉ</span><b>{{ summary.holiday }}</b></AppCard>
-      <AppCard><span>Hạn mặc định</span><b class="deadline-value">{{ deadlineTime }}</b><small>{{ defaultDeadlineMode==='week_before_20'?'Chủ nhật trước tuần':'hôm trước từng buổi' }}</small></AppCard>
+      <AppCard><span>Hạn mặc định</span><b class="deadline-value">{{ deadlineTime }}</b><small>tối hôm trước từng buổi</small></AppCard>
       <AppCard class="auto-close-card"><span>Tự động đóng sau buổi tự học cuối</span><b class="auto-close-value">{{ nextAutoCloseText }}</b><small>Nếu GV không mở/đóng thủ công.</small></AppCard>
     </section>
     <InlineStatus v-if="serverChanged" state="server-changed" message="Dữ liệu trên máy chủ vừa thay đổi."><div class="conflict-actions"><button type="button" @click="loadServerVersion">Tải bản mới</button><button type="button" @click="keepDraft">Tiếp tục bản đang chỉnh</button></div></InlineStatus>
@@ -82,7 +79,7 @@ onBeforeUnmount(clearStatusReset)
       </AppCard>
 
       <div class="week-detail-panel">
-        <WeekEditorCard v-if="selectedDraft" :model-value="selectedDraft" :operational-status="displayStatus(selectedDraft)" :current="lifecycle.currentWeekId===selectedDraft.id" :viewing="context.selectedWeekId===selectedDraft.id" :deadline-time="deadlineTime" :default-deadline-mode="defaultDeadlineMode" :disabled="status==='saving'" :dirty="isDirty" :save-state="status" :save-message="statusMessage" @update:model-value="replaceSelected" @save="save" @cancel="cancelSelected" @view="viewWeek(selectedDraft.id)" @open-schedule="openSchedule(selectedDraft.id)"/>
+        <WeekEditorCard v-if="selectedDraft" :model-value="selectedDraft" :operational-status="displayStatus(selectedDraft)" :current="lifecycle.currentWeekId===selectedDraft.id" :viewing="context.selectedWeekId===selectedDraft.id" :deadline-time="deadlineTime" :disabled="status==='saving'" :dirty="isDirty" :save-state="status" :save-message="statusMessage" @update:model-value="replaceSelected" @save="save" @cancel="cancelSelected" @view="viewWeek(selectedDraft.id)" @open-schedule="openSchedule(selectedDraft.id)"/>
         <AppCard v-else padding="lg" class="empty-weeks"><h2>Chọn một tuần</h2><p>Chọn tuần ở danh sách bên trái để chỉnh cấu hình vận hành.</p></AppCard>
       </div>
     </section>

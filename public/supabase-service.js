@@ -432,8 +432,11 @@
       const start=addDaysISO(firstWeekStart,i*7);
       const naturalEnd=addDaysISO(start,4);
       const end=naturalEnd>year.end_date ? year.end_date : naturalEnd;
-      const deadlineDate=addDaysISO(start,-1);
-      const mode=old?.deadline_mode || "per_session_20";
+      // Chế độ mặc định của mọi tuần là hạn theo từng buổi: cùng giờ cấu hình
+      // nhưng rơi vào ngày liền trước ngày có buổi tự học. Chỉ giữ "specific"
+      // khi tuần cũ thực sự đã được người dùng đặt hạn riêng. Các mode legacy
+      // (ví dụ week_before_20) được chuẩn hóa về per_session_20 khi rebase.
+      const mode=old?.deadline_mode === "specific" ? "specific" : "per_session_20";
       return {
         id:old?.id||null,
         school_year_id:year.id,
@@ -442,9 +445,11 @@
         end_date:end,
         status:old?.status||"upcoming",
         deadline_mode:mode,
+        // per_session_20 không cần lưu một timestamp cấp tuần. Deadline thật
+        // được tính theo weekday của từng buổi + per_session_deadline_time.
         registration_deadline:mode==="specific" && old?.registration_deadline
           ? old.registration_deadline
-          : `${deadlineDate}T${deadlineTime}:00+07:00`,
+          : null,
         note:old?.note||null
       };
     });
@@ -502,8 +507,8 @@
       for(const w of allWeeks||[]){
         classWeekRows.push({
           class_id:cls.id,week_id:w.id,status:w.status,
-          deadline_mode:"inherit",
-          registration_deadline:null,note:w.note||null,
+          deadline_mode:w.deadline_mode||"per_session_20",
+          registration_deadline:w.registration_deadline||null,note:w.note||null,
           updated_at:new Date().toISOString()
         });
       }
@@ -822,20 +827,16 @@
     };
   }
 
-  function mapClassWeek(base,row,defaultMode="per_session_20"){
-    const mode=row?.deadline_mode||"inherit";
-    const effective=mode==="inherit"?defaultMode:mode;
-    return {
-      ...mapWeek({
-        ...base,
-        status:row?.status??base.status,
-        manual_status:row?.manual_status??null,
-        deadline_mode:effective,
-        registration_deadline:effective==="specific"?(row?.registration_deadline||null):null,
-        note:row?.note??base.note
-      }),
-      deadlineOverrideMode:mode
-    };
+  function mapClassWeek(base,row){
+    const explicitSpecific=row?.deadline_mode==="specific"&&Boolean(row?.registration_deadline);
+    return mapWeek({
+      ...base,
+      status:row?.status??base.status,
+      manual_status:row?.manual_status??null,
+      deadline_mode:explicitSpecific?"specific":"per_session_20",
+      registration_deadline:explicitSpecific?(row?.registration_deadline||null):null,
+      note:row?.note??base.note
+    });
   }
 
   function emptyMemoryStats(){return {totalFeedback:0,revisionAfterAiApprove:0,approveAfterAiManual:0,approveAfterAiRevision:0,lastFeedbackAt:null,memoryEnabled:true,candidateLimit:80,selectedLimit:25};}
@@ -955,8 +956,6 @@
     }
 
     const cs=settingsRes.data||{};
-    const registrationDeadlineMode=cs.default_deadline_mode==="week_before_20"?"week_before_20":"per_session_20";
-    weeks=weeks.map(w=>w.deadlineOverrideMode==="inherit"?{...w,deadlineMode:registrationDeadlineMode}:w);
     const rawMemory=Array.isArray(memoryStatsRes.data)?memoryStatsRes.data[0]:memoryStatsRes.data;
     const memory=rawMemory?{
       totalFeedback:Number(rawMemory.total_feedback||0),revisionAfterAiApprove:Number(rawMemory.revision_after_ai_approve||0),approveAfterAiManual:Number(rawMemory.approve_after_ai_manual||0),approveAfterAiRevision:Number(rawMemory.approve_after_ai_revision||0),lastFeedbackAt:rawMemory.last_feedback_at||null,memoryEnabled:rawMemory.memory_enabled!==false,candidateLimit:Number(rawMemory.candidate_limit||80),selectedLimit:Number(rawMemory.selected_limit||25)
@@ -981,8 +980,7 @@
         aiAutoApproveThreshold:Math.max(.5,Math.min(.99,Number(cs.ai_auto_approve_threshold??.90))),
         aiRevisionActionThreshold:Math.max(.5,Math.min(.99,Number(cs.ai_revision_auto_approve_threshold??.85))),
         aiFeedbackMemoryEnabled:cs.ai_feedback_memory_enabled!==false,
-        registrationDeadlineMode,
-        registrationDeadlineTime:/^([01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d{1,6})?)?$/.test(String(cs.per_session_deadline_time||""))?String(cs.per_session_deadline_time).slice(0,5):"20:00"
+        registrationDeadlineTime:/^([01]\d|2[0-3]):[0-5]\d$/.test(String(cs.per_session_deadline_time||""))?String(cs.per_session_deadline_time).slice(0,5):"20:00"
       },
       users,weeks,
       periods:effectivePeriods.map(p=>({n:p.period_number,start:String(p.start_time).slice(0,5),end:String(p.end_time).slice(0,5)})),
@@ -1056,7 +1054,7 @@
       }
       const oldWeeks=new Map((before.weeks||[]).map(w=>[w.id,w]));
       for(const w of state.weeks||[]){const old=oldWeeks.get(w.id);if(old&&stable(w)!==stable(old)){
-        const {error}=await sb.from("class_weeks").upsert({class_id:classId,week_id:w.id,status:w.status,manual_status:w.manualStatus||null,deadline_mode:w.deadlineOverrideMode||w.deadlineMode||"inherit",registration_deadline:w.deadlineMode==="specific"&&w.deadline?new Date(`${w.deadline}:00+07:00`).toISOString():null,note:w.note||null,updated_by:currentUser.id,updated_at:new Date().toISOString()},{onConflict:"class_id,week_id"});if(error)throw error;
+        const {error}=await sb.from("class_weeks").upsert({class_id:classId,week_id:w.id,status:w.status,manual_status:w.manualStatus||null,deadline_mode:w.deadlineMode||"per_session_20",registration_deadline:w.deadline?new Date(w.deadline).toISOString():null,note:w.note||null,updated_by:currentUser.id,updated_at:new Date().toISOString()},{onConflict:"class_id,week_id"});if(error)throw error;
       }}
       if(stable(state.settings||{})!==stable(before.settings||{})){
         const {error}=await sb.from("class_settings").update({
@@ -1064,7 +1062,6 @@
           ai_auto_approve_threshold:Number(state.settings.aiAutoApproveThreshold||.90),
           ai_revision_auto_approve_threshold:Number(state.settings.aiRevisionActionThreshold||.85),
           ai_feedback_memory_enabled:state.settings.aiFeedbackMemoryEnabled!==false,
-          default_deadline_mode:state.settings.registrationDeadlineMode||"per_session_20",
           per_session_deadline_time:String(state.settings.registrationDeadlineTime||"20:00"),
           announcement:String(state.settings.announcement||""),updated_by:currentUser.id,updated_at:new Date().toISOString()
         }).eq("class_id",classId);if(error)throw error;

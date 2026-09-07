@@ -4,7 +4,6 @@ import { commitStateMutation, type LegacyMutationRuntime } from '../shared/legac
 export interface SettingsPatch {
   announcement: string
   registrationDeadlineTime: string
-  registrationDeadlineMode?: 'per_session_20' | 'week_before_20'
   aiAutomationEnabled: boolean
   aiAutoApproveThreshold: number
 }
@@ -14,14 +13,11 @@ export async function saveSettingsMutation(
   classId: string,
   patch: SettingsPatch,
 ): Promise<LegacyState> {
-  if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(patch.registrationDeadlineTime)) throw new Error('Giờ chốt đăng ký không hợp lệ.')
-  if (patch.registrationDeadlineMode && !['per_session_20', 'week_before_20'].includes(patch.registrationDeadlineMode)) throw new Error('Cách chốt hạn không hợp lệ.')
   return commitStateMutation(runtime, classId, source => {
     const settings = {
       ...source.settings,
       announcement: patch.announcement.trim(),
-      registrationDeadlineTime: patch.registrationDeadlineTime,
-      registrationDeadlineMode: patch.registrationDeadlineMode ?? source.settings.registrationDeadlineMode ?? 'per_session_20',
+      registrationDeadlineTime: patch.registrationDeadlineTime || '20:00',
       aiAutomationEnabled: patch.aiAutomationEnabled,
       smartApprovalEnabled: patch.aiAutomationEnabled,
       aiReviewEnabled: patch.aiAutomationEnabled,
@@ -35,8 +31,6 @@ export async function saveSettingsMutation(
       entityId: 'settings',
       detail: `AI_AUTO=${patch.aiAutomationEnabled}; threshold=${settings.aiAutoApproveThreshold}; deadline=${settings.registrationDeadlineTime}`,
     })
-    const weeks = source.weeks.map(week => week.deadlineOverrideMode === 'inherit'
-      ? { ...week, deadlineMode: String(settings.registrationDeadlineMode), deadline: '' } : week)
-    return { ...source, settings, weeks, audit }
+    return { ...source, settings, audit }
   })
 }

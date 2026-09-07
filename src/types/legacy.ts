@@ -36,7 +36,6 @@ export interface WeekRecord {
   status?: string
   manualStatus?: 'open' | 'locked' | null
   deadlineMode?: 'per_session_20' | 'specific' | string
-  deadlineOverrideMode?: 'inherit' | 'per_session_20' | 'week_before_20' | 'specific'
   deadline?: string
   note?: string
 }

@@ -7,8 +7,6 @@ import InlineStatus, { type InlineStatusState } from '../components/ui/InlineSta
 import TrackingFilters from '../components/tracking/TrackingFilters.vue'
 import StudentTrackingRow from '../components/tracking/StudentTrackingRow.vue'
 import TrackingQuickReport from '../components/tracking/TrackingQuickReport.vue'
-import PageArtwork from '../components/ui/PageArtwork.vue'
-import PageBannerArt from '../components/ui/PageBannerArt.vue'
 import { filterTrackingRows, summarizeTrackingSession, trackingFilterCounts, trackingQuickReport, type TrackingFilter, type TrackingSort } from '../features/tracking/tracking-model'
 import { aiOutcomeMismatch, aiReviewHistoryLabel, needsTeacherAction, registrationManagerActions } from '../features/registrations/registration-model'
 import { approveRegistrationsMutation, deleteManagedRegistration, markHandledRegistrationNotificationsRead, requestManagedRevision, saveTeacherCommentMutation, type ApprovalMutationRuntime } from '../features/approvals/approval-mutations'
@@ -103,7 +101,7 @@ async function rerunSessionAi(){
 </script>
 <template>
   <div class="page-stack tracking-page">
-    <header class="tracking-header"><PageBannerArt tone="primary"/><div class="page-head-lead"><PageArtwork name="tracking" tone="primary"/><div><span class="page-context"><UsersRound aria-hidden="true"/>Theo dõi lớp</span><h1>Theo dõi cả lớp</h1><p>Tuần {{ week?.number??'–' }} · chọn một buổi, sau đó bấm trực tiếp vào số liệu để xem đúng nhóm học sinh của buổi đó.</p></div></div><span v-if="weekQuery.isFetching.value" class="syncing"><RefreshCw aria-hidden="true"/>Đang đồng bộ</span></header>
+    <header class="tracking-header"><div><span class="page-context"><UsersRound aria-hidden="true"/>Theo dõi lớp</span><h1>Theo dõi cả lớp</h1><p>Tuần {{ week?.number??'–' }} · chọn một buổi, sau đó bấm trực tiếp vào số liệu để xem đúng nhóm học sinh của buổi đó.</p></div><span v-if="weekQuery.isFetching.value" class="syncing"><RefreshCw aria-hidden="true"/>Đang đồng bộ</span></header>
     <InlineStatus :state="status" :message="statusMessage"/>
     <div v-if="weekQuery.isLoading.value&&!summaries.length" class="tracking-skeleton" aria-label="Đang tải dữ liệu"><span v-for="n in 3" :key="n" class="skeleton-shimmer"></span></div>
 

@@ -3,8 +3,6 @@ import { computed } from 'vue'
 import { Clock3, MessageSquareText, Siren } from 'lucide-vue-next'
 import AppBadge from '../components/ui/AppBadge.vue'
 import AppCard from '../components/ui/AppCard.vue'
-import PageArtwork from '../components/ui/PageArtwork.vue'
-import PageBannerArt from '../components/ui/PageBannerArt.vue'
 import { useAuthStore } from '../stores/auth'
 
 const auth = useAuthStore()
@@ -18,7 +16,7 @@ function tone(status:string){return status==='approved'?'success':status==='need
 </script>
 <template>
   <div class="page-stack history-page">
-    <header><PageBannerArt tone="lilac"/><div class="page-head-lead"><PageArtwork name="history" tone="lilac"/><div><span>LỊCH SỬ CỦA TÔI</span><h1>Hoạt động đăng ký</h1><p>Xem lại đăng ký và phản hồi ở các tuần trước, mới nhất ở trên.</p></div></div></header>
+    <header><span>LỊCH SỬ CỦA TÔI</span><h1>Hoạt động đăng ký</h1><p>Xem lại đăng ký và phản hồi ở các tuần trước, mới nhất ở trên.</p></header>
     <div v-if="rows.length" class="timeline">
       <AppCard v-for="row in rows" :key="row.id" class="event" padding="lg">
         <div class="dot" aria-hidden="true"/><div class="event-main">

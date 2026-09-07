@@ -16,8 +16,6 @@ import AdminUserDialog from '../components/admin/AdminUserDialog.vue'
 import AdminPasswordDialog from '../components/admin/AdminPasswordDialog.vue'
 import AdminClassDialog from '../components/admin/AdminClassDialog.vue'
 import PermissionMatrix from '../components/admin/PermissionMatrix.vue'
-import PageArtwork from '../components/ui/PageArtwork.vue'
-import PageBannerArt from '../components/ui/PageBannerArt.vue'
 import {
   assignTeacher, createClass, createManagedUser, createSchoolYear, createTeacher, deleteClass, hardDeleteUser,
   resetManagedPassword, setActiveSchoolYear, updateClass, updateManagedUser, updateSchoolYearWeek,
@@ -37,19 +35,6 @@ const route=useRoute()
 const directory=useAdminDirectory()
 const validTabs=['overview','years','classes','students','teachers','permissions','recycle','audit']
 const tab=computed(()=>{const value=String(route.query.tab??'overview');return validTabs.includes(value)?value:'overview'})
-// Mỗi tab một hình minh họa riêng: thanh tiêu đề của trang Quản trị dùng chung
-// một <header>, nên hình phải đi theo tab đang mở chứ không cố định.
-const ARTWORK:Record<string,{name:string;tone:'primary'|'coral'|'sky'|'lilac'|'pink'|'info'|'warning'|'success'}>={
-  overview:{name:'admin-overview',tone:'primary'},
-  years:{name:'admin-years',tone:'coral'},
-  classes:{name:'admin-classes',tone:'info'},
-  students:{name:'admin-students',tone:'success'},
-  teachers:{name:'admin-teachers',tone:'lilac'},
-  permissions:{name:'admin-permissions',tone:'primary'},
-  recycle:{name:'admin-recycle',tone:'warning'},
-  audit:{name:'admin-audit',tone:'sky'},
-}
-const artwork=computed(()=>ARTWORK[tab.value]??ARTWORK.overview)
 
 const busyKey=ref<string|null>(null)
 const status=ref<InlineStatusState>('idle')
@@ -194,7 +179,7 @@ async function permission(payload:{classId:string;teacherId:string;enabled:boole
 
 <template>
   <div class="page-stack admin-page">
-    <header class="admin-header"><PageBannerArt :tone="artwork.tone"/><div class="page-head-lead"><PageArtwork :name="artwork.name" :tone="artwork.tone"/><div><span class="page-context"><ShieldCheck/>ROOT ADMIN · QUẢN TRỊ HỆ THỐNG</span><h1>{{ tab==='overview'?'Tổng quan hệ thống':tab==='years'?'Năm học':tab==='classes'?'Lớp học':tab==='students'?'Học sinh':tab==='teachers'?'Giáo viên':tab==='permissions'?'Phân quyền':tab==='recycle'?'Thùng rác':'Nhật ký hệ thống' }}</h1><p>Admin quản lý cấu trúc, tài khoản và quyền hệ thống; nghiệp vụ vận hành lớp thuộc Giáo viên.</p></div></div><AppButton v-if="tab!=='audit'" variant="secondary" :loading="directory.isFetching.value" @click="directory.refetch()"><RefreshCw/>Làm mới</AppButton></header>
+    <header class="admin-header"><div><span class="page-context"><ShieldCheck/>ROOT ADMIN · QUẢN TRỊ HỆ THỐNG</span><h1>{{ tab==='overview'?'Tổng quan hệ thống':tab==='years'?'Năm học':tab==='classes'?'Lớp học':tab==='students'?'Học sinh':tab==='teachers'?'Giáo viên':tab==='permissions'?'Phân quyền':tab==='recycle'?'Thùng rác':'Nhật ký hệ thống' }}</h1><p>Admin quản lý cấu trúc, tài khoản và quyền hệ thống; nghiệp vụ vận hành lớp thuộc Giáo viên.</p></div><AppButton v-if="tab!=='audit'" variant="secondary" :loading="directory.isFetching.value" @click="directory.refetch()"><RefreshCw/>Làm mới</AppButton></header>
     <InlineStatus :state="status" :message="statusMessage"/>
 
     <template v-if="tab==='overview'">
@@ -240,5 +225,5 @@ async function permission(payload:{classId:string;teacherId:string;enabled:boole
 </template>
 
 <style scoped>
-.admin-page{max-width:1560px;margin:0 auto}.admin-header,.section-actions{display:flex;justify-content:space-between;align-items:flex-start;gap:16px}.admin-header h1{margin:8px 0;font-size:clamp(2rem,4vw,3rem)}.admin-header p,.section-actions p,.overview-copy p{margin:0;color:var(--text-muted)}.page-context{display:flex;align-items:center;gap:7px;color:var(--color-primary);font-size:var(--font-size-ui-min);font-weight:900;letter-spacing:.04em}.page-context svg,.admin-header :deep(.app-button svg),.section-actions :deep(svg){width:17px}.summary{display:grid;grid-template-columns:repeat(5,1fr);gap:11px}.summary :deep(.app-card){display:flex;align-items:center;justify-content:space-between}.summary span{display:flex;align-items:center;gap:7px;color:var(--text-muted);font-weight:800}.summary svg{width:18px}.summary b{font-size:1.8rem}.overview-copy h2,.section-actions h2{margin:0 0 5px}.year-grid{display:grid;grid-template-columns:1fr;gap:11px}.class-grid,.student-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:11px}.teacher-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:11px}.quick-form{display:grid;grid-template-columns:1fr 2fr auto;gap:10px;align-items:end}.quick-form.year-form{grid-template-columns:1.1fr 1fr 1fr 1.3fr auto}.quick-form label{display:grid;gap:5px;font-size:var(--font-size-ui-min);font-weight:800;color:var(--text-muted)}.quick-form input,.student-filters input,.student-filters select{min-height:44px;border:1px solid var(--border);border-radius:11px;background:var(--surface);color:var(--text);padding:8px 10px}.quick-form .check-field{display:flex;align-items:center;gap:8px;min-height:44px;padding:8px 10px;border:1px solid var(--border);border-radius:11px;background:color-mix(in srgb,var(--wash-cream) 48%,var(--surface));color:var(--text)}.quick-form .check-field input{min-height:0;width:17px;height:17px}.student-filters{display:grid;grid-template-columns:minmax(220px,1.5fr) repeat(4,minmax(130px,.7fr));gap:8px}@media(max-width:1180px){.summary{grid-template-columns:repeat(3,1fr)}.quick-form.year-form{grid-template-columns:1fr 1fr}.teacher-grid{grid-template-columns:repeat(2,1fr)}.quick-form{grid-template-columns:1fr 1fr}.quick-form :deep(.app-button){width:100%}.student-filters{grid-template-columns:1fr 1fr}}@media(max-width:720px){.admin-header,.section-actions{flex-direction:column}.summary,.year-grid,.class-grid,.student-grid,.teacher-grid{grid-template-columns:1fr}.quick-form,.quick-form.year-form,.student-filters{grid-template-columns:1fr}.admin-header :deep(.app-button),.section-actions :deep(.app-button){width:100%}}
+.admin-page{max-width:1560px;margin:0 auto}.admin-header,.section-actions{display:flex;justify-content:space-between;align-items:flex-start;gap:16px}.admin-header h1{margin:8px 0;font-size:clamp(2rem,4vw,3rem)}.admin-header p,.section-actions p,.overview-copy p{margin:0;color:var(--text-muted)}.page-context{display:flex;align-items:center;gap:7px;color:var(--color-primary);font-size:var(--font-size-ui-min);font-weight:900;letter-spacing:.04em}.page-context svg,.admin-header :deep(svg),.section-actions :deep(svg){width:17px}.summary{display:grid;grid-template-columns:repeat(5,1fr);gap:11px}.summary :deep(.app-card){display:flex;align-items:center;justify-content:space-between}.summary span{display:flex;align-items:center;gap:7px;color:var(--text-muted);font-weight:800}.summary svg{width:18px}.summary b{font-size:1.8rem}.overview-copy h2,.section-actions h2{margin:0 0 5px}.year-grid{display:grid;grid-template-columns:1fr;gap:11px}.class-grid,.student-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:11px}.teacher-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:11px}.quick-form{display:grid;grid-template-columns:1fr 2fr auto;gap:10px;align-items:end}.quick-form.year-form{grid-template-columns:1.1fr 1fr 1fr 1.3fr auto}.quick-form label{display:grid;gap:5px;font-size:var(--font-size-ui-min);font-weight:800;color:var(--text-muted)}.quick-form input,.student-filters input,.student-filters select{min-height:44px;border:1px solid var(--border);border-radius:11px;background:var(--surface);color:var(--text);padding:8px 10px}.quick-form .check-field{display:flex;align-items:center;gap:8px;min-height:44px;padding:8px 10px;border:1px solid var(--border);border-radius:11px;background:color-mix(in srgb,var(--wash-cream) 48%,var(--surface));color:var(--text)}.quick-form .check-field input{min-height:0;width:17px;height:17px}.student-filters{display:grid;grid-template-columns:minmax(220px,1.5fr) repeat(4,minmax(130px,.7fr));gap:8px}@media(max-width:1180px){.summary{grid-template-columns:repeat(3,1fr)}.quick-form.year-form{grid-template-columns:1fr 1fr}.teacher-grid{grid-template-columns:repeat(2,1fr)}.quick-form{grid-template-columns:1fr 1fr}.quick-form :deep(.app-button){width:100%}.student-filters{grid-template-columns:1fr 1fr}}@media(max-width:720px){.admin-header,.section-actions{flex-direction:column}.summary,.year-grid,.class-grid,.student-grid,.teacher-grid{grid-template-columns:1fr}.quick-form,.quick-form.year-form,.student-filters{grid-template-columns:1fr}.admin-header :deep(.app-button),.section-actions :deep(.app-button){width:100%}}
 </style>

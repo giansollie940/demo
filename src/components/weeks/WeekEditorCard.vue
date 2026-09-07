@@ -13,12 +13,11 @@ const props = withDefaults(defineProps<{
   current?: boolean
   viewing?: boolean
   deadlineTime?: string
-  defaultDeadlineMode?: 'per_session_20' | 'week_before_20'
   disabled?: boolean
   dirty?: boolean
   saveState?: SaveState
   saveMessage?: string
-}>(), { current: false, viewing: false, deadlineTime: '20:00', defaultDeadlineMode: 'per_session_20', disabled: false, dirty: false, saveState: 'idle', saveMessage: '' })
+}>(), { current: false, viewing: false, deadlineTime: '20:00', disabled: false, dirty: false, saveState: 'idle', saveMessage: '' })
 
 const emit = defineEmits<{
   'update:modelValue': [value: WeekEditorDraft]
@@ -42,9 +41,7 @@ const saveTitle=computed(()=>props.saveState==='saving'?'Đang lưu thay đổi'
 const saveDetail=computed(()=>props.saveState==='error'?(props.saveMessage||'Hãy thử lưu lại.'):props.saveState==='saving'?'Đang đồng bộ cấu hình tuần với máy chủ.':props.dirty?'Lưu trước khi chuyển sang chức năng hoặc tuần khác.':props.saveState==='success'?'Thay đổi đã được lưu an toàn.':'')
 const specificDeadlineLabel=computed(()=>validDeadline(props.modelValue.deadline)?formatDateTime(props.modelValue.deadline):'Hạn cụ thể cho cả tuần')
 const deadlineSummaryText=computed(()=>{
-  if(props.modelValue.deadlineMode==='inherit')return `Theo cài đặt lớp: ${props.deadlineTime} ${props.defaultDeadlineMode==='week_before_20'?'Chủ nhật trước tuần học':'hôm trước từng buổi'}.`
-  if(props.modelValue.deadlineMode==='week_before_20')return `Hạn chung: ${props.deadlineTime} Chủ nhật trước tuần học. Giờ lấy từ cài đặt lớp.`
-  if(props.modelValue.deadlineMode!=='specific')return `Deadline được tính riêng cho từng buổi. Giờ ${props.deadlineTime} lấy từ cài đặt lớp.`
+  if(props.modelValue.deadlineMode!=='specific')return 'Deadline được tính riêng cho từng buổi.'
   if(deadlineInvalid.value)return 'Hãy chọn ngày và giờ hết hạn.'
   return `Hạn cụ thể cho cả tuần · ${specificDeadlineLabel.value}`
 })
@@ -77,9 +74,7 @@ function formatDateTime(value:string){if(!validDeadline(value))return value;cons
 
       <div class="field-control deadline-control">
         <span>Deadline</span>
-        <select aria-label="Hạn đăng ký của tuần" :value="modelValue.deadlineMode" :disabled="disabled" :aria-invalid="deadlineInvalid ? 'true' : undefined" :aria-describedby="deadlineSummaryHelpId" @change="updateDeadlineMode(($event.target as HTMLSelectElement).value as WeekEditorDraft['deadlineMode'])">
-          <option value="inherit">Dùng cài đặt chung của lớp</option>
-          <option value="week_before_20">{{ deadlineTime }} Chủ nhật trước tuần học</option>
+        <select :value="modelValue.deadlineMode" :disabled="disabled" :aria-invalid="deadlineInvalid ? 'true' : undefined" :aria-describedby="deadlineSummaryHelpId" @change="updateDeadlineMode(($event.target as HTMLSelectElement).value as WeekEditorDraft['deadlineMode'])">
           <option value="per_session_20">{{ deadlineTime }} tối hôm trước từng buổi</option>
           <option value="specific">{{ specificDeadlineLabel }}</option>
         </select>

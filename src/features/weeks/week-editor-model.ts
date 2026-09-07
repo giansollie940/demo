@@ -10,7 +10,7 @@ export interface WeekEditorDraft {
   endDate: string
   holiday: boolean
   manualStatus: 'open' | 'locked' | null
-  deadlineMode: 'inherit' | 'per_session_20' | 'week_before_20' | 'specific'
+  deadlineMode: 'per_session_20' | 'specific'
   deadline: string
   note: string
 }
@@ -23,7 +23,7 @@ export function buildWeekDrafts(weeks: WeekRecord[]): WeekEditorDraft[] {
     endDate: week.endDate,
     holiday: week.status === 'holiday',
     manualStatus: week.manualStatus??null,
-    deadlineMode: (week.deadlineOverrideMode ?? week.deadlineMode ?? 'inherit') as WeekEditorDraft['deadlineMode'],
+    deadlineMode: week.deadlineMode === 'specific' ? 'specific' : 'per_session_20',
     deadline: week.deadline ?? '',
     note: week.note ?? '',
   }))
@@ -37,7 +37,6 @@ function isValidLocalDateTime(value: string): boolean {
 
 export function validateWeekDrafts(drafts: WeekEditorDraft[]): void {
   for (const draft of drafts) {
-    if (!['inherit', 'per_session_20', 'week_before_20', 'specific'].includes(draft.deadlineMode)) throw new Error(`Chế độ deadline của Tuần ${draft.number} không hợp lệ.`)
     if (draft.deadlineMode !== 'specific') continue
     if (!draft.deadline) {
       throw new Error(`Tuần ${draft.number} dùng hạn cụ thể phải có ngày và giờ.`)
@@ -64,10 +63,7 @@ export function applyWeekDrafts(state: LegacyState, drafts: WeekEditorDraft[]): 
       ...week,
       status,
       manualStatus: draft.manualStatus,
-      deadlineOverrideMode: draft.deadlineMode,
-      deadlineMode: draft.deadlineMode === 'inherit'
-        ? (state.settings.registrationDeadlineMode === 'week_before_20' ? 'week_before_20' : 'per_session_20')
-        : draft.deadlineMode,
+      deadlineMode: draft.deadlineMode,
       deadline: draft.deadlineMode === 'specific' ? draft.deadline : '',
       note: draft.note,
     }

@@ -5,8 +5,6 @@ import { BarChart3, CheckCircle2, CircleAlert, Download, UserRoundX } from 'luci
 import AppButton from '../components/ui/AppButton.vue'
 import AppCard from '../components/ui/AppCard.vue'
 import AppBadge from '../components/ui/AppBadge.vue'
-import PageArtwork from '../components/ui/PageArtwork.vue'
-import PageBannerArt from '../components/ui/PageBannerArt.vue'
 import { useAuthStore } from '../stores/auth'
 import { useContextStore } from '../stores/context'
 import { useWeekData } from '../features/weeks/queries'
@@ -69,7 +67,7 @@ function exportCsv() {
 
 <template>
   <div class="page-stack statistics-page">
-    <header class="page-header"><PageBannerArt tone="sky"/><div class="page-head-lead"><PageArtwork name="statistics" tone="sky"/><div><span>{{ isLearner?'THỐNG KÊ CÁ NHÂN':'THỐNG KÊ LỚP' }}</span><h1>{{ isLearner?'Tiến độ của tôi':'Tỷ lệ hoàn thành' }}</h1><p>{{ isLearner?'Đăng ký hợp lệ, mục cần xử lý và xu hướng cá nhân theo 12 tuần.':'Đăng ký hợp lệ, trường hợp cần xử lý và xu hướng theo 12 tuần.' }}</p></div></div><div class="header-actions"><AppBadge :tone="isFetching?'info':'success'">{{ isFetching?'Đang tải tuần':'Dữ liệu tuần đã tải' }}</AppBadge><AppButton variant="secondary" :disabled="!personalState" @click="exportCsv"><Download />Xuất CSV</AppButton></div></header>
+    <header class="page-header"><div><span>{{ isLearner?'THỐNG KÊ CÁ NHÂN':'THỐNG KÊ LỚP' }}</span><h1>{{ isLearner?'Tiến độ của tôi':'Tỷ lệ hoàn thành' }}</h1><p>{{ isLearner?'Đăng ký hợp lệ, mục cần xử lý và xu hướng cá nhân theo 12 tuần.':'Đăng ký hợp lệ, trường hợp cần xử lý và xu hướng theo 12 tuần.' }}</p></div><div class="header-actions"><AppBadge :tone="isFetching?'info':'success'">{{ isFetching?'Đang tải tuần':'Dữ liệu tuần đã tải' }}</AppBadge><AppButton variant="secondary" :disabled="!personalState" @click="exportCsv"><Download />Xuất CSV</AppButton></div></header>
     <section v-if="current" class="metric-grid">
       <AppCard class="metric success"><CheckCircle2/><span>Đăng ký hợp lệ</span><b>{{ current.valid }}</b></AppCard>
       <AppCard class="metric warning"><CircleAlert/><span>Cần xử lý</span><b>{{ current.issues }}</b></AppCard>

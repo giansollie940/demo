@@ -7,8 +7,6 @@ import AppCard from '../components/ui/AppCard.vue'
 import InlineStatus, { type InlineStatusState } from '../components/ui/InlineStatus.vue'
 import StudentDirectory from '../components/students/StudentDirectory.vue'
 import StudentAccountDialog from '../components/students/StudentAccountDialog.vue'
-import PageArtwork from '../components/ui/PageArtwork.vue'
-import PageBannerArt from '../components/ui/PageBannerArt.vue'
 import { createStudentAccount, resetStudentPassword, restoreStudent, softDeleteStudent, updateStudentAccount, useStudentDirectory, type StudentMutationRuntime } from '../features/students/student-directory'
 import { useAuthStore } from '../stores/auth'
 import { useContextStore } from '../stores/context'
@@ -34,7 +32,7 @@ async function restore(user:DirectoryUser){if(!await appDialog.confirm({title:'K
 </script>
 <template>
   <div class="page-stack students-page">
-    <header class="students-header"><PageBannerArt tone="pink"/><div class="page-head-lead"><PageArtwork name="students" tone="pink"/><div><span class="page-context"><GraduationCap aria-hidden="true"/>Tài khoản lớp học</span><h1>Học sinh và cán sự</h1><p>Quản lý mã đăng nhập, vai trò và trạng thái tài khoản theo đúng lớp đang chọn.</p></div></div><AppButton @click="openCreate"><Plus aria-hidden="true"/>Thêm học sinh</AppButton></header>
+    <header class="students-header"><div><span class="page-context"><GraduationCap aria-hidden="true"/>Tài khoản lớp học</span><h1>Học sinh và cán sự</h1><p>Quản lý mã đăng nhập, vai trò và trạng thái tài khoản theo đúng lớp đang chọn.</p></div><AppButton @click="openCreate"><Plus aria-hidden="true"/>Thêm học sinh</AppButton></header>
     <InlineStatus :state="status" :message="statusMessage"/>
     <section class="metrics"><AppCard padding="sm"><span><GraduationCap/>Học sinh</span><b>{{ counts.student }}</b></AppCard><AppCard padding="sm"><span><UsersRound/>Cán sự</span><b>{{ counts.monitor }}</b></AppCard><AppCard padding="sm"><span><UserCheck/>Hoạt động</span><b>{{ counts.active }}</b></AppCard><AppCard padding="sm"><span><UserRoundX/>Đã xóa</span><b>{{ counts.deleted }}</b></AppCard></section>
     <AppCard padding="lg" class="directory-card"><div class="toolbar"><label class="search"><Search aria-hidden="true"/><input v-model="query" placeholder="Tìm theo mã hoặc họ tên" aria-label="Tìm học sinh"></label><label><span>Vai trò</span><select v-model="role"><option value="all">Tất cả</option><option value="student">Học sinh</option><option value="monitor">Cán sự</option></select></label><label><span>Trạng thái</span><select v-model="stateFilter"><option value="active">Đang hoạt động</option><option value="deleted">Đã xóa</option><option value="all">Tất cả</option></select></label></div><div class="directory-meta"><b>{{ visible.length }}/{{ users.length }} tài khoản</b><span>Xóa mềm giữ lịch sử; có thể Khôi phục từ bộ lọc Đã xóa.</span></div><StudentDirectory v-if="visible.length" :users="visible" :busy-id="busyId" @copy="copy" @edit="openEdit" @reset="reset" @delete="remove" @restore="restore"/><div v-else class="empty">Không có tài khoản phù hợp.</div></AppCard>
