@@ -3,6 +3,8 @@ import { computed } from 'vue'
 import { Clock3, MessageSquareText, TriangleAlert, UserRound } from 'lucide-vue-next'
 import AppCard from '../components/ui/AppCard.vue'
 import RegistrationStatusBadge from '../components/registrations/RegistrationStatusBadge.vue'
+import PageArtwork from '../components/ui/PageArtwork.vue'
+import PageBannerArt from '../components/ui/PageBannerArt.vue'
 import { useAuthStore } from '../stores/auth'
 import { useContextStore } from '../stores/context'
 import { useWeekData } from '../features/weeks/queries'
@@ -53,8 +55,8 @@ const days=['Thứ 2','Thứ 3','Thứ 4','Thứ 5','Thứ 6']
 
 <template>
   <div class="page-stack issues-page">
-    <header class="issues-header">
-      <div><span class="page-context"><TriangleAlert aria-hidden="true"/> Theo dõi quá hạn chỉnh sửa</span><h1>Báo cáo lỗi</h1><p>Tuần {{ week?.number??'–' }} · đăng ký chưa xong trước giờ bắt đầu tiết: {{ overdueCount }} quá hạn chỉnh sửa · {{ unapprovedCount }} chưa được duyệt.</p></div>
+    <header class="issues-header"><PageBannerArt tone="warning"/>
+      <div class="page-head-lead"><PageArtwork name="issues" tone="warning"/><div><span class="page-context"><TriangleAlert aria-hidden="true"/> Theo dõi quá hạn chỉnh sửa</span><h1>Báo cáo lỗi</h1><p>Tuần {{ week?.number??'–' }} · đăng ký chưa xong trước giờ bắt đầu tiết: {{ overdueCount }} quá hạn chỉnh sửa · {{ unapprovedCount }} chưa được duyệt.</p></div></div>
       <span class="issue-count">{{ reports.length }} mục</span>
     </header>
 
