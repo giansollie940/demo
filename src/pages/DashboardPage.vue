@@ -12,6 +12,8 @@ import {
 
 import AppCard from '../components/ui/AppCard.vue'
 import AppBadge from '../components/ui/AppBadge.vue'
+import PageArtwork from '../components/ui/PageArtwork.vue'
+import PageBannerArt from '../components/ui/PageBannerArt.vue'
 import { useAuthStore } from '../stores/auth'
 import { useContextStore } from '../stores/context'
 import { useWeekData } from '../features/weeks/queries'
@@ -34,6 +36,10 @@ const weekQuery = useWeekData(classId, weekId)
 const isStudent = computed(() => auth.currentUser?.role === 'student')
 const isMonitor = computed(() => auth.currentUser?.role === 'monitor')
 const isLearner = computed(() => isStudent.value || isMonitor.value)
+
+const dashboardTone = computed<'primary' | 'mint' | 'sky'>(() =>
+  isStudent.value ? 'mint' : isMonitor.value ? 'sky' : 'primary'
+)
 
 const scheduleSlots = computed(() => {
   const state = auth.legacyState
@@ -135,8 +141,12 @@ const attentionCount = computed(
     <!-- HERO -->
     <section class="dashboard-hero app-card">
 
-      <!-- CHỮ BÊN TRÁI -->
-      <div class="hero-copy">
+      <PageBannerArt :tone="dashboardTone" />
+
+      <!-- ICON + CHỮ BÊN TRÁI -->
+      <div class="hero-lead">
+        <PageArtwork name="dashboard" :tone="dashboardTone" />
+        <div class="hero-copy">
 
         <span class="hero-kicker">
           TỔNG QUAN TUẦN
@@ -183,6 +193,7 @@ const attentionCount = computed(
 
         </div>
 
+        </div>
       </div>
 
       <!-- HÌNH BÊN PHẢI -->
@@ -692,6 +703,20 @@ const attentionCount = computed(
 
 
 /* =========================================================
+   HERO LEAD — ICON + CHỮ BÊN TRÁI
+   ========================================================= */
+
+.hero-lead {
+  position: relative;
+  z-index: 2;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 16px;
+  min-width: 0;
+}
+
+/* =========================================================
    HERO COPY — BÊN TRÁI
    ========================================================= */
 
@@ -707,11 +732,7 @@ const attentionCount = computed(
 
   width: 100%;
 
-  /*
-   * Căn vào trong một chút,
-   * tránh chữ quá sát mép trái Hero.
-   */
-  padding-left: 22px;
+  padding-left: 0;
 
   box-sizing: border-box;
 
