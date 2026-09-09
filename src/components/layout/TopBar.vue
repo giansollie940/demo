@@ -3,6 +3,7 @@ import { computed, ref } from 'vue'
 import { onClickOutside } from '@vueuse/core'
 import { ChevronDown, LogOut, Menu, Moon, SlidersHorizontal, Sun } from 'lucide-vue-next'
 import IconButton from '../ui/IconButton.vue'
+import HomeworkInbox from '../homework/HomeworkInbox.vue'
 import UserAvatar from '../profile/UserAvatar.vue'
 import { useAuthStore } from '../../stores/auth'
 import { useContextStore } from '../../stores/context'
@@ -38,6 +39,7 @@ function requestLogout(){profileOpen.value=false;emit('logout')}
       <div v-else class="school-year-bubble static-year"><span>Năm học</span><b>{{ context.selectedSchoolYear?.name||state?.settings.schoolYear||'—' }}</b></div>
     </div>
     <div class="context-controls">
+      <HomeworkInbox v-if="auth.currentUser"/>
       <label v-if="isTeacher" class="compact control-bubble"><span>Lớp</span><select :value="context.selectedClassId??''" @change="changeClass"><option v-for="item in context.classes" :key="item.id" :value="item.id">{{ item.code }}{{ item.name&&item.name!==item.code?` · ${item.name}`:'' }}</option></select></label>
       <label v-if="!isAdmin" class="compact control-bubble"><span>Tuần</span><select :value="context.selectedWeekId??''" @change="changeWeek"><option v-for="item in context.weeks" :key="item.id" :value="item.id">Tuần {{ item.number }}</option></select></label>
       <IconButton class="theme-bubble" label="Đổi giao diện" @click="preferences.toggleTheme"><Sun v-if="preferences.resolvedTheme==='dark'"/><Moon v-else/></IconButton>

@@ -8,6 +8,8 @@ const item=(label:string,to:string,icon:string,roles:UserRole[]):NavigationItem=
 
 export const navigation:NavigationItem[]=[
   item('Tổng quan','/dashboard','LayoutDashboard',['student','monitor','teacher']),
+  item('Báo bài','/homework','NotebookPen',['student','monitor','teacher']),
+  item('Quản trị Báo bài','/homework','NotebookPen',admins),
   item('Đăng ký tự học','/register','NotebookPen',learners),
   item('Duyệt đăng ký','/review','ClipboardCheck',teachers),
   item('Báo cáo lỗi','/issues','TriangleAlert',['student','monitor','teacher']),
@@ -36,10 +38,10 @@ export const navigation:NavigationItem[]=[
 // biến mất khỏi sidebar — đúng lỗi đã xảy ra với "Thùng rác". Test
 // navigation-source giữ hai danh sách khớp nhau.
 const orders:Record<UserRole,string[]>={
-  student:['Tổng quan','Đăng ký tự học','Báo cáo lỗi','Lịch sử','Nhận xét GV','Thống kê của tôi'],
-  monitor:['Tổng quan','Đăng ký tự học','Báo cáo lỗi','Theo dõi lớp','Lịch sử','Nhận xét GV','Thống kê của tôi'],
-  teacher:['Tổng quan','Duyệt đăng ký','Báo cáo lỗi','Theo dõi cả lớp','Quản lý tuần','Thời khóa biểu','Học sinh','Thống kê','Cài đặt'],
-  admin:['Tổng quan','Năm học','Lớp học','Học sinh','Giáo viên','Phân quyền','Thùng rác','Nhật ký hệ thống'],
+  student:['Tổng quan','Báo bài','Đăng ký tự học','Báo cáo lỗi','Lịch sử','Nhận xét GV','Thống kê của tôi'],
+  monitor:['Tổng quan','Báo bài','Đăng ký tự học','Báo cáo lỗi','Theo dõi lớp','Lịch sử','Nhận xét GV','Thống kê của tôi'],
+  teacher:['Tổng quan','Báo bài','Duyệt đăng ký','Báo cáo lỗi','Theo dõi cả lớp','Quản lý tuần','Thời khóa biểu','Học sinh','Thống kê','Cài đặt'],
+  admin:['Tổng quan','Quản trị Báo bài','Năm học','Lớp học','Học sinh','Giáo viên','Phân quyền','Thùng rác','Nhật ký hệ thống'],
 }
 
 export function visibleNavigation(role:UserRole|null|undefined):NavigationItem[]{

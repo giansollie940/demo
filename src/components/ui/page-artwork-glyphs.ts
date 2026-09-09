@@ -13,6 +13,7 @@ const soft = 'fill="var(--art-ink)" opacity=".22"'
 
 export const PAGE_GLYPHS: Record<string, string> = {
   // ── HS / cán sự ──────────────────────────────────────────────────────────
+  homework: `<path d="M15 18h29v34H15z" ${S}/><path d="M22 27h15M22 34h10" ${S}/><path d="M38 37l7-4 8 4-8 4z" ${soft}/><path d="M39 44l4 4 9-10" ${S}/>`,
   dashboard: `<rect x="14" y="16" width="36" height="28" rx="6" ${S}/><path d="M22 38v-8M31 38v-14M40 38v-5" ${S}/><circle cx="45" cy="21" r="3.4" ${soft}/><path d="M20 50h24" ${S}/>`,
   register: `<path d="M18 14h22a4 4 0 0 1 4 4v30a4 4 0 0 1-4 4H18z" ${S}/><path d="M18 14v38" ${S}/><path d="M25 25h12M25 32h12M25 39h7" ${S}/><path d="M44 40l6-6 4 4-6 6-5 1z" ${soft}/>`,
   issues: `<path d="M32 15l17 30H15z" ${S}/><path d="M32 27v8" ${S}/><circle cx="32" cy="40" r="1.9" fill="var(--art-ink)"/><circle cx="47" cy="20" r="4" ${soft}/>`,
