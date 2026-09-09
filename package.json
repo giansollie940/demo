@@ -18,7 +18,10 @@
     "verify:release": "node scripts/verify-release.mjs",
     "verify:quality": "node scripts/run-quality-gate.mjs",
     "package:audit-hotfix": "node scripts/package-audit-hotfix.mjs",
-    "package:github-pages-minimal": "node scripts/package-github-pages-minimal.mjs"
+    "package:github-pages-minimal": "node scripts/package-github-pages-minimal.mjs",
+    "test:homework": "node --test tests/homework/*.test.mjs",
+    "test:homework:ui": "vitest run tests/homework/warning.test.ts",
+    "test:bug-001": "vitest run --config tests/bug-001/vitest.config.ts"
   },
   "dependencies": {
     "@tanstack/vue-query": "^5.0.0",
@@ -29,6 +32,7 @@
     "vue-router": "^4.5.0"
   },
   "devDependencies": {
+    "@electric-sql/pglite": "0.3.14",
     "@playwright/test": "^1.50.0",
     "@vitejs/plugin-vue": "^6.0.0",
     "@vue/test-utils": "^2.4.0",
