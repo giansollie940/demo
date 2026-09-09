@@ -1,3 +1,4 @@
+import { resolveHomeworkTab } from '../homework/view-context'
 import type { CurrentUser, LegacyState, RegistrationRecord } from '../../types/legacy'
 import { isRegistrationIssue, isRevisionOverdue, isTeacherQueueItem, needsTeacherAction, sessionStartMs } from '../registrations/registration-model'
 import { effectiveScheduleForWeek } from '../schedule/schedule-model'
@@ -156,8 +157,26 @@ function monitorClassSupportMessages({ state, weekId, nowMs }: { state: LegacySt
   return messages
 }
 
-export function buildOwlContextMessages({ state, user, path, weekId = state.currentWeekId, nowMs = Date.now() }: { state: LegacyState; user: CurrentUser; path: string; weekId?: string | null; nowMs?: number }): OwlMessage[] {
+export function buildOwlContextMessages({ state, user, path, weekId = state?.currentWeekId, nowMs = Date.now(), homeworkTab }: { state: LegacyState | null; user: CurrentUser; path: string; weekId?: string | null; nowMs?: number; homeworkTab?: string | null }): OwlMessage[] {
   const route = routeName(path)
+  // Resolve this subsystem before reading any Registration/Schedule state.
+  if (route === 'homework') {
+    const tab = resolveHomeworkTab(user.role, homeworkTab)
+    const guidance: Record<string, string> = {
+      overview: 'Theo dõi tình trạng hệ thống và cảnh báo Báo bài theo cấu hình đã chọn.',
+      board: 'Xem bài cần hoàn thành theo môn và deadline. Dùng Đăng Báo bài để chia sẻ bài mới.',
+      history: 'Xem các Báo bài bạn đã đăng và trạng thái xử lý của từng bài.',
+      awards: 'Ghi nhận riêng số Báo bài hợp lệ và số tim nhận được.',
+      queue: user.role === 'monitor' ? 'Bạn được xem thông tin cơ bản; giáo viên quyết định các trường hợp nghi trùng.' : 'Xem các Báo bài nghi trùng trước khi chọn phương án xử lý phù hợp.',
+      subjects: 'Quản lý danh sách môn dùng trong Báo bài.',
+      english: 'Quản lý nhóm Tiếng Anh và phân nhóm học sinh cho Báo bài.',
+      trash: 'Xem các Báo bài đã xóa và thao tác khôi phục trong phạm vi được phép.',
+      audit: 'Xem nhật ký thao tác Báo bài trong phạm vi được phép.',
+      settings: 'Cấu hình Báo bài và mức cảnh báo dành cho Admin.',
+    }
+    return [{ kind: 'page', text: `Báo bài · ${tab.label}: ${guidance[tab.id]}` }]
+  }
+  if (!state) return []
   const week = state.weeks.find(item => item.id === weekId) ?? state.weeks.find(item => item.id === state.currentWeekId)
   const weekLabel = week ? `Tuần ${week.number}` : 'tuần đang xem'
   const manager = ['teacher','admin'].includes(user.role)

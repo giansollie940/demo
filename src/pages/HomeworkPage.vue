@@ -17,6 +17,8 @@ import {
   type Subject,
   type EnglishGroup,
 } from "../features/homework/api";
+import { homeworkTabs, resolveHomeworkTab, useHomeworkViewStore } from "../features/homework/view-context";
+const view = useHomeworkViewStore();
 const auth = useAuthStore(),
   ctx = useContextStore();
 const classId = computed(
@@ -34,7 +36,6 @@ const data = ref<HomeworkData | null>(null),
   busy = ref(false),
   error = ref(""),
   message = ref(""),
-  tab = ref(admin.value ? "overview" : "board"),
   subject = ref(""),
   week = ref(ctx.selectedWeekId || ""),
   now = ref(Date.now());
@@ -69,24 +70,13 @@ const seed = ref(3),
   pending = ref(70),
   reject = ref(90),
   alerts = ref("system");
-const tabs = computed(() => [
-  ...(admin.value ? [{ id: "overview", label: "Tổng quan" }] : []),
-  { id: "board", label: "Bảng Báo bài" },
-  { id: "history", label: "Lịch sử đăng" },
-  { id: "awards", label: "🌟 Góc tuyên dương" },
-  ...(["teacher", "monitor", "admin"].includes(role.value)
-    ? [{ id: "queue", label: "AI trùng" }]
-    : []),
-  ...(manager.value
-    ? [
-        { id: "subjects", label: "Môn học" },
-        { id: "english", label: "Tiếng Anh" },
-        { id: "trash", label: "Thùng rác" },
-        { id: "audit", label: "Nhật ký" },
-      ]
-    : []),
-  ...(admin.value ? [{ id: "settings", label: "Cấu hình" }] : []),
-]);
+const tabs = computed(() => homeworkTabs(role.value));
+// A stale or unauthorized selection never becomes the rendered page/Owl context.
+const tab = computed({
+  get: () => resolveHomeworkTab(role.value, view.selectedTab).id,
+  set: (value: string) => { view.selectedTab = value; },
+});
+watch(role, () => { view.selectedTab = tab.value; });
 const selectedSubject = computed(() =>
   data.value?.subjects.find((s) => s.id === form.subject_id),
 );
@@ -264,6 +254,7 @@ watch([classId, week], () => {
 });
 onMounted(load);
 onUnmounted(() => {
+  view.selectedTab = null;
   loadId++;
   clearInterval(timer);
 });
@@ -773,7 +764,7 @@ onUnmounted(() => {
         class="modal"
       >
         <h2 id="compose-title">
-          {{ form.id ? "Sửa Báo bài" : "✏️ Gửi lời nhắc cho lớp" }}
+          {{ form.id ? "Sửa Báo bài" : "✏️ Đăng Báo bài" }}
         </h2>
         <form @submit.prevent="send">
           <div class="form-grid">
