@@ -22,7 +22,8 @@
     "test:homework": "node --test tests/homework/*.test.mjs",
     "test:homework:ui": "vitest run tests/homework/warning.test.ts",
     "test:bug-001": "vitest run --config tests/bug-001/vitest.config.ts",
-    "test:feat-002": "FEAT002_UPGRADE=1 node --test tests/homework/*.test.mjs tests/feat-002/*.test.mjs"
+    "test:feat-002": "FEAT002_UPGRADE=1 node --test tests/homework/*.test.mjs tests/feat-002/*.test.mjs",
+    "test:feat-003": "vitest run --config tests/feat-003/vitest.config.ts"
   },
   "dependencies": {
     "@tanstack/vue-query": "^5.0.0",

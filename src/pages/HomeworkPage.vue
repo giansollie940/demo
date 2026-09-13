@@ -4,6 +4,8 @@ import { useAuthStore } from "../stores/auth";
 import { useContextStore } from "../stores/context";
 import PageArtwork from "../components/ui/PageArtwork.vue";
 import PageBannerArt from "../components/ui/PageBannerArt.vue";
+import HomeworkAiSettings from "../components/homework/HomeworkAiSettings.vue";
+import HomeworkGroupManager from "../components/homework/HomeworkGroupManager.vue";
 import HomeworkCard from "../components/homework/HomeworkCard.vue";
 import HomeworkDuplicateWarning from "../components/homework/HomeworkDuplicateWarning.vue";
 import {
@@ -15,7 +17,6 @@ import {
   type HomeworkData,
   type Notice,
   type Subject,
-  type EnglishGroup,
 } from "../features/homework/api";
 import { homeworkTabs, resolveHomeworkTab, useHomeworkViewStore } from "../features/homework/view-context";
 const view = useHomeworkViewStore();
@@ -68,13 +69,7 @@ const subjectForm = reactive({
   is_english: false,
   is_active: true,
 });
-const groupForm = reactive({ id: "", name: "", is_active: true }),
-  assign = reactive({ student_id: "", english_group_id: "" });
-const seed = ref(3),
-  semanticEnabled = ref(true),
-  pending = ref(70),
-  reject = ref(90),
-  alerts = ref("system");
+const seed = ref(3), alerts = ref("system");
 const tabs = computed(() => homeworkTabs(role.value));
 // A stale or unauthorized selection never becomes the rendered page/Owl context.
 const tab = computed({
@@ -125,9 +120,6 @@ async function load() {
     if (id !== loadId) return;
     data.value = result;
     seed.value = result.settings.seed_threshold;
-    pending.value = result.ai_settings?.duplicate_review_threshold ?? 70;
-    reject.value = result.ai_settings?.duplicate_auto_threshold ?? 90;
-    semanticEnabled.value = result.ai_settings?.semantic_duplicate_enabled ?? true;
     alerts.value = result.alert_level || "system";
   } catch (e) {
     if (id === loadId)
@@ -248,16 +240,16 @@ function editSubject(s?: Subject) {
     },
   );
 }
-function editGroup(g?: EnglishGroup) {
-  Object.assign(groupForm, g || { id: "", name: "", is_active: true });
-}
 async function saveSubject() {
   await act("subject_save", { ...subjectForm, id: subjectForm.id || null });
   if (!error.value) editSubject();
 }
-async function saveGroup() {
-  await act("group_save", { ...groupForm, id: groupForm.id || null });
-  if (!error.value) editGroup();
+function acceptManagementUpdate(fresh: HomeworkData) {
+  // A confirmed management reload supersedes any earlier page reload in flight.
+  loadId++;
+  loading.value = false;
+  data.value = fresh;
+  view.refreshVersion++;
 }
 function jump(id: string) {
   tab.value = "board";
@@ -302,6 +294,7 @@ onUnmounted(() => {
       <button
         v-for="t in tabs"
         :key="t.id"
+        :disabled="busy"
         :aria-current="tab === t.id ? 'page' : undefined"
         @click="tab = t.id"
       >
@@ -631,68 +624,7 @@ onUnmounted(() => {
           </div>
         </form>
       </section>
-      <section v-if="tab === 'english' && teacher" class="panel">
-        <h2>Nhóm Tiếng Anh</h2>
-        <div class="config-list">
-          <button v-for="g in data.groups" :key="g.id" @click="editGroup(g)">
-            {{ g.name }} · {{ g.is_active ? "Hoạt động" : "Tạm ngưng" }}
-          </button>
-        </div>
-        <form class="form-grid" @submit.prevent="saveGroup">
-          <label
-            >Tên nhóm<input
-              v-model="groupForm.name"
-              required
-              maxlength="100" /></label
-          ><label class="check"
-            ><input v-model="groupForm.is_active" type="checkbox" />Hoạt
-            động</label
-          >
-          <div class="actions">
-            <button :disabled="busy">
-              {{ groupForm.id ? "Lưu nhóm" : "Thêm nhóm" }}</button
-            ><button type="button" @click="editGroup()">Nhập mới</button>
-          </div>
-        </form>
-        <h3>Gán hoặc chuyển nhóm</h3>
-        <form
-          class="form-grid"
-          @submit.prevent="act('group_assign', { ...assign })"
-        >
-          <label
-            >Học sinh<select v-model="assign.student_id" required>
-              <option value="">Chọn học sinh</option>
-              <option v-for="s in data.learners" :key="s.id" :value="s.id">
-                {{ s.name }}
-              </option>
-            </select></label
-          ><label
-            >Nhóm mới<select v-model="assign.english_group_id" required>
-              <option value="">Chọn nhóm</option>
-              <option
-                v-for="g in data.groups.filter((x) => x.is_active)"
-                :key="g.id"
-                :value="g.id"
-              >
-                {{ g.name }}
-              </option>
-            </select></label
-          ><button :disabled="busy">Lưu phân nhóm</button>
-        </form>
-        <ul>
-          <li v-for="s in data.learners" :key="s.id">
-            {{ s.name }} —
-            {{
-              data.groups.find(
-                (g) =>
-                  g.id ===
-                  data?.members.find((m) => m.student_id === s.id)
-                    ?.english_group_id,
-              )?.name || "Chưa có nhóm"
-            }}
-          </li>
-        </ul>
-      </section>
+      <HomeworkGroupManager v-if="tab === 'english' && teacher" :key="classId" :class-id="classId" :week-id="week" :role="role" :data="data" @updated="acceptManagementUpdate" @busy="busy = $event" />
       <section v-if="tab === 'trash' && manager">
         <h2>Thùng rác Báo bài</h2>
         <p>
@@ -732,39 +664,7 @@ onUnmounted(() => {
           }}</pre>
         </details>
       </section>
-      <section v-if="tab === 'ai_settings' && teacher" class="panel">
-        <h2>Cài đặt AI Báo bài</h2>
-        <p>Tắt semantic vẫn giữ kiểm tra nội dung trùng chính xác và chuẩn hóa.</p>
-        <form
-          class="form-grid"
-          @submit.prevent="
-            act('ai_settings', {
-              semantic_duplicate_enabled: semanticEnabled,
-              duplicate_review_threshold: pending,
-              duplicate_auto_threshold: reject,
-            })
-          "
-        >
-          <label><input v-model="semanticEnabled" type="checkbox" /> Bật kiểm tra trùng semantic</label>
-          <label
-            >Ngưỡng chờ GV (%)<input
-              v-model.number="pending"
-              type="number"
-              step="1"
-              min="0"
-              max="99"
-              required /></label
-          ><label
-            >Ngưỡng trùng (%)<input
-              v-model.number="reject"
-              type="number"
-              step="1"
-              :min="pending + 1"
-              max="100"
-              required /></label
-          ><button :disabled="busy || !Number.isInteger(pending) || !Number.isInteger(reject) || pending >= reject">Lưu cài đặt AI</button>
-        </form>
-      </section>
+      <HomeworkAiSettings v-if="teacher" v-show="tab === 'ai_settings'" :key="classId" :class-id="classId" :week-id="week" :role="role" :settings="data.ai_settings" @updated="acceptManagementUpdate" @busy="busy = $event" />
       <section v-if="tab === 'settings' && admin" class="panel">
         <h2>Cấu hình Báo bài</h2>
         <form
