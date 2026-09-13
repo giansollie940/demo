@@ -30,6 +30,7 @@ const classId = computed(
 );
 const role = computed(() => auth.role || "student"),
   manager = computed(() => ["teacher", "admin"].includes(role.value)),
+  teacher = computed(() => role.value === "teacher"),
   admin = computed(() => role.value === "admin");
 const data = ref<HomeworkData | null>(null),
   loading = ref(false),
@@ -44,6 +45,9 @@ let loadId = 0;
 const editing = ref(false),
   deleteTarget = ref<Notice | null>(null),
   deleteReason = ref(""),
+  hardTarget = ref<Notice | null>(null),
+  hardReason = ref(""),
+  hardConfirmed = ref(false),
   reviewReasons = reactive<Record<string, string>>({});
 const form = reactive({
   id: "",
@@ -67,6 +71,7 @@ const subjectForm = reactive({
 const groupForm = reactive({ id: "", name: "", is_active: true }),
   assign = reactive({ student_id: "", english_group_id: "" });
 const seed = ref(3),
+  semanticEnabled = ref(true),
   pending = ref(70),
   reject = ref(90),
   alerts = ref("system");
@@ -76,7 +81,10 @@ const tab = computed({
   get: () => resolveHomeworkTab(role.value, view.selectedTab).id,
   set: (value: string) => { view.selectedTab = value; },
 });
-watch(role, () => { view.selectedTab = tab.value; });
+watch(role, () => {
+  view.selectedTab = tab.value; editing.value = false; deleteTarget.value = null; hardTarget.value = null;
+  data.value = null; void load();
+});
 const selectedSubject = computed(() =>
   data.value?.subjects.find((s) => s.id === form.subject_id),
 );
@@ -91,6 +99,7 @@ const upcoming = computed(() =>
 const overdue = computed(() =>
   filtered.value.filter((n) => new Date(n.due_at).getTime() < now.value),
 );
+const reviewCases = computed(() => tab.value === 'queue' ? data.value?.queue || [] : data.value?.review_history || []);
 const personal = computed(() =>
   data.value?.leaderboard.find((r) => r.id === auth.currentUser?.id),
 );
@@ -116,8 +125,9 @@ async function load() {
     if (id !== loadId) return;
     data.value = result;
     seed.value = result.settings.seed_threshold;
-    pending.value = result.settings.pending_threshold ?? 70;
-    reject.value = result.settings.reject_threshold ?? 90;
+    pending.value = result.ai_settings?.duplicate_review_threshold ?? 70;
+    reject.value = result.ai_settings?.duplicate_auto_threshold ?? 90;
+    semanticEnabled.value = result.ai_settings?.semantic_duplicate_enabled ?? true;
     alerts.value = result.alert_level || "system";
   } catch (e) {
     if (id === loadId)
@@ -134,6 +144,7 @@ async function act(action: string, payload: Record<string, unknown>) {
   try {
     await homeworkRpc(action, classId.value, payload);
     message.value = "Đã lưu thay đổi.";
+    view.refreshVersion++;
     await load();
   } catch (e) {
     error.value =
@@ -143,6 +154,7 @@ async function act(action: string, payload: Record<string, unknown>) {
   }
 }
 function compose(n?: Notice) {
+  if (admin.value) return;
   Object.assign(form, {
     id: n?.id || "",
     revision: n?.revision || 0,
@@ -175,6 +187,7 @@ async function send() {
       (result.notice?.status === "published"
         ? "Đã công bố Báo bài."
         : "Đã lưu bài vào Lịch sử đăng để kiểm tra nội dung trùng.");
+    view.refreshVersion++;
     await load();
     if (result.notice?.status !== "published") tab.value = "history";
   } catch (e) {
@@ -195,14 +208,24 @@ async function retry(n: Notice) {
     message.value = result.message || (result.notice?.status === "published"
       ? "Đã kiểm tra lại và công bố Báo bài."
       : "Đã kiểm tra lại. Xem kết quả trong lịch sử hoặc danh sách chờ.");
+    view.refreshVersion++;
     await load();
   } catch (e) {
     error.value = e instanceof Error ? e.message : "Chưa kiểm tra lại được bài.";
   } finally { busy.value = false; }
 }
 function remove(n: Notice) {
+  if (admin.value) return;
   deleteTarget.value = n;
   deleteReason.value = "";
+}
+function requestHardDelete(n: Notice) {
+  hardTarget.value = n; hardReason.value = ""; hardConfirmed.value = false;
+}
+async function confirmHardDelete() {
+  if (!admin.value || !hardTarget.value || !hardConfirmed.value || !hardReason.value.trim() || hardReason.value.trim().length > 500) return;
+  await act("hard_delete", { id: hardTarget.value.id, confirm_irreversible: true, hard_delete_reason: hardReason.value.trim() });
+  if (!error.value) hardTarget.value = null;
 }
 async function confirmDelete() {
   await act("delete", {
@@ -318,6 +341,7 @@ onUnmounted(() => {
       </section>
       <template v-if="tab === 'board'">
         <button
+          v-if="!admin"
           class="composer-launch"
           :disabled="busy || !data.subjects.some((s) => s.is_active)"
           @click="compose()"
@@ -383,9 +407,13 @@ onUnmounted(() => {
       </template>
       <section v-if="tab === 'history'">
         <h2>Lịch sử đăng của tôi</h2>
-        <p v-if="!data.history.length" class="empty">
+        <p v-if="!data.history.length && !data.history_markers?.length" class="empty">
           Chưa có bài đăng. Hãy chia sẻ lời nhắc đầu tiên!
         </p>
+        <article v-for="marker in data.history_markers" :key="marker.notice_id" class="panel">
+          <strong>{{ marker.marker }}</strong>
+          <p>Tạo: {{ dateLabel(marker.original_created_at) }} · Xóa vĩnh viễn: {{ dateLabel(marker.hard_deleted_at) }}</p>
+        </article>
         <div class="notice-grid">
           <div v-for="n in data.history" :key="n.id">
             <HomeworkCard
@@ -399,8 +427,8 @@ onUnmounted(() => {
               @heart="act('heart', { id: n.id, liked: !n.liked })"
               @remind="act('remind', { id: n.id })"
             />
-            <button v-if="n.can_retry" type="button" :disabled="busy" @click="retry(n)">Thử kiểm tra AI lại</button>
-            <HomeworkDuplicateWarning
+            <button v-if="!admin && n.can_retry" type="button" :disabled="busy" @click="retry(n)">Thử kiểm tra AI lại</button>
+            <HomeworkDuplicateWarning v-if="!admin"
               :notice="n"
               :visible-notices="data.notices"
               :busy="busy"
@@ -469,14 +497,14 @@ onUnmounted(() => {
           </article>
         </div>
       </section>
-      <section v-if="tab === 'queue'">
-        <h2>{{ manager ? "Báo bài cần xử lý" : "Bài đang chờ giáo viên" }}</h2>
-        <p v-if="!manager">
+      <section v-if="tab === 'queue' || (tab === 'audit' && teacher)">
+        <h2>{{ tab === "audit" ? "Lịch sử kiểm tra trùng" : teacher ? "Báo bài cần xử lý" : "Bài đang chờ giáo viên" }}</h2>
+        <p v-if="!teacher">
           Cán sự xem thông tin cặp bài để hỗ trợ lớp. Giáo viên quyết định kết
           quả.
         </p>
-        <p v-if="!data.queue.length" class="empty">Không có bài cần xem xét.</p>
-        <article v-for="n in data.queue" :key="n.id" class="panel queue-case">
+        <p v-if="!reviewCases.length" class="empty">Không có bài cần xem xét.</p>
+        <article v-for="n in reviewCases" :key="n.id" class="panel queue-case">
           <div class="comparison">
             <div>
               <small>BÀI MỚI</small>
@@ -504,10 +532,10 @@ onUnmounted(() => {
                 {{ dateLabel(n.candidate.created_at) }}</small
               >
             </div>
-            <p v-else>Chưa có bài so sánh. Giáo viên cần kiểm tra nội dung.</p>
+            <p v-else>{{ n.duplicate_tombstone_id ? "Bài được so sánh đã bị xóa vĩnh viễn." : "Chưa có bài so sánh. Giáo viên cần kiểm tra nội dung." }}</p>
           </div>
-          <template v-if="manager"
-            ><button v-if="n.can_retry" type="button" :disabled="busy" @click="retry(n)">Thử kiểm tra AI lại</button><p>
+          <template v-if="teacher"
+            ><button v-if="!admin && n.can_retry" type="button" :disabled="busy" @click="retry(n)">Thử kiểm tra AI lại</button><p>
               {{ n.score != null ? `Mức giống: ${n.score}% · ` : ""
               }}{{ n.reason || "Chưa nhận được kết quả AI." }}
             </p>
@@ -518,7 +546,7 @@ onUnmounted(() => {
                 placeholder="Bắt buộc khi giữ cả hai"
             /></label>
             <div class="actions">
-              <template v-if="n.candidate"
+              <template v-if="n.candidate?.status === 'published' && n.score != null"
                 ><button
                   :disabled="busy"
                   @click="
@@ -559,7 +587,7 @@ onUnmounted(() => {
           >
         </article>
       </section>
-      <section v-if="tab === 'subjects' && manager" class="panel">
+      <section v-if="tab === 'subjects' && teacher" class="panel">
         <h2>Môn học của lớp</h2>
         <div class="config-list">
           <button
@@ -603,7 +631,7 @@ onUnmounted(() => {
           </div>
         </form>
       </section>
-      <section v-if="tab === 'english' && manager" class="panel">
+      <section v-if="tab === 'english' && teacher" class="panel">
         <h2>Nhóm Tiếng Anh</h2>
         <div class="config-list">
           <button v-for="g in data.groups" :key="g.id" @click="editGroup(g)">
@@ -668,19 +696,25 @@ onUnmounted(() => {
       <section v-if="tab === 'trash' && manager">
         <h2>Thùng rác Báo bài</h2>
         <p>
-          Khôi phục bảo toàn lịch sử; bài có khả năng trùng mới sẽ chờ kiểm tra.
+          {{ admin ? "Chỉ xóa vĩnh viễn từng bài đã được xóa trước đó. Hành động không thể hoàn tác." : "Khôi phục bảo toàn lịch sử; bài có khả năng trùng mới sẽ chờ kiểm tra." }}
         </p>
         <article v-for="n in data.trash" :key="n.id" class="panel">
           <h3>{{ n.title }}</h3>
           <p>{{ n.delete_reason }}</p>
-          <button :disabled="busy" @click="act('restore', { id: n.id })">
+          <button v-if="teacher" :disabled="busy" @click="act('restore', { id: n.id })">
             Khôi phục
           </button>
+          <button v-if="admin" :disabled="busy" @click="requestHardDelete(n)">Xóa vĩnh viễn</button>
         </article>
         <p v-if="!data.trash.length" class="empty">Thùng rác trống.</p>
       </section>
       <section v-if="tab === 'audit' && manager" class="panel">
         <h2>Nhật ký Báo bài</h2>
+        <article v-for="tombstone in data.tombstones" :key="tombstone.notice_id" class="panel">
+          <strong>Admin đã xóa vĩnh viễn notice</strong>
+          <p>{{ dateLabel(tombstone.hard_deleted_at) }}</p>
+          <details v-if="admin"><summary>Metadata xóa vĩnh viễn</summary><pre>{{ JSON.stringify(tombstone, null, 2) }}</pre></details>
+        </article>
         <p>300 sự kiện gần nhất.</p>
         <details v-for="e in data.audit" :key="e.id">
           <summary>{{ dateLabel(e.created_at) }} · {{ e.event_type }}</summary>
@@ -697,6 +731,39 @@ onUnmounted(() => {
             )
           }}</pre>
         </details>
+      </section>
+      <section v-if="tab === 'ai_settings' && teacher" class="panel">
+        <h2>Cài đặt AI Báo bài</h2>
+        <p>Tắt semantic vẫn giữ kiểm tra nội dung trùng chính xác và chuẩn hóa.</p>
+        <form
+          class="form-grid"
+          @submit.prevent="
+            act('ai_settings', {
+              semantic_duplicate_enabled: semanticEnabled,
+              duplicate_review_threshold: pending,
+              duplicate_auto_threshold: reject,
+            })
+          "
+        >
+          <label><input v-model="semanticEnabled" type="checkbox" /> Bật kiểm tra trùng semantic</label>
+          <label
+            >Ngưỡng chờ GV (%)<input
+              v-model.number="pending"
+              type="number"
+              step="1"
+              min="0"
+              max="99"
+              required /></label
+          ><label
+            >Ngưỡng trùng (%)<input
+              v-model.number="reject"
+              type="number"
+              step="1"
+              :min="pending + 1"
+              max="100"
+              required /></label
+          ><button :disabled="busy || !Number.isInteger(pending) || !Number.isInteger(reject) || pending >= reject">Lưu cài đặt AI</button>
+        </form>
       </section>
       <section v-if="tab === 'settings' && admin" class="panel">
         <h2>Cấu hình Báo bài</h2>
@@ -715,31 +782,6 @@ onUnmounted(() => {
         </form>
         <form
           class="form-grid"
-          @submit.prevent="
-            act('ai_settings', {
-              pending_threshold: pending,
-              reject_threshold: reject,
-            })
-          "
-        >
-          <label
-            >Ngưỡng chờ GV (%)<input
-              v-model.number="pending"
-              type="number"
-              min="1"
-              max="99"
-              required /></label
-          ><label
-            >Ngưỡng trùng (%)<input
-              v-model.number="reject"
-              type="number"
-              :min="pending + 1"
-              max="100"
-              required /></label
-          ><button :disabled="busy">Lưu ngưỡng AI</button>
-        </form>
-        <form
-          class="form-grid"
           @submit.prevent="act('alert_settings', { alert_level: alerts })"
         >
           <label
@@ -752,8 +794,21 @@ onUnmounted(() => {
         </form>
       </section>
     </template>
+    <div v-if="hardTarget && admin" class="modal-backdrop" @keydown.esc="!busy && (hardTarget = null)">
+      <section role="dialog" aria-modal="true" aria-labelledby="hard-delete-title" class="modal">
+        <h2 id="hard-delete-title">Xóa vĩnh viễn Báo bài</h2>
+        <p>{{ hardTarget.title }}</p>
+        <p>Nội dung, tim và lượt nhắc sẽ bị xóa; hành động không thể hoàn tác. Nhật ký xóa tối thiểu được giữ lại.</p>
+        <form @submit.prevent="confirmHardDelete">
+          <label>Lý do xóa vĩnh viễn<textarea v-model="hardReason" maxlength="500" required /></label>
+          <label><input v-model="hardConfirmed" type="checkbox" required /> Tôi xác nhận xóa vĩnh viễn bài này.</label>
+          <p v-if="error" role="alert">{{ error }}</p>
+          <div class="actions"><button type="button" :disabled="busy" @click="hardTarget = null">Hủy</button><button :disabled="busy || !hardConfirmed || !hardReason.trim() || hardReason.trim().length > 500">Xóa vĩnh viễn</button></div>
+        </form>
+      </section>
+    </div>
     <div
-      v-if="editing"
+      v-if="editing && !admin"
       class="modal-backdrop"
       @keydown.esc="!busy && (editing = false)"
     >

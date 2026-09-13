@@ -27,10 +27,10 @@ const emit = defineEmits<{
 const own = computed(() => props.notice.author_id === props.userId);
 const manage = computed(
   () =>
-    own.value ||
-    (["admin", "teacher", "monitor"].includes(props.role) &&
+    props.role !== "admin" && (own.value ||
+    (["teacher", "monitor"].includes(props.role) &&
       ["student", "monitor"].includes(props.notice.author_role) &&
-      (props.role !== "monitor" || props.notice.status === "published")),
+      (props.role !== "monitor" || props.notice.status === "published"))),
 );
 const deadlineText = computed(() => {
   const due = new Date(props.notice.due_at).getTime();
@@ -71,7 +71,7 @@ const deadlineText = computed(() => {
     </p>
     <footer>
       <button
-        v-if="notice.status === 'published'"
+        v-if="notice.status === 'published' && role !== 'admin'"
         :disabled="busy || own"
         :aria-pressed="notice.liked"
         :aria-label="
@@ -88,7 +88,7 @@ const deadlineText = computed(() => {
       <button
         v-if="
           notice.status === 'published' &&
-          ['admin', 'teacher', 'monitor'].includes(role)
+          ['teacher', 'monitor'].includes(role)
         "
         :disabled="busy"
         @click="emit('remind', notice)"

@@ -7,6 +7,8 @@ import {
   homeworkRpc,
   type HomeworkNotification,
 } from "../../features/homework/api";
+import { useHomeworkViewStore } from "../../features/homework/view-context";
+const view = useHomeworkViewStore();
 const auth = useAuthStore(),
   ctx = useContextStore(),
   router = useRouter();
@@ -52,7 +54,7 @@ async function visit(n: HomeworkNotification) {
   }
 }
 watch(
-  [classId, () => auth.currentUser?.id],
+  [classId, () => auth.currentUser?.id, () => view.refreshVersion],
   () => {
     items.value = [];
     void refresh();

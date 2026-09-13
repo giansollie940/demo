@@ -22,6 +22,8 @@ export interface Notice {
   hearts: number;
   liked: boolean;
   can_retry?: boolean;
+  duplicate_tombstone_id?: string | null;
+  decision?: string | null;
   candidate?: Notice | null;
   score?: number | null;
   reason?: string | null;
@@ -51,6 +53,10 @@ export interface HomeworkNotification {
   created_at: string;
 }
 export interface HomeworkData {
+  ai_settings?: { semantic_duplicate_enabled: boolean; duplicate_review_threshold: number; duplicate_auto_threshold: number };
+  review_history?: Notice[];
+  history_markers?: Array<{ notice_id: string; marker: string; original_created_at: string; hard_deleted_at: string }>;
+  tombstones?: Array<{ notice_id: string; hard_deleted_at: string; event?: string; [key: string]: unknown }>;
   subjects: Subject[];
   groups: EnglishGroup[];
   notices: Notice[];
@@ -59,8 +65,7 @@ export interface HomeworkData {
   trash: Notice[];
   settings: {
     seed_threshold: number;
-    pending_threshold?: number;
-    reject_threshold?: number;
+
   };
   leaderboard: Array<{
     id: string;

@@ -21,7 +21,8 @@
     "package:github-pages-minimal": "node scripts/package-github-pages-minimal.mjs",
     "test:homework": "node --test tests/homework/*.test.mjs",
     "test:homework:ui": "vitest run tests/homework/warning.test.ts",
-    "test:bug-001": "vitest run --config tests/bug-001/vitest.config.ts"
+    "test:bug-001": "vitest run --config tests/bug-001/vitest.config.ts",
+    "test:feat-002": "FEAT002_UPGRADE=1 node --test tests/homework/*.test.mjs tests/feat-002/*.test.mjs"
   },
   "dependencies": {
     "@tanstack/vue-query": "^5.0.0",
