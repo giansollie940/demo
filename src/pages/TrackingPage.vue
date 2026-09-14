@@ -103,7 +103,7 @@ async function rerunSessionAi(){
 </script>
 <template>
   <div class="page-stack tracking-page">
-    <header class="tracking-header"><PageBannerArt tone="primary"/><div class="page-head-lead"><PageArtwork name="tracking" tone="primary"/><div><span class="page-context"><UsersRound aria-hidden="true"/>Theo dõi lớp</span><h1>Theo dõi cả lớp</h1><p>Tuần {{ week?.number??'–' }} · chọn một buổi, sau đó bấm trực tiếp vào số liệu để xem đúng nhóm học sinh của buổi đó.</p></div></div><span v-if="weekQuery.isFetching.value" class="syncing"><RefreshCw aria-hidden="true"/>Đang đồng bộ</span></header>
+    <header class="page-banner tracking-header"><PageBannerArt tone="primary"/><div class="page-head-lead"><PageArtwork name="tracking" tone="primary"/><div><span class="page-context"><UsersRound aria-hidden="true"/>Theo dõi lớp</span><h1>Theo dõi cả lớp</h1><p>Tuần {{ week?.number??'–' }} · chọn một buổi, sau đó bấm trực tiếp vào số liệu để xem đúng nhóm học sinh của buổi đó.</p></div></div><span v-if="weekQuery.isFetching.value" class="syncing"><RefreshCw aria-hidden="true"/>Đang đồng bộ</span></header>
     <InlineStatus :state="status" :message="statusMessage"/>
     <div v-if="weekQuery.isLoading.value&&!summaries.length" class="tracking-skeleton" aria-label="Đang tải dữ liệu"><span v-for="n in 3" :key="n" class="skeleton-shimmer"></span></div>
 

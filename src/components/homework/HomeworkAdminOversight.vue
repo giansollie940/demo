@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import {computed,onMounted,onUnmounted,reactive,ref,watch} from 'vue';
+import PageBannerArt from '../ui/PageBannerArt.vue';
 import AppCard from '../ui/AppCard.vue';
 import AppButton from '../ui/AppButton.vue';
 import {homeworkRpc,dateLabel,stateLabels,type HomeworkContext,type HomeworkData,type CatalogSubject,type Notice} from '../../features/homework/api';
@@ -48,7 +49,7 @@ onMounted(initialize);onUnmounted(()=>{generation++;});
 </script>
 <template>
 <section class="oversight">
- <header><p class="eyebrow">QUẢN TRỊ BÁO BÀI</p><h1>Giám sát học tập</h1><p>Tổng quan theo khối, lịch sử theo lớp và danh mục môn chuẩn.</p></header>
+ <header class="page-banner oversight-banner"><PageBannerArt tone="lilac"/><div><p class="eyebrow">QUẢN TRỊ BÁO BÀI</p><h1>Giám sát học tập</h1><p>Tổng quan theo khối, lịch sử theo lớp và danh mục môn chuẩn.</p></div></header>
  <AppCard><div class="toolbar"><label>Khối<select v-model.number="grade" :disabled="busy"><option value="">Tất cả khối</option><option v-for="g in context.grades" :key="g" :value="g">Khối {{ g }}</option></select></label><label>Lớp<select v-model="classId" :disabled="busy"><option value="">Tất cả lớp</option><option v-for="c in classes" :key="c.id" :value="c.id">{{ c.code }} · Khối {{ c.grade }}{{ c.active?'':' · Đã khóa' }}</option></select></label><AppButton variant="secondary" :disabled="loading||busy" @click="load">Làm mới</AppButton></div></AppCard>
  <nav class="tabs" aria-label="Các mục Báo bài"><AppButton v-for="t in homeworkTabs('admin')" :key="t.id" :variant="tab===t.id?'primary':'secondary'" :aria-current="tab===t.id?'page':undefined" :disabled="busy" @click="tab=t.id">{{ t.label }}</AppButton></nav>
  <p v-if="error" role="alert" class="error">{{ error }}</p><p v-if="message" role="status">{{ message }}</p><p v-if="loading" role="status">Đang tải dữ liệu theo phạm vi đã chọn…</p>
@@ -69,5 +70,6 @@ onMounted(initialize);onUnmounted(()=>{generation++;});
 </section>
 </template>
 <style scoped>
+.oversight-banner h1{margin:8px 0;font-size:clamp(2rem,4vw,3rem)}.oversight-banner p{margin:0;color:var(--text-muted)}.oversight-banner .eyebrow{color:var(--color-primary);font-weight:850;font-size:var(--font-size-ui-min);letter-spacing:.08em}
 .oversight{display:grid;gap:20px;min-width:0}.toolbar,.tabs,.catalog-list{display:flex;flex-wrap:wrap;align-items:end;gap:12px}.tabs{align-items:center}.toolbar label{flex:1;min-width:180px}.form-grid,.metrics{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(240px,100%),1fr));gap:16px}.metrics strong{font-size:2rem}label{display:grid;gap:8px;margin-block:10px}.check{display:flex;align-items:center}.check input{width:20px;min-height:20px}input,select,textarea{width:100%;min-width:0;min-height:44px;border:1px solid var(--border);border-radius:var(--radius-md,12px);padding:10px;background:var(--surface-raised);color:var(--text)}.catalog-list button{padding:12px;border:1px solid var(--border);border-radius:12px;background:var(--surface-raised);color:var(--text);text-align:left}article{padding:16px 0;border-bottom:1px solid var(--border);overflow-wrap:anywhere}pre{white-space:pre-wrap;overflow-wrap:anywhere}.error{color:var(--color-danger)}@media(max-width:640px){.toolbar{align-items:stretch}.toolbar label{min-width:0;flex-basis:100%}.tabs :deep(button){white-space:normal}header h1{font-size:1.6rem}}
 </style>

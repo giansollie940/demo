@@ -7,6 +7,7 @@ import ConfirmDialog from '../components/ui/ConfirmDialog.vue'
 import InlineStatus, { type InlineStatusState } from '../components/ui/InlineStatus.vue'
 import ScheduleGrid from '../components/schedule/ScheduleGrid.vue'
 import ScheduleModeTabs from '../components/schedule/ScheduleModeTabs.vue'
+import PageBannerArt from '../components/ui/PageBannerArt.vue'
 import PageArtwork from '../components/ui/PageArtwork.vue'
 import { useAuthStore } from '../stores/auth'
 import { useContextStore } from '../stores/context'
@@ -154,7 +155,7 @@ async function resetToDefault() {
 
 <template>
   <div class="page-stack schedule-page">
-    <header class="schedule-header">
+    <header class="page-banner schedule-header"><PageBannerArt tone="lilac"/>
       <div class="page-head-lead"><PageArtwork name="schedule" tone="lilac"/><div>
         <span class="page-context"><CalendarClock /> Lịch học theo lớp</span>
         <h1>Thời khóa biểu</h1>

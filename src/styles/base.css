@@ -20,20 +20,19 @@ img{max-width:100%;display:block}
    đẩy tiêu đề trôi vào giữa và nút hành động lệch chỗ. Bọc [hình][chữ] thành
    một khối thì mọi header giữ nguyên bố cục cũ. */
 .page-head-lead{display:grid;grid-template-columns:auto minmax(0,1fr);align-items:center;gap:16px;min-width:0;position:relative}
-/* Dải hình ở khoảng trống bên phải cần một khung định vị và phải bị cắt theo
-   góc bo của banner. .issues-header và .personal-header có banner riêng nên
-   được gộp vào đây; .schedule-header không phải banner nên không có dải. */
-.registration-header,.history-page>header,.comments-page>header,.approval-header,.tracking-header,.weeks-header,.students-header,.statistics-page>.page-header,.admin-header,.settings-page>header,.issues-header,.personal-header{position:relative;overflow:hidden}
 .page-head-lead>*{min-width:0}
 @media(max-width:900px){.page-head-lead{gap:12px}}
 .muted{color:var(--text-muted)}
 .sr-only{position:absolute!important;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
+/* Opt in on the header itself. New banners receive full treatment without a selector list.
+   Existing page selectors below only choose their established wash colors. */
+.page-banner{--page-wash-a:var(--wash-violet);--page-wash-b:var(--wash-coral);position:relative;overflow:hidden;min-width:0;padding:18px 20px;border:1px solid color-mix(in srgb,var(--color-primary) 9%,var(--border));border-radius:20px;background:linear-gradient(135deg,var(--page-wash-a),color-mix(in srgb,var(--page-wash-b) 72%,var(--surface)));box-shadow:0 8px 24px rgb(54 44 104 / .06)}
+
 /* Bright Learning page banners: same structure, different gentle washes by task. */
 .registration-header,.history-page>header,.comments-page>header{--page-wash-a:var(--wash-mint);--page-wash-b:var(--wash-peach)}
 .approval-header,.tracking-header,.weeks-header{--page-wash-a:var(--wash-peach);--page-wash-b:var(--wash-violet)}
 .students-header,.statistics-page>.page-header{--page-wash-a:var(--wash-sun);--page-wash-b:var(--wash-peach)}
 .admin-header,.settings-page>header{--page-wash-a:var(--wash-violet);--page-wash-b:var(--wash-coral)}
-.registration-header,.history-page>header,.comments-page>header,.approval-header,.tracking-header,.weeks-header,.students-header,.statistics-page>.page-header,.admin-header,.settings-page>header{padding:18px 20px;border:1px solid color-mix(in srgb,var(--color-primary) 9%,var(--border));border-radius:20px;background:linear-gradient(135deg,var(--page-wash-a),color-mix(in srgb,var(--page-wash-b) 72%,var(--surface)));box-shadow:0 8px 24px rgb(54 44 104 / .06)}
 /* Reusable multicolor summary cards across student, teacher and admin screens. */
 .metrics>.app-card:nth-child(1),.approval-summary>.app-card:nth-child(1),.week-summary>.app-card:nth-child(1),.summary>.app-card:nth-child(1),.metric-grid>.app-card:nth-child(1){--card-accent:var(--color-sky);--card-wash:var(--wash-sky)}
 .metrics>.app-card:nth-child(2),.approval-summary>.app-card:nth-child(2),.week-summary>.app-card:nth-child(2),.summary>.app-card:nth-child(2),.metric-grid>.app-card:nth-child(2){--card-accent:var(--color-mint);--card-wash:var(--wash-mint)}
@@ -63,3 +62,7 @@ button:not(.app-button):not(.icon-button):not(:disabled){transition:transform va
 .page-stack input,.page-stack select,.page-stack textarea{transition:border-color var(--transition-fast),box-shadow var(--transition-fast),background var(--transition-fast),transform var(--transition-fast)}
 .page-stack input:hover,.page-stack select:hover,.page-stack textarea:hover{border-color:color-mix(in srgb,var(--color-primary) 28%,var(--border))}
 @media(prefers-reduced-motion:reduce){button:not(.app-button):not(.icon-button),.interactive-card,.interactive-link,.page-stack input,.page-stack select,.page-stack textarea{transition:none!important}.page-stack button:not(.app-button):not(.icon-button):hover,.page-stack button:not(.app-button):not(.icon-button):active,.interactive-card:hover,.interactive-link:hover{transform:none!important}}
+
+/* Content stays above decorative artwork, wraps safely, and keeps existing layout. */
+.page-banner>:not(.page-banner-art){position:relative;min-width:0;max-width:100%;overflow-wrap:anywhere}
+@media(max-width:520px){.page-banner{padding:16px}}

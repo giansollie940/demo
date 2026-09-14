@@ -194,7 +194,7 @@ async function permission(payload:{classId:string;teacherId:string;enabled:boole
 
 <template>
   <div class="page-stack admin-page">
-    <header class="admin-header"><PageBannerArt :tone="artwork.tone"/><div class="page-head-lead"><PageArtwork :name="artwork.name" :tone="artwork.tone"/><div><span class="page-context"><ShieldCheck/>ROOT ADMIN · QUẢN TRỊ HỆ THỐNG</span><h1>{{ tab==='overview'?'Tổng quan hệ thống':tab==='years'?'Năm học':tab==='classes'?'Lớp học':tab==='students'?'Học sinh':tab==='teachers'?'Giáo viên':tab==='permissions'?'Phân quyền':tab==='recycle'?'Thùng rác':'Nhật ký hệ thống' }}</h1><p>Admin quản lý cấu trúc, tài khoản và quyền hệ thống; nghiệp vụ vận hành lớp thuộc Giáo viên.</p></div></div><AppButton v-if="tab!=='audit'" variant="secondary" :loading="directory.isFetching.value" @click="directory.refetch()"><RefreshCw/>Làm mới</AppButton></header>
+    <header class="page-banner admin-header"><PageBannerArt :tone="artwork.tone"/><div class="page-head-lead"><PageArtwork :name="artwork.name" :tone="artwork.tone"/><div><span class="page-context"><ShieldCheck/>ROOT ADMIN · QUẢN TRỊ HỆ THỐNG</span><h1>{{ tab==='overview'?'Tổng quan hệ thống':tab==='years'?'Năm học':tab==='classes'?'Lớp học':tab==='students'?'Học sinh':tab==='teachers'?'Giáo viên':tab==='permissions'?'Phân quyền':tab==='recycle'?'Thùng rác':'Nhật ký hệ thống' }}</h1><p>Admin quản lý cấu trúc, tài khoản và quyền hệ thống; nghiệp vụ vận hành lớp thuộc Giáo viên.</p></div></div><AppButton v-if="tab!=='audit'" variant="secondary" :loading="directory.isFetching.value" @click="directory.refetch()"><RefreshCw/>Làm mới</AppButton></header>
     <InlineStatus :state="status" :message="statusMessage"/>
 
     <template v-if="tab==='overview'">
