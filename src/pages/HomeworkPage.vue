@@ -4,6 +4,7 @@ import { useAuthStore } from "../stores/auth";
 import { useContextStore } from "../stores/context";
 import PageArtwork from "../components/ui/PageArtwork.vue";
 import PageBannerArt from "../components/ui/PageBannerArt.vue";
+import HomeworkAdminOversight from "../components/homework/HomeworkAdminOversight.vue";
 import HomeworkAiSettings from "../components/homework/HomeworkAiSettings.vue";
 import HomeworkGroupManager from "../components/homework/HomeworkGroupManager.vue";
 import HomeworkCard from "../components/homework/HomeworkCard.vue";
@@ -15,6 +16,7 @@ import {
   localDeadline,
   utcDeadline,
   type HomeworkData,
+  type HomeworkContext,
   type Notice,
   type Subject,
 } from "../features/homework/api";
@@ -22,15 +24,24 @@ import { homeworkTabs, resolveHomeworkTab, useHomeworkViewStore } from "../featu
 const view = useHomeworkViewStore();
 const auth = useAuthStore(),
   ctx = useContextStore();
-const classId = computed(
-  () =>
-    ctx.selectedClassId ||
-    auth.currentUser?.classId ||
-    ctx.classes.find((c) => c.active)?.id ||
-    "",
-);
+const assigned = ref<HomeworkContext['classes']>([]);
+const selectedClass = ref('');
+const assignedWeeks = ref<NonNullable<HomeworkContext['weeks']>>([]);
+const weekOptions = computed(() => auth.role === 'teacher' ? assignedWeeks.value.filter(w=>w.school_year_id===assigned.value.find(c=>c.id===selectedClass.value)?.school_year_id).map(w=>({id:w.id,number:w.week_number})) : ctx.weeks);
+const classId = computed(() => auth.role === 'teacher' ? selectedClass.value : auth.currentUser?.classId || ctx.selectedClassId || '');
+let contextRequest = 0;
+async function loadContext() {
+  if (auth.role !== 'teacher') return;
+  const request = ++contextRequest;
+  try {
+    const result = await homeworkRpc<HomeworkContext>('context', '');
+    if(request !== contextRequest || auth.role !== 'teacher') return;
+    assigned.value = result.classes; assignedWeeks.value=result.weeks||[];
+    if (!assigned.value.some(c => c.id === selectedClass.value)) selectedClass.value = assigned.value.find(c => c.id === ctx.selectedClassId)?.id || assigned.value[0]?.id || '';
+  } catch(e) { if(request === contextRequest) { assigned.value=[]; selectedClass.value=''; error.value=e instanceof Error?e.message:'Không tải được phân công lớp'; } }
+}
 const role = computed(() => auth.role || "student"),
-  manager = computed(() => ["teacher", "admin"].includes(role.value)),
+  manager = computed(() => role.value === "teacher"),
   teacher = computed(() => role.value === "teacher"),
   admin = computed(() => role.value === "admin");
 const data = ref<HomeworkData | null>(null),
@@ -46,9 +57,6 @@ let loadId = 0;
 const editing = ref(false),
   deleteTarget = ref<Notice | null>(null),
   deleteReason = ref(""),
-  hardTarget = ref<Notice | null>(null),
-  hardReason = ref(""),
-  hardConfirmed = ref(false),
   reviewReasons = reactive<Record<string, string>>({});
 const form = reactive({
   id: "",
@@ -62,6 +70,7 @@ const form = reactive({
 });
 const subjectForm = reactive({
   id: "",
+  catalog_subject_id: "",
   name: "",
   short_name: "",
   icon: "📚",
@@ -69,16 +78,16 @@ const subjectForm = reactive({
   is_english: false,
   is_active: true,
 });
-const seed = ref(3), alerts = ref("system");
 const tabs = computed(() => homeworkTabs(role.value));
 // A stale or unauthorized selection never becomes the rendered page/Owl context.
 const tab = computed({
   get: () => resolveHomeworkTab(role.value, view.selectedTab).id,
   set: (value: string) => { view.selectedTab = value; },
 });
-watch(role, () => {
-  view.selectedTab = tab.value; editing.value = false; deleteTarget.value = null; hardTarget.value = null;
-  data.value = null; void load();
+watch([role, () => auth.currentUser?.id], () => {
+  contextRequest++; assigned.value=[]; selectedClass.value='';
+  view.selectedTab = tab.value; editing.value = false; deleteTarget.value = null;
+  data.value = null; void loadContext(); void load();
 });
 const selectedSubject = computed(() =>
   data.value?.subjects.find((s) => s.id === form.subject_id),
@@ -109,7 +118,7 @@ const stars = computed(() =>
     .sort((a, b) => a.heart_rank - b.heart_rank),
 );
 async function load() {
-  if (!classId.value) return;
+  if (admin.value || !classId.value) return;
   const id = ++loadId;
   loading.value = true;
   error.value = "";
@@ -119,11 +128,10 @@ async function load() {
     });
     if (id !== loadId) return;
     data.value = result;
-    seed.value = result.settings.seed_threshold;
-    alerts.value = result.alert_level || "system";
   } catch (e) {
     if (id === loadId)
       error.value = e instanceof Error ? e.message : "Không tải được Báo bài.";
+    if (id === loadId && teacher.value) await loadContext();
   } finally {
     if (id === loadId) loading.value = false;
   }
@@ -141,6 +149,7 @@ async function act(action: string, payload: Record<string, unknown>) {
   } catch (e) {
     error.value =
       e instanceof Error ? e.message : "Không thực hiện được thao tác.";
+    await loadContext();
   } finally {
     busy.value = false;
   }
@@ -211,14 +220,6 @@ function remove(n: Notice) {
   deleteTarget.value = n;
   deleteReason.value = "";
 }
-function requestHardDelete(n: Notice) {
-  hardTarget.value = n; hardReason.value = ""; hardConfirmed.value = false;
-}
-async function confirmHardDelete() {
-  if (!admin.value || !hardTarget.value || !hardConfirmed.value || !hardReason.value.trim() || hardReason.value.trim().length > 500) return;
-  await act("hard_delete", { id: hardTarget.value.id, confirm_irreversible: true, hard_delete_reason: hardReason.value.trim() });
-  if (!error.value) hardTarget.value = null;
-}
 async function confirmDelete() {
   await act("delete", {
     id: deleteTarget.value?.id,
@@ -231,6 +232,7 @@ function editSubject(s?: Subject) {
     subjectForm,
     s || {
       id: "",
+      catalog_subject_id: "",
       name: "",
       short_name: "",
       icon: "📚",
@@ -241,8 +243,12 @@ function editSubject(s?: Subject) {
   );
 }
 async function saveSubject() {
-  await act("subject_save", { ...subjectForm, id: subjectForm.id || null });
+  await act("subject_save", { id: subjectForm.id || null, catalog_subject_id: subjectForm.catalog_subject_id, sort_order: subjectForm.sort_order, is_active: subjectForm.is_active });
   if (!error.value) editSubject();
+}
+function managementBusy(value: boolean) {
+  busy.value = value;
+  if (!value && teacher.value) void loadContext();
 }
 function acceptManagementUpdate(fresh: HomeworkData) {
   // A confirmed management reload supersedes any earlier page reload in flight.
@@ -262,20 +268,26 @@ function jump(id: string) {
     50,
   );
 }
+watch([classId,role], () => { if(!admin.value)view.scopeClassId=classId.value; },{immediate:true});
+watch(classId, () => { week.value=""; subject.value=""; editSubject(); deleteTarget.value=null; Object.keys(reviewReasons).forEach(k=>delete reviewReasons[k]); });
 watch([classId, week], () => {
+  loadId++;
   editing.value = false;
   data.value = null;
   void load();
 });
-onMounted(load);
+onMounted(async () => { await loadContext(); await load(); });
 onUnmounted(() => {
+  view.scopeClassId=undefined;
+  contextRequest++;
   view.selectedTab = null;
   loadId++;
   clearInterval(timer);
 });
 </script>
 <template>
-  <section class="homework-page">
+  <HomeworkAdminOversight v-if="admin" />
+  <section v-else class="homework-page">
     <header class="homework-banner">
       <PageBannerArt tone="sun" /><PageArtwork name="homework" tone="sun" />
       <div>
@@ -287,6 +299,9 @@ onUnmounted(() => {
         ↻ Làm mới
       </button>
     </header>
+    <label v-if="teacher && assigned.length > 1">Lớp đang thao tác
+      <select v-model="selectedClass" :disabled="busy"><option v-for="c in assigned" :key="c.id" :value="c.id">Khối {{ c.grade }} · {{ c.code }}</option></select>
+    </label>
     <p v-if="!classId" class="empty">
       Chưa có lớp hoạt động để sử dụng Báo bài.
     </p>
@@ -308,30 +323,6 @@ onUnmounted(() => {
     <p v-if="message" role="status" class="success">{{ message }}</p>
     <p v-if="loading" role="status">Đang tải Báo bài…</p>
     <template v-if="data">
-      <section v-if="tab === 'overview'" class="panel">
-        <h2>Tình trạng Báo bài</h2>
-        <div class="metrics">
-          <div>
-            <strong>{{ data.health?.total || 0 }}</strong
-            ><span>Bài trong hệ thống</span>
-          </div>
-          <div>
-            <strong>{{ data.health?.pending || 0 }}</strong
-            ><span>Đang chờ giáo viên</span>
-          </div>
-        </div>
-        <p>
-          Giáo viên phụ trách xử lý nội dung. Admin theo dõi lỗi và cảnh báo
-          theo cấu hình đã chọn.
-        </p>
-        <ul class="notifications">
-          <li v-for="n in data.notifications" :key="n.id">
-            <strong>{{ n.title }}</strong>
-            <p>{{ n.message }}</p>
-            <small>{{ dateLabel(n.created_at) }}</small>
-          </li>
-        </ul>
-      </section>
       <template v-if="tab === 'board'">
         <button
           v-if="!admin"
@@ -437,7 +428,7 @@ onUnmounted(() => {
           <label
             >Thời gian<select v-model="week">
               <option value="">Toàn năm học</option>
-              <option v-for="w in ctx.weeks" :key="w.id" :value="w.id">
+              <option v-for="w in weekOptions" :key="w.id" :value="w.id">
                 Tuần {{ w.number }}
               </option>
             </select></label
@@ -593,26 +584,15 @@ onUnmounted(() => {
           </button>
         </div>
         <form class="form-grid" @submit.prevent="saveSubject">
-          <label
-            >Tên môn<input
-              v-model="subjectForm.name"
-              required
-              maxlength="100" /></label
-          ><label
-            >Tên ngắn<input
-              v-model="subjectForm.short_name"
-              maxlength="30" /></label
-          ><label
-            >Biểu tượng<input
-              v-model="subjectForm.icon"
-              maxlength="12" /></label
+          <label>Môn trong danh mục khối<select v-model="subjectForm.catalog_subject_id" required :disabled="!!subjectForm.id">
+            <option value="">Chọn môn</option>
+            <option v-for="s in data.catalog || []" :key="s.id" :value="s.id">{{ s.icon }} {{ s.name }}</option>
+            <option v-if="subjectForm.id && !(data.catalog || []).some(c => c.id === subjectForm.catalog_subject_id)" :value="subjectForm.catalog_subject_id">{{ subjectForm.name }} · Catalog đã tắt</option>
+          </select></label
           ><label
             >Thứ tự<input
               v-model.number="subjectForm.sort_order"
               type="number" /></label
-          ><label class="check"
-            ><input v-model="subjectForm.is_english" type="checkbox" />Môn Tiếng
-            Anh</label
           ><label class="check"
             ><input v-model="subjectForm.is_active" type="checkbox" />Hoạt
             động</label
@@ -624,11 +604,11 @@ onUnmounted(() => {
           </div>
         </form>
       </section>
-      <HomeworkGroupManager v-if="tab === 'english' && teacher" :key="classId" :class-id="classId" :week-id="week" :role="role" :data="data" @updated="acceptManagementUpdate" @busy="busy = $event" />
+      <HomeworkGroupManager v-if="tab === 'english' && teacher" :key="classId" :class-id="classId" :week-id="week" :role="role" :data="data" @updated="acceptManagementUpdate" @busy="managementBusy" />
       <section v-if="tab === 'trash' && manager">
         <h2>Thùng rác Báo bài</h2>
         <p>
-          {{ admin ? "Chỉ xóa vĩnh viễn từng bài đã được xóa trước đó. Hành động không thể hoàn tác." : "Khôi phục bảo toàn lịch sử; bài có khả năng trùng mới sẽ chờ kiểm tra." }}
+          Khôi phục bảo toàn lịch sử; bài có khả năng trùng mới sẽ chờ kiểm tra.
         </p>
         <article v-for="n in data.trash" :key="n.id" class="panel">
           <h3>{{ n.title }}</h3>
@@ -636,7 +616,6 @@ onUnmounted(() => {
           <button v-if="teacher" :disabled="busy" @click="act('restore', { id: n.id })">
             Khôi phục
           </button>
-          <button v-if="admin" :disabled="busy" @click="requestHardDelete(n)">Xóa vĩnh viễn</button>
         </article>
         <p v-if="!data.trash.length" class="empty">Thùng rác trống.</p>
       </section>
@@ -645,7 +624,6 @@ onUnmounted(() => {
         <article v-for="tombstone in data.tombstones" :key="tombstone.notice_id" class="panel">
           <strong>Admin đã xóa vĩnh viễn notice</strong>
           <p>{{ dateLabel(tombstone.hard_deleted_at) }}</p>
-          <details v-if="admin"><summary>Metadata xóa vĩnh viễn</summary><pre>{{ JSON.stringify(tombstone, null, 2) }}</pre></details>
         </article>
         <p>300 sự kiện gần nhất.</p>
         <details v-for="e in data.audit" :key="e.id">
@@ -664,49 +642,8 @@ onUnmounted(() => {
           }}</pre>
         </details>
       </section>
-      <HomeworkAiSettings v-if="teacher" v-show="tab === 'ai_settings'" :key="classId" :class-id="classId" :week-id="week" :role="role" :settings="data.ai_settings" @updated="acceptManagementUpdate" @busy="busy = $event" />
-      <section v-if="tab === 'settings' && admin" class="panel">
-        <h2>Cấu hình Báo bài</h2>
-        <form
-          class="form-grid"
-          @submit.prevent="act('settings', { seed_threshold: seed })"
-        >
-          <label
-            >Ngưỡng Mầm xanh<input
-              v-model.number="seed"
-              type="number"
-              min="1"
-              step="1"
-              required /></label
-          ><button :disabled="busy">Lưu ngưỡng danh hiệu</button>
-        </form>
-        <form
-          class="form-grid"
-          @submit.prevent="act('alert_settings', { alert_level: alerts })"
-        >
-          <label
-            >Cảnh báo Admin<select v-model="alerts">
-              <option value="system">Chỉ lỗi hệ thống</option>
-              <option value="backlog">Lỗi hệ thống + tồn đọng</option>
-              <option value="all">Tất cả cảnh báo</option>
-            </select></label
-          ><button :disabled="busy">Lưu cảnh báo</button>
-        </form>
-      </section>
+      <HomeworkAiSettings v-if="teacher" v-show="tab === 'ai_settings'" :key="classId" :class-id="classId" :week-id="week" :role="role" :settings="data.ai_settings" @updated="acceptManagementUpdate" @busy="managementBusy" />
     </template>
-    <div v-if="hardTarget && admin" class="modal-backdrop" @keydown.esc="!busy && (hardTarget = null)">
-      <section role="dialog" aria-modal="true" aria-labelledby="hard-delete-title" class="modal">
-        <h2 id="hard-delete-title">Xóa vĩnh viễn Báo bài</h2>
-        <p>{{ hardTarget.title }}</p>
-        <p>Nội dung, tim và lượt nhắc sẽ bị xóa; hành động không thể hoàn tác. Nhật ký xóa tối thiểu được giữ lại.</p>
-        <form @submit.prevent="confirmHardDelete">
-          <label>Lý do xóa vĩnh viễn<textarea v-model="hardReason" maxlength="500" required /></label>
-          <label><input v-model="hardConfirmed" type="checkbox" required /> Tôi xác nhận xóa vĩnh viễn bài này.</label>
-          <p v-if="error" role="alert">{{ error }}</p>
-          <div class="actions"><button type="button" :disabled="busy" @click="hardTarget = null">Hủy</button><button :disabled="busy || !hardConfirmed || !hardReason.trim() || hardReason.trim().length > 500">Xóa vĩnh viễn</button></div>
-        </form>
-      </section>
-    </div>
     <div
       v-if="editing && !admin"
       class="modal-backdrop"

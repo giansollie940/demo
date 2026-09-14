@@ -5,7 +5,7 @@ import { ref } from 'vue'
 export function homeworkTabs(role: string) {
   return [
     ...(role === 'admin' ? [{ id: 'overview', label: 'Tổng quan' }] : []),
-    { id: 'board', label: 'Bảng Báo bài' },
+    ...(role !== 'admin' ? [{ id: 'board', label: 'Bảng Báo bài' }] : [{ id: 'catalog', label: 'Danh mục môn' }]),
     { id: 'history', label: 'Lịch sử đăng' },
     { id: 'awards', label: '🌟 Góc tuyên dương' },
     ...(['teacher', 'monitor'].includes(role) ? [{ id: 'queue', label: 'AI trùng' }] : []),
@@ -30,5 +30,7 @@ export function resolveHomeworkTab(role: string, selectedTab?: string | null) {
 export const useHomeworkViewStore = defineStore('homework-view', () => {
   const selectedTab = ref<string | null>(null)
   const refreshVersion = ref(0)
-  return { selectedTab, refreshVersion }
+  // undefined outside Báo bài; empty string is an explicit all/no-class scope.
+  const scopeClassId = ref<string | undefined>(undefined)
+  return { selectedTab, refreshVersion, scopeClassId }
 })

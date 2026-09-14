@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
+import {useRoute}from 'vue-router'
 import { onClickOutside } from '@vueuse/core'
 import { ChevronDown, LogOut, Menu, Moon, SlidersHorizontal, Sun } from 'lucide-vue-next'
 import IconButton from '../ui/IconButton.vue'
@@ -13,6 +14,7 @@ import { dirtyRegistry } from '../../features/shared/dirty-registry'
 import { appDialog } from '../../features/shared/app-dialog'
 import type { UserRole } from '../../types/legacy'
 
+const route=useRoute();const isHomework=computed(()=>route.path==='/homework')
 const emit=defineEmits<{menu:[];logout:[]}>()
 const auth=useAuthStore();const context=useContextStore();const preferences=usePreferencesStore()
 const profileOpen=ref(false);const profileMenu=ref<HTMLElement|null>(null)
@@ -35,13 +37,13 @@ function requestLogout(){profileOpen.value=false;emit('logout')}
   <header class="topbar">
     <div class="left">
       <IconButton label="Mở menu" class="mobile-menu" @click="emit('menu')"><Menu/></IconButton>
-      <label v-if="isTeacher||isAdmin" class="school-year-bubble"><span>Năm học</span><i v-if="context.selectedSchoolYear?.active" class="year-status-dot" aria-label="Năm học đang hoạt động"></i><select :value="context.selectedSchoolYearId??''" @change="changeSchoolYear"><option v-for="item in context.schoolYears" :key="item.id" :value="item.id">{{ item.name }}</option></select></label>
-      <div v-else class="school-year-bubble static-year"><span>Năm học</span><b>{{ context.selectedSchoolYear?.name||state?.settings.schoolYear||'—' }}</b></div>
+      <label v-if="!isHomework&&(isTeacher||isAdmin)" class="school-year-bubble"><span>Năm học</span><i v-if="context.selectedSchoolYear?.active" class="year-status-dot" aria-label="Năm học đang hoạt động"></i><select :value="context.selectedSchoolYearId??''" @change="changeSchoolYear"><option v-for="item in context.schoolYears" :key="item.id" :value="item.id">{{ item.name }}</option></select></label>
+      <div v-else-if="!isHomework" class="school-year-bubble static-year"><span>Năm học</span><b>{{ context.selectedSchoolYear?.name||state?.settings.schoolYear||'—' }}</b></div>
     </div>
     <div class="context-controls">
       <HomeworkInbox v-if="auth.currentUser"/>
-      <label v-if="isTeacher" class="compact control-bubble"><span>Lớp</span><select :value="context.selectedClassId??''" @change="changeClass"><option v-for="item in context.classes" :key="item.id" :value="item.id">{{ item.code }}{{ item.name&&item.name!==item.code?` · ${item.name}`:'' }}</option></select></label>
-      <label v-if="!isAdmin" class="compact control-bubble"><span>Tuần</span><select :value="context.selectedWeekId??''" @change="changeWeek"><option v-for="item in context.weeks" :key="item.id" :value="item.id">Tuần {{ item.number }}</option></select></label>
+      <label v-if="isTeacher&&!isHomework" class="compact control-bubble"><span>Lớp</span><select :value="context.selectedClassId??''" @change="changeClass"><option v-for="item in context.classes" :key="item.id" :value="item.id">{{ item.code }}{{ item.name&&item.name!==item.code?` · ${item.name}`:'' }}</option></select></label>
+      <label v-if="!isAdmin&&!isHomework" class="compact control-bubble"><span>Tuần</span><select :value="context.selectedWeekId??''" @change="changeWeek"><option v-for="item in context.weeks" :key="item.id" :value="item.id">Tuần {{ item.number }}</option></select></label>
       <IconButton class="theme-bubble" label="Đổi giao diện" @click="preferences.toggleTheme"><Sun v-if="preferences.resolvedTheme==='dark'"/><Moon v-else/></IconButton>
       <div v-if="auth.currentUser" ref="profileMenu" class="profile-menu">
         <button class="profile-chip" type="button" :title="`${auth.currentUser.name} · ${roleLabel}`" :aria-expanded="profileOpen" aria-haspopup="menu" @click="profileOpen=!profileOpen">

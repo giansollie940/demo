@@ -16,7 +16,7 @@ const open = ref(false),
   items = ref<HomeworkNotification[]>([]),
   error = ref("");
 const classId = computed(
-  () =>
+  () => view.scopeClassId !== undefined ? view.scopeClassId :
     ctx.selectedClassId ||
     auth.currentUser?.classId ||
     ctx.classes.find((c) => c.active)?.id ||
@@ -56,7 +56,7 @@ async function visit(n: HomeworkNotification) {
 watch(
   [classId, () => auth.currentUser?.id, () => view.refreshVersion],
   () => {
-    items.value = [];
+    items.value = []; open.value=false; error.value="";
     void refresh();
   },
   { immediate: true },

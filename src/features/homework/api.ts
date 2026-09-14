@@ -29,7 +29,11 @@ export interface Notice {
   reason?: string | null;
   delete_reason?: string;
 }
+export interface HomeworkClass { id: string; code: string; name: string; grade: number; active: boolean; school_year_id: string }
+export interface HomeworkContext { weeks?: Array<{id:string;school_year_id:string;week_number:number}>; grades: number[]; classes: HomeworkClass[] }
+export interface CatalogSubject extends Subject { grade: number }
 export interface Subject {
+  catalog_subject_id?: string;
   id: string;
   name: string;
   short_name: string;
@@ -53,6 +57,7 @@ export interface HomeworkNotification {
   created_at: string;
 }
 export interface HomeworkData {
+  catalog?: CatalogSubject[];
   ai_settings?: { semantic_duplicate_enabled: boolean; duplicate_review_threshold: number; duplicate_auto_threshold: number };
   review_history?: Notice[];
   history_markers?: Array<{ notice_id: string; marker: string; original_created_at: string; hard_deleted_at: string }>;

@@ -60,7 +60,7 @@ let timetableFeedbackToken=0
 const showYearForm=ref(false)
 const showClassForm=ref(false)
 const yearForm=reactive({name:'',startDate:'',endDate:'',setActive:true})
-const classForm=reactive({code:'',name:''})
+const classForm=reactive({code:'',name:'',grade:'' as number|''})
 const editingClass=ref<import('../features/admin/admin-directory').AdminClassRecord|null>(null)
 const classDialogError=ref('')
 
@@ -154,7 +154,7 @@ async function saveYearTimetableVersion(input:{templateId:string;config:Timetabl
   catch(error){setTimetableFeedback({schoolYearId,state:'error',message:error instanceof Error?error.message:'Không lưu được phiên bản TKB.',selectedTemplateId:input.templateId})}
 }
 async function assignYearTimetable(input:{classId:string;schoolYearId:string;templateVersionId:string;effectiveFrom:string;effectiveTo:string}){try{await run(`timetable-assignment:${input.classId}`,()=>assignTimetableTemplate(runtime(),input),'Đã gán mẫu TKB theo khoảng hiệu lực.')}catch{}}
-async function submitClass(){const code=classForm.code.trim().toUpperCase(),name=classForm.name.trim();if(!code||!name){status.value='error';statusMessage.value='Hãy nhập đủ mã lớp và tên lớp.';return}if(!selectedYearId.value){status.value='error';statusMessage.value='Hãy chọn năm học trước khi tạo lớp.';return}try{await run('create-class',()=>createClass(runtime(),{code,name,schoolYearId:selectedYearId.value}),'Đã tạo lớp.')}catch{return};classForm.code='';classForm.name='';showClassForm.value=false}
+async function submitClass(){const code=classForm.code.trim().toUpperCase(),name=classForm.name.trim();if(!Number.isInteger(classForm.grade)||Number(classForm.grade)<6||Number(classForm.grade)>12){status.value='error';statusMessage.value='Hãy chọn khối từ 6 đến 12.';return}if(!code||!name){status.value='error';statusMessage.value='Hãy nhập đủ mã lớp và tên lớp.';return}if(!selectedYearId.value){status.value='error';statusMessage.value='Hãy chọn năm học trước khi tạo lớp.';return}try{await run('create-class',()=>createClass(runtime(),{code,name,grade:Number(classForm.grade),schoolYearId:selectedYearId.value}),'Đã tạo lớp.')}catch{return};classForm.code='';classForm.name='';classForm.grade='';showClassForm.value=false}
 function editClass(id:string){editingClass.value=data.value.classes.find(row=>row.id===id)??null;classDialogError.value=''}
 async function saveClassDialog(payload:{code:string;name:string}){const item=editingClass.value;if(!item)return;try{await run(`class:${item.id}`,()=>updateClass(runtime(),item.id,payload),'Đã cập nhật lớp.');editingClass.value=null}catch(error){classDialogError.value=error instanceof Error?error.message:'Không cập nhật được lớp.'}}
 async function toggleClass(id:string){const item=data.value.classes.find(row=>row.id===id);if(!item)return;if(item.active&&!await appDialog.confirm({title:'Khóa lớp',body:'Khóa lớp này? Backend chỉ cho phép khi trạng thái hợp lệ.',confirmLabel:'Khóa lớp',danger:true}))return;try{await run(`class:${id}`,()=>updateClass(runtime(),id,{active:!item.active}),item.active?'Đã khóa lớp.':'Đã kích hoạt lớp.')}catch{}}
@@ -210,7 +210,7 @@ async function permission(payload:{classId:string;teacherId:string;enabled:boole
 
     <template v-else-if="tab==='classes'">
       <div class="section-actions"><div><h2>Lớp học · {{ selectedYear?.name||'—' }}</h2><p>{{ yearClasses.length }} lớp trong năm học đang chọn.</p></div><AppButton :disabled="!selectedYearId" @click="showClassForm=!showClassForm"><Plus/>Tạo lớp</AppButton></div>
-      <AppCard v-if="showClassForm" padding="md"><form class="quick-form" novalidate @submit.prevent="submitClass"><label>Mã lớp<input v-model="classForm.code" required maxlength="40" placeholder="7A1"></label><label>Tên lớp<input v-model="classForm.name" required maxlength="120" placeholder="Lớp 7A1"></label><AppButton type="submit" :loading="busyKey==='create-class'">Tạo lớp</AppButton></form></AppCard>
+      <AppCard v-if="showClassForm" padding="md"><form class="quick-form" novalidate @submit.prevent="submitClass"><label>Khối<select v-model.number="classForm.grade" required><option value="">Chọn khối</option><option v-for="g in [6,7,8,9,10,11,12]" :key="g" :value="g">{{ g }}</option></select></label><label>Mã lớp<input v-model="classForm.code" required maxlength="40" placeholder="7A1"></label><label>Tên lớp<input v-model="classForm.name" required maxlength="120" placeholder="Lớp 7A1"></label><AppButton type="submit" :loading="busyKey==='create-class'">Tạo lớp</AppButton></form></AppCard>
       <section class="class-grid"><AdminClassCard v-for="item in yearClasses" :key="item.id" :item="item" :teachers="assignedTeachers(item.id)" :busy="busyKey===`class:${item.id}`" @edit="editClass(item.id)" @toggle="toggleClass(item.id)" @delete="removeClass(item.id)"/></section>
     </template>
 
