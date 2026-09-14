@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import {computed,onMounted,onUnmounted,reactive,ref,watch} from 'vue';
+import PageArtwork from '../ui/PageArtwork.vue';
 import PageBannerArt from '../ui/PageBannerArt.vue';
 import AppCard from '../ui/AppCard.vue';
 import AppButton from '../ui/AppButton.vue';
@@ -49,7 +50,7 @@ onMounted(initialize);onUnmounted(()=>{generation++;});
 </script>
 <template>
 <section class="oversight">
- <header class="page-banner oversight-banner"><PageBannerArt tone="lilac"/><div><p class="eyebrow">QUẢN TRỊ BÁO BÀI</p><h1>Giám sát học tập</h1><p>Tổng quan theo khối, lịch sử theo lớp và danh mục môn chuẩn.</p></div></header>
+ <header class="page-banner oversight-banner"><PageBannerArt tone="lilac"/><div class="page-head-lead"><PageArtwork name="homework" tone="lilac"/><div><p class="eyebrow">QUẢN TRỊ BÁO BÀI</p><h1>Giám sát học tập</h1><p>Tổng quan theo khối, lịch sử theo lớp và danh mục môn chuẩn.</p></div></div></header>
  <AppCard><div class="toolbar"><label>Khối<select v-model.number="grade" :disabled="busy"><option value="">Tất cả khối</option><option v-for="g in context.grades" :key="g" :value="g">Khối {{ g }}</option></select></label><label>Lớp<select v-model="classId" :disabled="busy"><option value="">Tất cả lớp</option><option v-for="c in classes" :key="c.id" :value="c.id">{{ c.code }} · Khối {{ c.grade }}{{ c.active?'':' · Đã khóa' }}</option></select></label><AppButton variant="secondary" :disabled="loading||busy" @click="load">Làm mới</AppButton></div></AppCard>
  <nav class="tabs" aria-label="Các mục Báo bài"><AppButton v-for="t in homeworkTabs('admin')" :key="t.id" :variant="tab===t.id?'primary':'secondary'" :aria-current="tab===t.id?'page':undefined" :disabled="busy" @click="tab=t.id">{{ t.label }}</AppButton></nav>
  <p v-if="error" role="alert" class="error">{{ error }}</p><p v-if="message" role="status">{{ message }}</p><p v-if="loading" role="status">Đang tải dữ liệu theo phạm vi đã chọn…</p>
