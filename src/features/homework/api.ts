@@ -28,7 +28,22 @@ export interface Notice {
   score?: number | null;
   reason?: string | null;
   delete_reason?: string;
+  deleted_actor_type?: 'user' | 'system' | null;
+  deleted_by?: string | null;
+  deleted_at?: string | null;
+  deleted_actor_name?: string | null;
+  correction?: CorrectionToken | null;
 }
+export interface RevisionData { subject_id: string; english_group_id: string | null; title: string; content: string; due_at: string }
+export interface CorrectionToken { id: string; round: number; version: number; status: string; due_at?: string }
+export interface ModerationEvent { id: string; event_type: string; actor_id: string | null; actor_name?: string | null; actor_type: 'user' | 'system'; round: number | null; reason: string | null; created_at: string }
+export interface Correction extends CorrectionToken {
+  notice_id: string; class_id: string; closed_at: string | null;
+  rounds: Array<{ round: number; requested_by: string; requested_at: string; due_at: string; reason: string; issue_types: string[]; draft: RevisionData | null; submitted_at: string | null; decision: string | null; decision_reason: string | null; decided_by: string | null; decided_at: string | null }>;
+  events: ModerationEvent[];
+}
+export interface NoticeReport { id: string; notice_id: string; class_id: string; class_name?: string; reporter_id: string; reporter_name: string; reporter_code: string | null; category: string; note: string | null; status: string; created_at: string; teacher_note: string | null; events: ModerationEvent[] }
+export interface ReportStatistic { reporter_id: string; full_name: string; total: number; valid: number; invalid: number; suspected_abuse: number }
 export interface HomeworkClass { id: string; code: string; name: string; grade: number; active: boolean; school_year_id: string }
 export interface HomeworkContext { weeks?: Array<{id:string;school_year_id:string;week_number:number}>; grades: number[]; classes: HomeworkClass[] }
 export interface CatalogSubject extends Subject { grade: number }
@@ -57,6 +72,9 @@ export interface HomeworkNotification {
   created_at: string;
 }
 export interface HomeworkData {
+  corrections?: Correction[];
+  reports?: NoticeReport[];
+  report_statistics?: ReportStatistic[];
   catalog?: CatalogSubject[];
   ai_settings?: { semantic_duplicate_enabled: boolean; duplicate_review_threshold: number; duplicate_auto_threshold: number };
   review_history?: Notice[];

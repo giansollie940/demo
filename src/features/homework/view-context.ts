@@ -7,6 +7,8 @@ export function homeworkTabs(role: string) {
     ...(role === 'admin' ? [{ id: 'overview', label: 'Tổng quan' }] : []),
     ...(role !== 'admin' ? [{ id: 'board', label: 'Bảng Báo bài' }] : [{ id: 'catalog', label: 'Danh mục môn' }]),
     { id: 'history', label: 'Lịch sử đăng' },
+    ...(role !== 'admin' ? [{ id: 'corrections', label: 'Yêu cầu chỉnh sửa' }] : []),
+    ...(role === 'teacher' ? [{ id: 'reports', label: 'Báo sai thông tin' }] : []),
     { id: 'awards', label: '🌟 Góc tuyên dương' },
     ...(['teacher', 'monitor'].includes(role) ? [{ id: 'queue', label: 'AI trùng' }] : []),
     ...(role === 'teacher' ? [

@@ -23,14 +23,15 @@ const emit = defineEmits<{
   remove: [notice: Notice];
   heart: [notice: Notice];
   remind: [notice: Notice];
+  report: [notice: Notice];
+  correction: [notice: Notice];
+  emergency: [notice: Notice];
+  withdraw: [notice: Notice];
 }>();
 const own = computed(() => props.notice.author_id === props.userId);
 const manage = computed(
   () =>
-    props.role !== "admin" && (own.value ||
-    (["teacher", "monitor"].includes(props.role) &&
-      ["student", "monitor"].includes(props.notice.author_role) &&
-      (props.role !== "monitor" || props.notice.status === "published"))),
+    props.role !== "admin" && own.value,
 );
 const deadlineText = computed(() => {
   const due = new Date(props.notice.due_at).getTime();
@@ -65,6 +66,12 @@ const deadlineText = computed(() => {
       {{ dateLabel(notice.created_at) }}
     </p>
     <span class="notice-state">{{ stateLabels[notice.status] }}</span>
+    <p v-if="notice.correction" class="correction-badge" role="status">
+      {{ notice.correction.status === 'awaiting_teacher' ? 'Đang chờ GV xác nhận chỉnh sửa' : 'GV yêu cầu chỉnh sửa' }}
+      <strong v-if="notice.correction.round === 2"> · Lần chỉnh sửa cuối</strong>
+      <span v-if="own && notice.correction.status === 'awaiting_author' && notice.correction.due_at"> · Hạn gửi lại: {{ dateLabel(notice.correction.due_at) }}</span>
+    </p>
+    <p v-if="notice.status === 'deleted' && notice.deleted_actor_type" class="hint">Người gỡ: {{ notice.deleted_actor_name || (notice.deleted_actor_type === 'system' ? 'System' : notice.deleted_by) }}</p>
     <p v-if="notice.status === 'duplicate_rejected'" class="hint">
       Bài được lưu trong lịch sử; không xuất hiện trên bảng chung và không tính
       đóng góp.
@@ -88,7 +95,7 @@ const deadlineText = computed(() => {
       <button
         v-if="
           notice.status === 'published' &&
-          ['teacher', 'monitor'].includes(role)
+          (role === 'teacher' || (role === 'monitor' && own))
         "
         :disabled="busy"
         @click="emit('remind', notice)"
@@ -96,19 +103,25 @@ const deadlineText = computed(() => {
         🔔 Nhắc
       </button>
       <button
-        v-if="manage && !['deleted', 'replaced'].includes(notice.status)"
+        v-if="manage && !['deleted', 'replaced'].includes(notice.status) && notice.correction?.status !== 'awaiting_teacher'"
         :disabled="busy"
         @click="emit('edit', notice)"
       >
         Sửa
       </button>
       <button
-        v-if="manage && notice.status !== 'deleted'"
+        v-if="manage && notice.status !== 'deleted' && !notice.correction"
         :disabled="busy"
         @click="emit('remove', notice)"
       >
         Xóa
       </button>
+      <button v-if="manage && notice.correction" :disabled="busy" @click="emit('withdraw', notice)">Xin rút bài</button>
+      <button v-if="role === 'monitor' && !own && notice.status === 'published'" :disabled="busy" @click="emit('report', notice)">Báo sai thông tin</button>
+      <template v-if="role === 'teacher' && ['student', 'monitor'].includes(notice.author_role) && !['deleted', 'replaced'].includes(notice.status)">
+        <button v-if="notice.status === 'published' && !notice.correction" :disabled="busy" @click="emit('correction', notice)">Yêu cầu chỉnh sửa Báo bài</button>
+        <button :disabled="busy" @click="emit('emergency', notice)">Gỡ bài</button>
+      </template>
     </footer>
   </article>
 </template>
@@ -160,6 +173,7 @@ const deadlineText = computed(() => {
 .notice-state {
   font-size: 0.82rem;
 }
+.correction-badge { margin: 0; padding: 10px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface-raised, #fff8e8); font-size: .85rem; }
 footer {
   margin-top: auto;
   display: flex;

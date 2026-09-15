@@ -166,6 +166,8 @@ export function buildOwlContextMessages({ state, user, path, weekId = state?.cur
       overview: 'Theo dõi tình trạng hệ thống và cảnh báo Báo bài theo cấu hình đã chọn.',
       board: user.role === 'admin' ? 'Xem Báo bài của lớp theo môn và deadline ở chế độ giám sát.' : 'Xem bài cần hoàn thành theo môn và deadline. Dùng Đăng Báo bài để chia sẻ bài mới.',
       history: 'Xem các Báo bài bạn đã đăng và trạng thái xử lý của từng bài.',
+      corrections: 'Xem yêu cầu chỉnh sửa và hạn gửi lại giáo viên. Mỗi vòng có 72 giờ; vòng 2 là lần cuối.',
+      reports: 'Báo sai thông tin chỉ dành cho giáo viên phụ trách xem xét và xử lý.',
       awards: 'Ghi nhận riêng số Báo bài hợp lệ và số tim nhận được.',
       queue: user.role === 'monitor' ? 'Bạn được xem thông tin cơ bản; giáo viên quyết định các trường hợp nghi trùng.' : 'Xem các Báo bài nghi trùng trước khi chọn phương án xử lý phù hợp.',
       ai_settings: 'Bật hoặc tắt kiểm tra trùng semantic và lưu các ngưỡng cho lớp.',

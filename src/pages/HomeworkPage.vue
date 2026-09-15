@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, reactive, ref, watch } from "vue";
+import { computed, nextTick, onMounted, onUnmounted, reactive, ref, watch } from "vue";
 import { useAuthStore } from "../stores/auth";
 import { useContextStore } from "../stores/context";
 import PageArtwork from "../components/ui/PageArtwork.vue";
@@ -8,6 +8,10 @@ import HomeworkAdminOversight from "../components/homework/HomeworkAdminOversigh
 import HomeworkAiSettings from "../components/homework/HomeworkAiSettings.vue";
 import HomeworkGroupManager from "../components/homework/HomeworkGroupManager.vue";
 import HomeworkCard from "../components/homework/HomeworkCard.vue";
+import HomeworkModerationDialog from "../components/homework/HomeworkModerationDialog.vue";
+import HomeworkCorrectionPanel from "../components/homework/HomeworkCorrectionPanel.vue";
+import HomeworkReports from "../components/homework/HomeworkReports.vue";
+import { correctionPayload } from "../features/homework/moderation";
 import HomeworkDuplicateWarning from "../components/homework/HomeworkDuplicateWarning.vue";
 import {
   homeworkRpc,
@@ -19,6 +23,7 @@ import {
   type HomeworkContext,
   type Notice,
   type Subject,
+  type Correction,
 } from "../features/homework/api";
 import { homeworkTabs, resolveHomeworkTab, useHomeworkViewStore } from "../features/homework/view-context";
 const view = useHomeworkViewStore();
@@ -58,6 +63,51 @@ const editing = ref(false),
   deleteTarget = ref<Notice | null>(null),
   deleteReason = ref(""),
   reviewReasons = reactive<Record<string, string>>({});
+const activeCorrection = ref<Correction|null>(null);
+const composerDialog = ref<HTMLDialogElement|null>(null);
+let composerReturnFocus:HTMLElement|null=null;
+watch(editing,async open=>{
+  if(open){
+    composerReturnFocus=typeof HTMLElement!=='undefined' && document.activeElement instanceof HTMLElement?document.activeElement:null;
+    await nextTick();
+    if(editing.value)composerDialog.value?.showModal?.();
+  }else{
+    composerDialog.value?.close?.();
+    if(composerReturnFocus?.isConnected)composerReturnFocus.focus();
+    composerReturnFocus=null;
+  }
+});
+watch(busy,async()=>{
+  await nextTick();
+  const dialog=composerDialog.value;
+  // Disabling the focused save button can send focus to body; keep it in the
+  // still-open editor during and after an asynchronous draft save.
+  if(editing.value && dialog?.open && !dialog.contains(document.activeElement)){
+    dialog.querySelector<HTMLElement>('select:not(:disabled), input:not(:disabled), textarea:not(:disabled), button:not(:disabled)')?.focus();
+  }
+});
+function composerKeydown(event:KeyboardEvent){
+  if(event.key!=='Tab'||!composerDialog.value)return;
+  const controls=Array.from(composerDialog.value.querySelectorAll<HTMLElement>('button:not(:disabled), input:not(:disabled), select:not(:disabled), textarea:not(:disabled), a[href], [tabindex]:not([tabindex="-1"])')).filter(el=>el.getClientRects().length>0);
+  const first=controls[0],last=controls[controls.length-1];
+  if(!first){event.preventDefault();composerDialog.value.focus();return;}
+  if(event.shiftKey && (document.activeElement===first||document.activeElement===composerDialog.value)){event.preventDefault();last.focus();}
+  else if(!event.shiftKey && document.activeElement===last){event.preventDefault();first.focus();}
+}
+const moderation = ref<{ notice:Notice; mode:'report'|'correction_request'|'emergency_remove'|'withdraw' }|null>(null);
+const correctionNotices = computed(() => new Map([...(data.value?.notices||[]),...(data.value?.history||[])].map(n=>[n.id,n])));
+function openModeration(mode:NonNullable<typeof moderation.value>['mode'],notice:Notice){
+  if(admin.value||busy.value)return;error.value='';moderation.value={mode,notice};
+}
+async function moderate(action:string,payload:Record<string,unknown>){await act(action,payload);if(!error.value)moderation.value=null;}
+async function decideCorrection(payload:Record<string,unknown>){
+  if(!teacher.value||busy.value)return;
+  if(payload.decision!=='approved'){await act('correction_decide',payload);return;}
+  busy.value=true;error.value='';
+  try{const result=await submitHomework(classId.value,{...payload,action:'correction_decide'});
+    message.value=result.message||(result.notice?.status==='published'?'Đã xác nhận và công bố chỉnh sửa.':'Đã xác nhận chỉnh sửa; bài đang qua kiểm tra trùng.');view.refreshVersion++;await load();
+  }catch(e){error.value=e instanceof Error?e.message:'Chưa xác nhận được chỉnh sửa.';}finally{busy.value=false;}
+}
 const form = reactive({
   id: "",
   revision: 0,
@@ -85,8 +135,8 @@ const tab = computed({
   set: (value: string) => { view.selectedTab = value; },
 });
 watch([role, () => auth.currentUser?.id], () => {
-  contextRequest++; assigned.value=[]; selectedClass.value='';
-  view.selectedTab = tab.value; editing.value = false; deleteTarget.value = null;
+  loadId++; contextRequest++; assigned.value=[]; selectedClass.value='';
+  view.selectedTab = tab.value; editing.value = false; deleteTarget.value = null; moderation.value=null; activeCorrection.value=null;
   data.value = null; void loadContext(); void load();
 });
 const selectedSubject = computed(() =>
@@ -142,7 +192,8 @@ async function act(action: string, payload: Record<string, unknown>) {
   error.value = "";
   message.value = "";
   try {
-    await homeworkRpc(action, classId.value, payload);
+    const result = await homeworkRpc<{ok?:boolean;expired?:boolean;message?:string}>(action, classId.value, payload);
+    if(result?.expired){await load();throw new Error(result.message||'Đã hết hạn chỉnh sửa.');}
     message.value = "Đã lưu thay đổi.";
     view.refreshVersion++;
     await load();
@@ -155,20 +206,24 @@ async function act(action: string, payload: Record<string, unknown>) {
   }
 }
 function compose(n?: Notice) {
-  if (admin.value) return;
+  if (admin.value || (n && n.author_id !== auth.currentUser?.id)) return;
+  activeCorrection.value=n?.correction ? data.value?.corrections?.find(c=>c.id===n.correction?.id)||null : null;
+  if(n?.correction && (!activeCorrection.value || activeCorrection.value.status!=='awaiting_author'))return;
+  const draft=activeCorrection.value?.rounds.find(r=>r.round===activeCorrection.value?.round)?.draft;
   Object.assign(form, {
     id: n?.id || "",
     revision: n?.revision || 0,
     request_id: crypto.randomUUID(),
-    subject_id: n?.subject_id || "",
-    english_group_id: n?.english_group_id || "",
-    title: n?.title || "",
-    content: n?.content || "",
-    deadline: n ? localDeadline(n.due_at) : "",
+    subject_id: draft?.subject_id || n?.subject_id || "",
+    english_group_id: draft ? draft.english_group_id || '' : n?.english_group_id || "",
+    title: draft?.title || n?.title || "",
+    content: draft?.content || n?.content || "",
+    deadline: draft ? localDeadline(draft.due_at) : n ? localDeadline(n.due_at) : "",
   });
   editing.value = true;
 }
 async function send() {
+  if(activeCorrection.value){await saveCorrection(true);return;}
   if (busy.value) return;
   busy.value = true;
   error.value = "";
@@ -199,6 +254,19 @@ async function send() {
     busy.value = false;
   }
 }
+async function saveCorrection(resubmit:boolean){
+  if(!activeCorrection.value||busy.value)return;
+  const c=activeCorrection.value;busy.value=true;error.value='';
+  try{
+    const result=await homeworkRpc<Correction & {expired?:boolean;message?:string}>(resubmit?'correction_submit':'correction_save',classId.value,{
+      ...correctionPayload(form.id,c),revision_data:{subject_id:form.subject_id,english_group_id:selectedSubject.value?.is_english?form.english_group_id:null,title:form.title,content:form.content,due_at:utcDeadline(form.deadline)}
+    });
+    if(result.expired){editing.value=false;await load();throw new Error(result.message||'Đã hết hạn chỉnh sửa.');}
+    if(resubmit){editing.value=false;message.value='Đã gửi lại GV. Đồng hồ 72 giờ đã dừng.';tab.value='corrections';}
+    else{activeCorrection.value={...c,...result};message.value='Đã lưu bản nháp riêng tư; bạn vẫn cần bấm Gửi lại GV trước hạn.';}
+    view.refreshVersion++;await load();
+  }catch(e){error.value=e instanceof Error?e.message:'Chưa lưu được chỉnh sửa.';}finally{busy.value=false;}
+}
 async function retry(n: Notice) {
   if (busy.value) return;
   busy.value = true;
@@ -216,7 +284,8 @@ async function retry(n: Notice) {
   } finally { busy.value = false; }
 }
 function remove(n: Notice) {
-  if (admin.value) return;
+  if (admin.value || n.author_id !== auth.currentUser?.id) return;
+  if(n.correction){openModeration('withdraw',n);return;}
   deleteTarget.value = n;
   deleteReason.value = "";
 }
@@ -269,7 +338,7 @@ function jump(id: string) {
   );
 }
 watch([classId,role], () => { if(!admin.value)view.scopeClassId=classId.value; },{immediate:true});
-watch(classId, () => { week.value=""; subject.value=""; editSubject(); deleteTarget.value=null; Object.keys(reviewReasons).forEach(k=>delete reviewReasons[k]); });
+watch(classId, () => { week.value=""; subject.value=""; editSubject(); deleteTarget.value=null; moderation.value=null;activeCorrection.value=null; Object.keys(reviewReasons).forEach(k=>delete reviewReasons[k]); });
 watch([classId, week], () => {
   loadId++;
   editing.value = false;
@@ -366,6 +435,7 @@ onUnmounted(() => {
             :now="now"
             @edit="compose"
             @remove="remove"
+            @report="openModeration('report',$event)" @correction="openModeration('correction_request',$event)" @emergency="openModeration('emergency_remove',$event)" @withdraw="openModeration('withdraw',$event)"
             @heart="act('heart', { id: n.id, liked: !n.liked })"
             @remind="act('remind', { id: n.id })"
           />
@@ -383,6 +453,7 @@ onUnmounted(() => {
               :now="now"
               @edit="compose"
               @remove="remove"
+              @report="openModeration('report',$event)" @correction="openModeration('correction_request',$event)" @emergency="openModeration('emergency_remove',$event)" @withdraw="openModeration('withdraw',$event)"
               @heart="act('heart', { id: n.id, liked: !n.liked })"
               @remind="act('remind', { id: n.id })"
             />
@@ -408,11 +479,12 @@ onUnmounted(() => {
               :now="now"
               @edit="compose"
               @remove="remove"
+              @report="openModeration('report',$event)" @correction="openModeration('correction_request',$event)" @emergency="openModeration('emergency_remove',$event)" @withdraw="openModeration('withdraw',$event)"
               @heart="act('heart', { id: n.id, liked: !n.liked })"
               @remind="act('remind', { id: n.id })"
             />
             <button v-if="!admin && n.can_retry" type="button" :disabled="busy" @click="retry(n)">Thử kiểm tra AI lại</button>
-            <HomeworkDuplicateWarning v-if="!admin"
+            <HomeworkDuplicateWarning v-if="!admin && n.author_id===auth.currentUser?.id"
               :notice="n"
               :visible-notices="data.notices"
               :busy="busy"
@@ -422,6 +494,12 @@ onUnmounted(() => {
           </div>
         </div>
       </section>
+      <section v-if="tab==='corrections'" class="correction-list">
+        <h2>Yêu cầu chỉnh sửa Báo bài</h2>
+        <p v-if="!data.corrections?.length" class="empty">Chưa có yêu cầu chỉnh sửa.</p>
+        <HomeworkCorrectionPanel v-for="c in data.corrections||[]" :key="c.id+':'+c.version" :correction="c" :notice="correctionNotices.get(c.notice_id)" :subjects="data.subjects" :groups="data.groups" :role="role" :user-id="auth.currentUser?.id||''" :busy="busy" :now="now" @edit="compose" @withdraw="openModeration('withdraw',$event)" @decide="decideCorrection" />
+      </section>
+      <HomeworkReports v-if="teacher && tab==='reports'" :key="classId" :reports="data.reports||[]" :statistics="data.report_statistics||[]" :busy="busy" @process="act('report_process',$event)" @view="jump" />
       <section v-if="tab === 'awards'">
         <div class="section-heading">
           <h2>🌟 Góc tuyên dương</h2>
@@ -523,6 +601,7 @@ onUnmounted(() => {
               {{ n.score != null ? `Mức giống: ${n.score}% · ` : ""
               }}{{ n.reason || "Chưa nhận được kết quả AI." }}
             </p>
+            <p v-if="n.candidate?.correction" role="status">Bài cũ đang có yêu cầu chỉnh sửa. GV cần xử lý correction trước khi thay bài cũ.</p>
             <label
               >Lý do quyết định<input
                 v-model="reviewReasons[n.id]"
@@ -543,7 +622,7 @@ onUnmounted(() => {
                 >
                   Giữ bài cũ</button
                 ><button
-                  :disabled="busy"
+                  :disabled="busy || !!n.candidate?.correction"
                   @click="
                     act('review', {
                       id: n.id,
@@ -613,6 +692,7 @@ onUnmounted(() => {
         <article v-for="n in data.trash" :key="n.id" class="panel">
           <h3>{{ n.title }}</h3>
           <p>{{ n.delete_reason }}</p>
+          <p>Người gỡ: {{n.deleted_actor_name||(n.deleted_actor_type==='system'?'System':n.deleted_by)||'Không có thông tin'}}</p>
           <button v-if="teacher" :disabled="busy" @click="act('restore', { id: n.id })">
             Khôi phục
           </button>
@@ -644,20 +724,21 @@ onUnmounted(() => {
       </section>
       <HomeworkAiSettings v-if="teacher" v-show="tab === 'ai_settings'" :key="classId" :class-id="classId" :week-id="week" :role="role" :settings="data.ai_settings" @updated="acceptManagementUpdate" @busy="managementBusy" />
     </template>
-    <div
+    <HomeworkModerationDialog v-if="moderation" :key="moderation.notice.id+moderation.mode" :notice="moderation.notice" :mode="moderation.mode" :busy="busy" :error="error" @close="moderation=null" @submit="moderate" />
+    <dialog
       v-if="editing && !admin"
-      class="modal-backdrop"
-      @keydown.esc="!busy && (editing = false)"
-    >
-      <section
+      ref="composerDialog"
+      @cancel.prevent="!busy && (editing = false)"
+      @keydown="composerKeydown"
         role="dialog"
         aria-modal="true"
         aria-labelledby="compose-title"
-        class="modal"
+        class="modal composer-dialog"
       >
         <h2 id="compose-title">
           {{ form.id ? "Sửa Báo bài" : "✏️ Đăng Báo bài" }}
         </h2>
+        <p v-if="activeCorrection"><strong v-if="activeCorrection.round===2">Lần chỉnh sửa cuối. </strong>{{activeCorrection.rounds.find(r=>r.round===activeCorrection?.round)?.reason}} — Hạn gửi lại: {{dateLabel(activeCorrection.rounds.find(r=>r.round===activeCorrection?.round)!.due_at)}}</p>
         <form @submit.prevent="send">
           <div class="form-grid">
             <label
@@ -710,17 +791,16 @@ onUnmounted(() => {
               required
           /></label>
           <p v-if="error" role="alert" class="error">{{ error }}</p>
-          <p>Nội dung được kiểm tra trùng trước khi công bố.</p>
+          <p>{{activeCorrection?'Bản nháp chỉ bạn và giáo viên thấy. Bấm Gửi lại GV để dừng đồng hồ 72 giờ; bài công khai hiện tại vẫn được giữ đến khi GV duyệt.':'Nội dung được kiểm tra trùng trước khi công bố.'}}</p>
           <div class="actions">
             <button type="button" :disabled="busy" @click="editing = false">
               Đóng</button
-            ><button class="primary" :disabled="busy">
-              {{ busy ? "Đang lưu và kiểm tra…" : "Đăng Báo bài" }}
+            ><button v-if="activeCorrection" type="button" :disabled="busy" @click="saveCorrection(false)">Lưu bản nháp</button><button class="primary" :disabled="busy">
+              {{ busy ? "Đang lưu và kiểm tra…" : activeCorrection ? "Gửi lại GV" : "Đăng Báo bài" }}
             </button>
           </div>
         </form>
-      </section>
-    </div>
+    </dialog>
     <div v-if="deleteTarget" class="modal-backdrop">
       <section
         role="dialog"
@@ -988,6 +1068,7 @@ textarea {
   background: var(--surface, #fff);
   box-sizing: border-box;
 }
+.composer-dialog{border:0;color:var(--text,inherit);margin:auto;width:min(620px,calc(100% - 36px))}.composer-dialog::backdrop{background:#142c3d77}
 .primary {
   background: #285d53;
   color: #fff;
