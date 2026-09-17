@@ -7,6 +7,8 @@ import PageBannerArt from "../components/ui/PageBannerArt.vue";
 import HomeworkAdminOversight from "../components/homework/HomeworkAdminOversight.vue";
 import HomeworkAiSettings from "../components/homework/HomeworkAiSettings.vue";
 import HomeworkGroupManager from "../components/homework/HomeworkGroupManager.vue";
+import HomeworkImage from "../components/homework/HomeworkImage.vue";
+import { useMediaComposer } from "../features/homework/media-composer";
 import HomeworkCard from "../components/homework/HomeworkCard.vue";
 import HomeworkModerationDialog from "../components/homework/HomeworkModerationDialog.vue";
 import HomeworkCorrectionPanel from "../components/homework/HomeworkCorrectionPanel.vue";
@@ -118,6 +120,9 @@ const form = reactive({
   content: "",
   deadline: "",
 });
+const media = useMediaComposer(form,()=>({ownerId:auth.currentUser?.id||'',classId:classId.value}),()=>editing.value);
+function chooseImage(event:Event){const input=event.target as HTMLInputElement;const file=input.files?.[0];if(file)void media.choose(file);input.value='';}
+watch(editing,open=>{if(!open)media.close();});
 const subjectForm = reactive({
   id: "",
   catalog_subject_id: "",
@@ -220,6 +225,7 @@ function compose(n?: Notice) {
     content: draft?.content || n?.content || "",
     deadline: draft ? localDeadline(draft.due_at) : n ? localDeadline(n.due_at) : "",
   });
+  media.open(n,activeCorrection.value);
   editing.value = true;
 }
 async function send() {
@@ -229,7 +235,9 @@ async function send() {
   error.value = "";
   message.value = "";
   try {
+    const attachment = await media.payload({class_id:classId.value,notice_id:form.id||null,revision:form.revision,request_id:form.request_id});
     const result = await submitHomework(classId.value, {
+      ...attachment,
       ...form,
       id: form.id || null,
       english_group_id: selectedSubject.value?.is_english
@@ -237,6 +245,7 @@ async function send() {
         : null,
       due_at: utcDeadline(form.deadline),
     });
+    await media.committed();
     editing.value = false;
     message.value =
       result.message ||
@@ -258,10 +267,12 @@ async function saveCorrection(resubmit:boolean){
   if(!activeCorrection.value||busy.value)return;
   const c=activeCorrection.value;busy.value=true;error.value='';
   try{
+    const attachment=await media.payload({class_id:classId.value,notice_id:form.id,request_id:form.request_id,revision:form.revision,correction_id:c.id,round:c.round,version:c.version});
     const result=await homeworkRpc<Correction & {expired?:boolean;message?:string}>(resubmit?'correction_submit':'correction_save',classId.value,{
-      ...correctionPayload(form.id,c),revision_data:{subject_id:form.subject_id,english_group_id:selectedSubject.value?.is_english?form.english_group_id:null,title:form.title,content:form.content,due_at:utcDeadline(form.deadline)}
+      ...attachment,...correctionPayload(form.id,c),revision_data:{subject_id:form.subject_id,english_group_id:selectedSubject.value?.is_english?form.english_group_id:null,title:form.title,content:form.content,due_at:utcDeadline(form.deadline)}
     });
     if(result.expired){editing.value=false;await load();throw new Error(result.message||'Đã hết hạn chỉnh sửa.');}
+    await media.committed(resubmit?undefined:{...c,...result});
     if(resubmit){editing.value=false;message.value='Đã gửi lại GV. Đồng hồ 72 giờ đã dừng.';tab.value='corrections';}
     else{activeCorrection.value={...c,...result};message.value='Đã lưu bản nháp riêng tư; bạn vẫn cần bấm Gửi lại GV trước hạn.';}
     view.refreshVersion++;await load();
@@ -740,6 +751,7 @@ onUnmounted(() => {
         </h2>
         <p v-if="activeCorrection"><strong v-if="activeCorrection.round===2">Lần chỉnh sửa cuối. </strong>{{activeCorrection.rounds.find(r=>r.round===activeCorrection?.round)?.reason}} — Hạn gửi lại: {{dateLabel(activeCorrection.rounds.find(r=>r.round===activeCorrection?.round)!.due_at)}}</p>
         <form @submit.prevent="send">
+          <fieldset :disabled="busy || media.compressing.value" class="composer-fields">
           <div class="form-grid">
             <label
               >Môn học<select
@@ -790,6 +802,20 @@ onUnmounted(() => {
               type="datetime-local"
               required
           /></label>
+          <section class="composer-image" aria-label="Ảnh đính kèm">
+            <label>Ảnh đính kèm (tối đa một ảnh)
+              <input type="file" accept="image/jpeg,image/png,image/webp,image/heic,image/heif,.heic,.heif" @change="chooseImage">
+            </label>
+            <p class="hint">Ảnh được nén trên thiết bị, giữ nguyên nội dung. Chỉ tải lên khi bạn gửi bài hoặc lưu bản sửa.</p>
+            <p v-if="media.compressing.value" role="status">Đang xử lý ảnh…</p>
+            <img v-if="media.preview.value" :src="media.preview.value" alt="Ảnh đã chọn — chưa công bố" class="image-preview">
+            <HomeworkImage v-else-if="media.attachmentId.value" :class-id="classId" :attachment-id="media.attachmentId.value" />
+            <p v-if="media.image.value">{{Math.round(media.image.value.blob.size/1000)}} KB · {{media.image.value.width}} × {{media.image.value.height}} px</p>
+            <button v-if="media.image.value || media.attachmentId.value" type="button" @click="media.remove">Bỏ ảnh, dùng nội dung chữ</button>
+            <p v-if="media.note.value" role="status">{{media.note.value}}</p>
+            <button v-if="media.recoverable.value" type="button" @click="media.restore">Khôi phục bản nháp</button>
+            <p v-if="media.failure.value" role="alert" class="error">{{media.failure.value}}</p>
+          </section>
           <p v-if="error" role="alert" class="error">{{ error }}</p>
           <p>{{activeCorrection?'Bản nháp chỉ bạn và giáo viên thấy. Bấm Gửi lại GV để dừng đồng hồ 72 giờ; bài công khai hiện tại vẫn được giữ đến khi GV duyệt.':'Nội dung được kiểm tra trùng trước khi công bố.'}}</p>
           <div class="actions">
@@ -799,6 +825,7 @@ onUnmounted(() => {
               {{ busy ? "Đang lưu và kiểm tra…" : activeCorrection ? "Gửi lại GV" : "Đăng Báo bài" }}
             </button>
           </div>
+          </fieldset>
         </form>
     </dialog>
     <div v-if="deleteTarget" class="modal-backdrop">
@@ -826,6 +853,8 @@ onUnmounted(() => {
   </section>
 </template>
 <style scoped>
+.composer-fields{border:0;margin:0;padding:0;min-width:0;display:grid;gap:16px}.composer-image{display:grid;gap:10px;min-width:0;border:1px solid var(--border);border-radius:12px;padding:12px}.image-preview{width:100%;max-height:300px;object-fit:contain;border-radius:10px}.composer-image input{max-width:100%}
+
 .homework-page {
   display: grid;
   gap: 22px;

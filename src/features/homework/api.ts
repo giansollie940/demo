@@ -1,5 +1,6 @@
 import { legacyApi } from "../../services/legacy-supabase";
 export interface Notice {
+  attachment_id?: string | null;
   id: string;
   class_id: string;
   subject_id: string;
@@ -39,7 +40,7 @@ export interface CorrectionToken { id: string; round: number; version: number; s
 export interface ModerationEvent { id: string; event_type: string; actor_id: string | null; actor_name?: string | null; actor_type: 'user' | 'system'; round: number | null; reason: string | null; created_at: string }
 export interface Correction extends CorrectionToken {
   notice_id: string; class_id: string; closed_at: string | null;
-  rounds: Array<{ round: number; requested_by: string; requested_at: string; due_at: string; reason: string; issue_types: string[]; draft: RevisionData | null; submitted_at: string | null; decision: string | null; decision_reason: string | null; decided_by: string | null; decided_at: string | null }>;
+  rounds: Array<{ attachment_id?: string | null; media_set?: boolean; round: number; requested_by: string; requested_at: string; due_at: string; reason: string; issue_types: string[]; draft: RevisionData | null; submitted_at: string | null; decision: string | null; decision_reason: string | null; decided_by: string | null; decided_at: string | null }>;
   events: ModerationEvent[];
 }
 export interface NoticeReport { id: string; notice_id: string; class_id: string; class_name?: string; reporter_id: string; reporter_name: string; reporter_code: string | null; category: string; note: string | null; status: string; created_at: string; teacher_note: string | null; events: ModerationEvent[] }
@@ -193,3 +194,10 @@ export const stateLabels: Record<string, string> = {
   replaced: "🔄 Được thay thế",
   deleted: "🗑️ Đã xóa",
 };
+
+export async function homeworkMedia(action:string,payload:Record<string,unknown>):Promise<import('./media-upload').MediaResponse>{
+ const {data,error}=await (await client()).functions.invoke('homework-media',{body:{...payload,action}});
+ if(error){let message=error.message||'Chưa xử lý được ảnh.';try{const body=await error.context?.json();message=body?.error||message;}catch{}throw new Error(message);}
+ const result=data as import('./media-upload').MediaResponse & {error?:string};
+ if(!result.ok)throw new Error(result.error||'Chưa xử lý được ảnh.');return result;
+}

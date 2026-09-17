@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import HomeworkImage from "./HomeworkImage.vue";
 import { computed } from "vue";
 import {
   dateLabel,
@@ -58,6 +59,7 @@ const deadlineText = computed(() => {
     </div>
     <h3>{{ notice.title }}</h3>
     <p class="notice-content">{{ notice.content }}</p>
+    <HomeworkImage v-if="notice.attachment_id" :class-id="notice.class_id" :attachment-id="notice.attachment_id" />
     <p class="deadline">
       Hạn: <strong>{{ dateLabel(notice.due_at) }}</strong>
     </p>
