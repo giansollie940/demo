@@ -39,5 +39,8 @@ export const PAGE_GLYPHS: Record<string, string> = {
   'admin-recycle': `<path d="M10 30h24M18 30v-5h8v5" ${S}/><path d="M13 30l2 21a4 4 0 0 0 4 3.6h10a4 4 0 0 0 4-3.6L31 30" ${S}/><circle cx="22" cy="42" r="4" ${soft}/><path d="M36 21a9 9 0 1 0 3-6.7L36 17" ${S}/><path d="M36 12v5h5" ${S}/>`,
   // Hai đĩa xếp chồng + vạch mức: dung lượng, không phải một biểu tượng file.
   'admin-storage': `<rect x="12" y="16" width="40" height="14" rx="6" ${S}/><rect x="12" y="36" width="40" height="14" rx="6" ${S}/><circle cx="20" cy="23" r="2.4" fill="var(--art-ink)"/><circle cx="20" cy="43" r="2.4" fill="var(--art-ink)"/><rect x="27" y="20" width="17" height="6" rx="3" ${soft}/><path d="M27 43h11" ${S}/>`,
+  // Thùng có nắp đã đậy, khác hẳn hai đĩa nằm ngang của 'admin-storage': một bên
+  // là "còn bao nhiêu chỗ", một bên là "đã đóng lại và cất đi".
+  'admin-archive': `<rect x="10" y="14" width="44" height="12" rx="4" ${S}/><rect x="26" y="17" width="12" height="6" rx="3" ${soft}/><path d="M15 26v24a3 3 0 0 0 3 3h28a3 3 0 0 0 3-3V26" ${S}/><path d="M25 36h14" ${S}/>`,
   'admin-audit': `<path d="M17 13h22l8 8v30a3 3 0 0 1-3 3H17a3 3 0 0 1-3-3V16a3 3 0 0 1 3-3z" ${S}/><path d="M38 13v9h9" ${S}/><path d="M21 30h13M21 37h9" ${S}/><circle cx="41" cy="41" r="6.5" ${S}/><path d="M46 46l5 5" ${S}/>`,
 }
