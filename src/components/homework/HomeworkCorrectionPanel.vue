@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import HomeworkImage from "./HomeworkImage.vue";
 import { computed, ref } from 'vue';
 import { dateLabel,type Correction,type Notice,type Subject,type EnglishGroup } from '../../features/homework/api';
 import { correctionLabels,correctionPayload,issueLabels,moderationEventLabels } from '../../features/homework/moderation';
@@ -24,11 +25,11 @@ function groupName(id:string|null){return id ? props.groups.find(g=>g.id===id)?.
     <div class="revision-comparison">
      <section v-if="notice" aria-label="Bản hiện tại"><h4>{{open?'Bản đang công khai':'Bản hiện tại'}}</h4>
       <dl><dt>Môn học</dt><dd>{{subjectName(notice.subject_id)}}</dd><dt>Nhóm Tiếng Anh</dt><dd>{{groupName(notice.english_group_id)}}</dd><dt>Hạn bài tập</dt><dd>{{dateLabel(notice.due_at)}}</dd></dl>
-      <h4>{{notice.title}}</h4><p class="text">{{notice.content}}</p>
+      <h4>{{notice.title}}</h4><p class="text">{{notice.content}}</p><HomeworkImage v-if="notice.attachment_id" :class-id="notice.class_id" :attachment-id="notice.attachment_id" />
      </section>
      <section :aria-label="r.submitted_at?'Bản gửi lại':'Bản nháp'"><h4>{{r.submitted_at?'Bản gửi lại':'Bản nháp'}}</h4>
       <dl><dt>Môn học</dt><dd>{{subjectName(r.draft.subject_id)}}</dd><dt>Nhóm Tiếng Anh</dt><dd>{{groupName(r.draft.english_group_id)}}</dd><dt>Hạn bài tập</dt><dd>{{dateLabel(r.draft.due_at)}}</dd></dl>
-      <h4>{{r.draft.title}}</h4><p class="text">{{r.draft.content}}</p>
+      <h4>{{r.draft.title}}</h4><p class="text">{{r.draft.content}}</p><HomeworkImage v-if="r.attachment_id" :class-id="correction.class_id" :attachment-id="r.attachment_id" />
      </section>
     </div>
    </details>
