@@ -9,6 +9,7 @@ import HomeworkAiSettings from "../components/homework/HomeworkAiSettings.vue";
 import HomeworkGroupManager from "../components/homework/HomeworkGroupManager.vue";
 import HomeworkImage from "../components/homework/HomeworkImage.vue";
 import { useMediaComposer } from "../features/homework/media-composer";
+import { isCapacityHold } from "../features/storage/api";
 import HomeworkCard from "../components/homework/HomeworkCard.vue";
 import HomeworkModerationDialog from "../components/homework/HomeworkModerationDialog.vue";
 import HomeworkCorrectionPanel from "../components/homework/HomeworkCorrectionPanel.vue";
@@ -55,6 +56,9 @@ const data = ref<HomeworkData | null>(null),
   loading = ref(false),
   busy = ref(false),
   error = ref(""),
+  // A capacity hold is not the user's mistake and not a permission problem,
+  // so it is shown as a hold rather than as a red failure (F8-RB-004).
+  hold = ref(""),
   message = ref(""),
   subject = ref(""),
   week = ref(ctx.selectedWeekId || ""),
@@ -195,6 +199,7 @@ async function act(action: string, payload: Record<string, unknown>) {
   if (busy.value) return;
   busy.value = true;
   error.value = "";
+  hold.value = "";
   message.value = "";
   try {
     const result = await homeworkRpc<{ok?:boolean;expired?:boolean;message?:string}>(action, classId.value, payload);
@@ -203,8 +208,8 @@ async function act(action: string, payload: Record<string, unknown>) {
     view.refreshVersion++;
     await load();
   } catch (e) {
-    error.value =
-      e instanceof Error ? e.message : "Không thực hiện được thao tác.";
+    if (isCapacityHold(e)) hold.value = e instanceof Error ? e.message : "";
+    else error.value = e instanceof Error ? e.message : "Không thực hiện được thao tác.";
     await loadContext();
   } finally {
     busy.value = false;
@@ -399,6 +404,7 @@ onUnmounted(() => {
         >
       </button>
     </nav>
+    <p v-if="hold" role="status" class="hold">{{ hold }}</p>
     <p v-if="error" role="alert" class="error">{{ error }}</p>
     <p v-if="message" role="status" class="success">{{ message }}</p>
     <p v-if="loading" role="status">Đang tải Báo bài…</p>
@@ -1074,6 +1080,15 @@ textarea {
   color: #24604c;
   padding: 15px;
   border-radius: 12px;
+}
+/* A capacity hold is a system state, not a rejection of what the user typed,
+   so it reads as a notice rather than as the red failure panel. */
+.hold {
+  background: #fdf3e2;
+  color: #7a4c06;
+  padding: 15px;
+  border-radius: 12px;
+  font-weight: 700;
 }
 .overdue summary {
   cursor: pointer;

@@ -118,7 +118,7 @@ export interface HomeworkData {
 }
 interface Result {
   data: unknown;
-  error: { message?: string; context?: Response } | null;
+  error: { message?: string; code?: string; context?: Response } | null;
 }
 interface HomeworkClient {
   rpc(name: string, args: Record<string, unknown>): Promise<Result>;
@@ -139,7 +139,10 @@ export async function homeworkRpc<T = unknown>(
     p_data: { ...payload, class_id: classId },
   });
   if (error)
-    throw new Error(error.message || "Không thể thực hiện thao tác Báo bài.");
+    // Keep the SQLSTATE. FEAT-008 raises 53100 for a capacity hold, and the UI
+    // must tell that apart from a permission or validation failure without
+    // matching on message text.
+    throw Object.assign(new Error(error.message || "Không thể thực hiện thao tác Báo bài."), { code: (error as { code?: string }).code });
   return data as T;
 }
 export async function submitHomework(

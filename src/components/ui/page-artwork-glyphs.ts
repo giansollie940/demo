@@ -37,5 +37,7 @@ export const PAGE_GLYPHS: Record<string, string> = {
   'admin-teachers': `<rect x="12" y="14" width="30" height="22" rx="5" ${S}/><path d="M19 22h14M19 28h9" ${S}/><circle cx="41" cy="41" r="6" ${S}/><path d="M30 54c0-6 5-9 11-9s11 3 11 9" ${S}/>`,
   'admin-permissions': `<path d="M31 12l16 7v12c0 10-7 16-16 20-9-4-16-10-16-20V19z" ${S}/><circle cx="31" cy="30" r="4.5" ${S}/><path d="M31 34.5V41" ${S}/>`,
   'admin-recycle': `<path d="M10 30h24M18 30v-5h8v5" ${S}/><path d="M13 30l2 21a4 4 0 0 0 4 3.6h10a4 4 0 0 0 4-3.6L31 30" ${S}/><circle cx="22" cy="42" r="4" ${soft}/><path d="M36 21a9 9 0 1 0 3-6.7L36 17" ${S}/><path d="M36 12v5h5" ${S}/>`,
+  // Hai đĩa xếp chồng + vạch mức: dung lượng, không phải một biểu tượng file.
+  'admin-storage': `<rect x="12" y="16" width="40" height="14" rx="6" ${S}/><rect x="12" y="36" width="40" height="14" rx="6" ${S}/><circle cx="20" cy="23" r="2.4" fill="var(--art-ink)"/><circle cx="20" cy="43" r="2.4" fill="var(--art-ink)"/><rect x="27" y="20" width="17" height="6" rx="3" ${soft}/><path d="M27 43h11" ${S}/>`,
   'admin-audit': `<path d="M17 13h22l8 8v30a3 3 0 0 1-3 3H17a3 3 0 0 1-3-3V16a3 3 0 0 1 3-3z" ${S}/><path d="M38 13v9h9" ${S}/><path d="M21 30h13M21 37h9" ${S}/><circle cx="41" cy="41" r="6.5" ${S}/><path d="M46 46l5 5" ${S}/>`,
 }
