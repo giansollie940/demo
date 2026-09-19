@@ -1,0 +1,34 @@
+/* Warm Bright Learning · vanilla-inspired warmth with lively educational accents */
+:root {
+  --color-primary:#6846dc;
+  --color-primary-strong:#5635c8;
+  --color-info:#4f78a8;
+  --color-success:#168252;
+  --color-warning:#b46b08;
+  --color-danger:#cf3d55;
+  --color-sky:#5c8ac7;
+  --color-mint:#1fa971;
+  --color-sun:#e3a117;
+  --color-coral:#ed6673;
+  --color-pink:#d85c91;
+  --color-lilac:#8f5fe0;
+  --gradient-primary:linear-gradient(135deg,#6846dc 0%,#8f5fe0 56%,#ed6673 100%);
+  --gradient-celebrate:linear-gradient(115deg,#6846dc 0%,#ed6673 32%,#e3a117 58%,#1fa971 82%,#8f5fe0 100%);
+  --space-1:4px; --space-2:8px; --space-3:12px; --space-4:16px;
+  --space-5:20px; --space-6:24px; --space-8:32px;
+  --radius-sm:10px; --radius-md:14px; --radius-lg:18px; --radius-xl:24px;
+  --shadow-sm:0 7px 20px rgb(79 55 73 / .09);
+  --shadow-md:0 20px 48px rgb(79 55 73 / .14);
+  --shadow-button:0 9px 22px rgb(104 70 220 / .18);
+  --spinner-track:rgb(255 255 255 / .4);
+  --color-on-action:#fff;
+  --font-display:"Aptos Display","Segoe UI Variable Display","Segoe UI",sans-serif;
+  --font-body:Inter,"Segoe UI Variable Text",ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+  --font-size-ui-min:.8125rem;
+  --dur-short:180ms;
+  --ease-out:cubic-bezier(.2,.8,.2,1);
+  --theme-transition:260ms cubic-bezier(.2,.8,.2,1);
+  --sidebar-expanded:238px;
+  --sidebar-collapsed:70px;
+  --transition-fast:var(--dur-short) var(--ease-out);
+}
