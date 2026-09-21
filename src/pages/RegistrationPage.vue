@@ -10,6 +10,8 @@ import PageBannerArt from '../components/ui/PageBannerArt.vue'
 import { useAuthStore } from '../stores/auth'
 import { useContextStore } from '../stores/context'
 import { useWeekData } from '../features/weeks/queries'
+import { useDevicePolicy, useDevicePolicyOnOpen } from '../features/registrations/device-policy-queries'
+import { deviceSlotState } from '../features/registrations/device-policy'
 import { getWeekLifecycle } from '../features/weeks/week-lifecycle'
 import { deriveRegistrationEligibility, type RegistrationEligibility } from '../features/registrations/registration-model'
 import { cancelEmergencyRegistration, createEmergencyRegistrationWithAi, saveRegistrationMutation, submitRegistrationWithAi, type RegistrationMutationRuntime } from '../features/registrations/registration-mutations'
@@ -22,12 +24,17 @@ import { appDialog } from '../features/shared/app-dialog'
 const auth=useAuthStore(),context=useContextStore(),createRuntime=useLegacyMutationRuntime(),dirtyEditor=useDirtyEditor('registration-dialog'),nowMs=useNowTicker(30_000)
 const classId=computed(()=>context.selectedClassId),weekId=computed(()=>context.selectedWeekId),week=computed(()=>context.selectedWeek)
 const weekQuery=useWeekData(classId,weekId)
+const devicePolicy=useDevicePolicy(classId,weekId)
+function policyFor(slot:ScheduleSlot){return deviceSlotState(devicePolicy.map.value,slot.dow,slot.period)}
 const studentRole=computed(()=>['student','monitor'].includes(auth.currentUser?.role??''))
 const slots=computed<ScheduleSlot[]>(()=>{const rows=weekQuery.data.value?.overrides??[];return rows.length?rows.filter(row=>row.active!==false).map(row=>({dow:row.dow,period:row.period})):auth.legacyState?.schedule??[]})
 const registrations=computed(()=>weekQuery.data.value?.registrations??auth.legacyState?.registrations.filter(row=>row.weekId===weekId.value)??[])
 const lifecycleStatus=computed(()=>{const state=auth.legacyState;if(!state||!weekId.value)return'upcoming';return getWeekLifecycle({weeks:state.weeks,periods:state.periods,getSlots:id=>id===weekId.value?slots.value:state.schedule}).statuses[weekId.value]??'upcoming'})
 const deadlineTime=computed(()=>String(auth.legacyState?.settings.registrationDeadlineTime||'20:00'))
 const dialogOpen=ref(false),dialogMode=ref<'regular'|'emergency'>('regular'),selected=ref<{slot:ScheduleSlot;period:PeriodRecord}|null>(null)
+// Sol RC2 §8: mở hộp thoại là lúc chắc chắn nhất để hỏi lại máy chủ, và nó
+// không phụ thuộc vào việc realtime có được bật hay không.
+useDevicePolicyOnOpen(dialogOpen,devicePolicy.query)
 const saving=ref(false),error=ref(''),status=ref<InlineStatusState>('idle'),statusMessage=ref('')
 function registrationFor(slot:ScheduleSlot){return registrations.value.find(row=>row.studentId===auth.currentUser?.id&&row.weekId===weekId.value&&row.dow===slot.dow&&row.period===slot.period)??null}
 function periodFor(slot:ScheduleSlot){return auth.legacyState?.periods.find(item=>Number(item.n)===Number(slot.period))??null}
@@ -49,10 +56,10 @@ async function cancelEmergency(id:string){if(!classId.value)return;if(!await app
     <InlineStatus :state="status" :message="statusMessage" />
     <AppCard v-if="!studentRole" padding="lg"><h2>Chế độ xem dành cho giáo viên</h2><p class="muted">Giáo viên có thể xem lịch nhưng không tạo đăng ký thay học sinh tại trang này.</p></AppCard>
     <section v-if="slots.length" class="session-grid">
-      <StudySessionCard v-for="slot in slots" :key="`${slot.dow}-${slot.period}`" :week="week!" :period="periodFor(slot)!" :dow="slot.dow" :registration="registrationFor(slot)" :eligibility="eligibilityFor(slot,registrationFor(slot))!" @open="open(slot,$event)" @cancel-emergency="cancelEmergency" />
+      <StudySessionCard v-for="slot in slots" :key="`${slot.dow}-${slot.period}`" :week="week!" :period="periodFor(slot)!" :dow="slot.dow" :registration="registrationFor(slot)" :eligibility="eligibilityFor(slot,registrationFor(slot))!" :policy-state="policyFor(slot)" @open="open(slot,$event)" @cancel-emergency="cancelEmergency" />
     </section>
     <AppCard v-else padding="lg" class="empty-registration"><h2>Tuần này chưa có tiết tự học</h2><p>Giáo viên cần cấu hình thời khóa biểu trước khi học sinh đăng ký.</p></AppCard>
-    <RegistrationDialog v-if="selected&&selectedEligibility&&week" :open="dialogOpen" :mode="dialogMode" :week="week" :period="selected.period" :dow="selected.slot.dow" :registration="selectedRegistration" :eligibility="selectedEligibility" :saving="saving" :error="error" @close="close" @dirty="dirtyEditor.setDirty" @save-draft="saveDraft" @submit="submit" />
+    <RegistrationDialog v-if="selected&&selectedEligibility&&week" :open="dialogOpen" :mode="dialogMode" :week="week" :period="selected.period" :dow="selected.slot.dow" :registration="selectedRegistration" :eligibility="selectedEligibility" :saving="saving" :error="error" :policy-state="policyFor(selected.slot)" @close="close" @dirty="dirtyEditor.setDirty" @save-draft="saveDraft" @submit="submit" />
   </div>
 </template>
 

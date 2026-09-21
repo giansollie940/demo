@@ -90,6 +90,12 @@ export interface RegistrationRecord {
   status: string
   teacherComment?: string
   usesElectronicDevice?: boolean
+  /**
+   * Quyền thiết bị sau khi áp chính sách khóa của giáo viên (FEAT-010).
+   * `usesElectronicDevice` là điều học sinh xin; đây là điều được phép. Mọi
+   * hiển thị và thống kê đọc trường này — xem features/registrations/device-policy.
+   */
+  effectiveUsesElectronicDevice?: boolean
   approvalSource?: 'manual' | 'ai' | string
   autoReviewReason?: string
   aiReviewStatus?: string
@@ -141,6 +147,8 @@ export interface TeacherDirectoryResponse {
   password?: string
   [key: string]: unknown
 }
+
+export type DeviceUsePolicyAction = 'state' | 'history' | 'lock' | 'unlock' | 'allow_session' | 'revoke_allow'
 
 export interface EmergencyRegistrationInput {
   weekId: string
@@ -268,6 +276,7 @@ export interface LegacySupabaseService {
   adminRestoreUser(userId: string): Promise<boolean>
   emergencyRegister(input: EmergencyRegistrationInput): Promise<RegistrationRecord | null>
   requestAiReview(registrationId: string): Promise<unknown>
+  deviceUsePolicy(action: DeviceUsePolicyAction, payload: Record<string, unknown>): Promise<unknown>
   prepareSessionAiRereview(input: { classId: string; weekId: string; dow: number; period: number }): Promise<string[]>
   prepareRegistrationAiRereview(registrationId: string): Promise<boolean>
   deleteRegistration(registrationId: string): Promise<boolean>

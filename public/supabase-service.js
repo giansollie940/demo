@@ -19,7 +19,7 @@
     "id","student_id","week_id","weekday","period_number","content","note","status",
     "teacher_comment","approval_source","auto_review_reason","ai_review_status","ai_decision",
     "ai_category","ai_confidence","ai_revision_status","ai_revision_confidence","ai_reason","ai_model","ai_reviewed_at","ai_review_count",
-    "is_emergency","emergency_reason","emergency_requested_at","uses_electronic_device",
+    "is_emergency","emergency_reason","emergency_requested_at","uses_electronic_device","effective_uses_electronic_device",
     "device_detection_source","device_detection_confidence","revision_overdue_at","updated_at","approved_at","class_id"
   ].join(",");
   const WEEK_OVERRIDE_COLUMNS="id,class_id,week_id,weekday,period_number,is_study_period,reason";
@@ -539,6 +539,26 @@
     return data.registration?mapReg(data.registration):null;
   }
 
+  async function deviceUsePolicy(action,payload){
+    const sb=requireClient();
+    const {data,error}=await sb.rpc("device_use_policy",{p_action:action,p_payload:payload||{}});
+    if(error)throw friendlyDevicePolicyError(error);
+    return data;
+  }
+
+  function friendlyDevicePolicyError(error){
+    const text=String(error?.message||"");
+    if(text.includes("DEVICE_POLICY_FORBIDDEN"))
+      return new Error("Bạn không phụ trách lớp này nên không đổi được chính sách thiết bị.");
+    if(text.includes("DEVICE_POLICY_YEAR_NOT_ACTIVE"))
+      return new Error("Năm học này đang được lưu trữ hoặc đã ở chế độ chỉ đọc, nên không đổi được chính sách thiết bị.");
+    if(text.includes("DEVICE_POLICY_SESSION_ALREADY_STARTED"))
+      return new Error("Buổi học đã bắt đầu nên không thay đổi được chính sách của buổi đó.");
+    if(text.includes("DEVICE_POLICY_SESSION_TIME_UNRESOLVED"))
+      return new Error("Chưa xác định được giờ bắt đầu của buổi học. Hãy kiểm tra thời khóa biểu của lớp.");
+    return new Error("Không cập nhật được chính sách thiết bị điện tử.");
+  }
+
   async function requestAiReview(registrationId){
     let lastError=null;
 
@@ -749,6 +769,7 @@
       emergencyReason:r.emergency_reason || "",
       emergencyRequestedAt:r.emergency_requested_at || null,
       usesElectronicDevice:r.uses_electronic_device===true,
+      effectiveUsesElectronicDevice:r.effective_uses_electronic_device===true,
       deviceDetectionSource:r.device_detection_source || "",
       deviceDetectionConfidence:r.device_detection_confidence==null?null:Number(r.device_detection_confidence),
       revisionOverdueAt:r.revision_overdue_at || null,
@@ -756,6 +777,19 @@
       approvedAt:r.approved_at ? new Date(r.approved_at).getTime() : null
     };
   }
+  // Các trường do máy chủ sở hữu: client không bao giờ gửi chúng đi, nên chúng
+  // cũng không được tính là "đăng ký đã thay đổi". effectiveUsesElectronicDevice
+  // đổi mỗi khi giáo viên khoá/mở thiết bị; nếu để nó vào phép so sánh thì
+  // client sẽ PATCH lại một dòng mà nó không sửa gì — và với buổi đã học xong,
+  // RLS từ chối đúng PATCH đó, nên đồng bộ hỏng vì một thay đổi không phải của
+  // người dùng.
+  const SERVER_OWNED_REGISTRATION_FIELDS=["effectiveUsesElectronicDevice"];
+  function regSignature(r){
+    const copy={...r};
+    for(const key of SERVER_OWNED_REGISTRATION_FIELDS)delete copy[key];
+    return stable(copy);
+  }
+
   function dbReg(r){
     const out = {
       student_id:r.studentId, week_id:r.weekId, weekday:Number(r.dow)+1,
@@ -1033,7 +1067,7 @@
     }
     for(const r of state.registrations||[]){
       if(!isManager&&r.studentId!==currentUser?.id)continue;
-      const old=oldById.get(r.id);if(old&&stable(r)===stable(old))continue;
+      const old=oldById.get(r.id);if(old&&regSignature(r)===regSignature(old))continue;
       if(!isUuid(r.id)){
         const payload=dbReg(r);delete payload.id;
         const {data,error}=await sb.from("registrations").insert(payload).select().single();if(error)throw error;Object.assign(r,mapReg(data));
@@ -1185,7 +1219,10 @@
       "class_weeks",
       "weeks",
       "study_schedule",
-      "week_schedule_overrides"
+      "week_schedule_overrides",
+      // FEAT-010: tín hiệu, không phải hai bảng policy. Hai bảng đó là
+      // manager-only nên Postgres Changes sẽ không phát cho học sinh.
+      "device_use_policy_signals"
     ];
 
     for(const table of tables){
@@ -1252,6 +1289,7 @@
     emergencyRegister,
     getDailyQuote,
     requestAiReview,
+    deviceUsePolicy,
     prepareSessionAiRereview,
     prepareRegistrationAiRereview,
     deleteRegistration,

@@ -1,5 +1,6 @@
 import type { CurrentUser, RegistrationRecord, ScheduleSlot } from '../../types/legacy'
 import { needsTeacherAction } from '../registrations/registration-model'
+import { usesDevice } from '../registrations/device-policy'
 
 export type TrackingBucket='registered'|'missing'|'attention'
 export type TrackingFilter='all'|'registered'|'missing'|'attention'|'device'|'no-device'|'unknown-device'
@@ -12,7 +13,9 @@ export interface TrackingQuickReportRow {id:string;code:string;name:string;devic
 export function activeLearners(users:CurrentUser[]){return users.filter(user=>user.active!==false&&['student','monitor'].includes(user.role))}
 export function registrationBucket(registration:RegistrationRecord|null):TrackingBucket{if(!registration||registration.status==='draft')return'missing';if(registration.revisionOverdueAt||needsTeacherAction(registration))return'attention';return'registered'}
 export function registrationForSession(registrations:RegistrationRecord[],studentId:string,session:ScheduleSlot){return registrations.find(row=>row.studentId===studentId&&Number(row.dow)===Number(session.dow)&&Number(row.period)===Number(session.period)&&row.isDeleted!==true)??null}
-export function trackingDeviceState(row:TrackingRow):TrackingDeviceState{if(!row.registration||row.bucket==='missing')return'missing';if(row.registration.usesElectronicDevice===true)return'device';if(row.registration.usesElectronicDevice===false)return'no-device';return'unknown-device'}
+// FEAT-010: bộ lọc "có thiết bị" phải đếm quyền hiệu lực, không đếm lời xin —
+// một buổi bị khóa không có thiết bị nào trong phòng dù học sinh từng chọn.
+export function trackingDeviceState(row:TrackingRow):TrackingDeviceState{if(!row.registration||row.bucket==='missing')return'missing';if(usesDevice(row.registration))return'device';if(row.registration.usesElectronicDevice===false||row.registration.effectiveUsesElectronicDevice===false)return'no-device';return'unknown-device'}
 
 export function summarizeTrackingSession({users,registrations,session}:{users:CurrentUser[];registrations:RegistrationRecord[];session:ScheduleSlot}):SessionTrackingSummary{
   let registered=0,missing=0,attention=0

@@ -8,6 +8,7 @@ import TrackingPage from '../../pages/TrackingPage.vue'
 import StudentsPage from '../../pages/StudentsPage.vue'
 import AdminPage from '../../pages/AdminPage.vue'
 import SchedulePage from '../../pages/SchedulePage.vue'
+import DevicePolicyPage from '../../pages/DevicePolicyPage.vue'
 import WeeksPage from '../../pages/WeeksPage.vue'
 import StatisticsPage from '../../pages/StatisticsPage.vue'
 import HistoryPage from '../../pages/HistoryPage.vue'
@@ -36,6 +37,7 @@ export const routes: RouteRecordRaw[] = [
       { path: 'tracking', component: TrackingPage, meta: { title: 'Theo dõi cả lớp', roles: ['monitor', ...teachers] } },
       { path: 'weeks', component: WeeksPage, meta: { title: 'Quản lý tuần', roles: teachers } },
       { path: 'schedule', component: SchedulePage, meta: { title: 'Thời khóa biểu', roles: ['monitor', ...teachers] } },
+      { path: 'device-policy', component: DevicePolicyPage, meta: { title: 'Thiết bị điện tử', roles: teachers } },
       { path: 'students', component: StudentsPage, meta: { title: 'Học sinh', roles: teachers } },
       { path: 'statistics', component: StatisticsPage, meta: { title: 'Thống kê', roles: classUsers } },
       { path: 'history', component: HistoryPage, meta: { title: 'Lịch sử', roles: learners } },
