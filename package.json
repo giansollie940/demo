@@ -1,0 +1,48 @@
+{
+  "name": "so-tu-hoc-vue",
+  "private": true,
+  "version": "8.8.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vue-tsc -b && vite build",
+    "build:pages": "vite build",
+    "typecheck": "vue-tsc -b",
+    "preview": "vite preview",
+    "test": "node --test tests/*.test.mjs",
+    "test:unit": "vitest run --configLoader runner tests/unit",
+    "test:watch": "vitest",
+    "test:static": "node --test tests/*.test.mjs",
+    "test:e2e": "playwright test",
+    "package:edge": "node scripts/package-edge-functions.mjs",
+    "verify:release": "node scripts/verify-release.mjs",
+    "verify:quality": "node scripts/run-quality-gate.mjs",
+    "package:audit-hotfix": "node scripts/package-audit-hotfix.mjs",
+    "package:github-pages-minimal": "node scripts/package-github-pages-minimal.mjs",
+    "test:homework": "node --test tests/homework/*.test.mjs",
+    "test:homework:ui": "vitest run tests/homework/warning.test.ts",
+    "test:bug-001": "vitest run --config tests/bug-001/vitest.config.ts",
+    "test:feat-002": "FEAT002_UPGRADE=1 node --test tests/homework/*.test.mjs tests/feat-002/*.test.mjs",
+    "test:feat-003": "vitest run --config tests/feat-003/vitest.config.ts",
+    "test:feat-004": "node --test tests/feat-004/*.test.mjs && vitest run --config tests/feat-004/vitest.config.ts",
+    "test:feat-004:regression": "FEAT002_UPGRADE=1 FEAT004_UPGRADE=1 node --test tests/homework/database.test.mjs tests/feat-002/database.test.mjs"
+  },
+  "dependencies": {
+    "@tanstack/vue-query": "^5.0.0",
+    "@vueuse/core": "^13.0.0",
+    "fflate": "^0.8.3",
+    "lucide-vue-next": "^0.468.0",
+    "pinia": "^3.0.0",
+    "vue": "^3.5.0",
+    "vue-router": "^4.5.0"
+  },
+  "devDependencies": {
+    "@electric-sql/pglite": "0.3.14",
+    "@playwright/test": "^1.50.0",
+    "@vitejs/plugin-vue": "^6.0.0",
+    "typescript": "^5.8.0",
+    "vite": "^7.0.0",
+    "vitest": "^3.0.0",
+    "vue-tsc": "^2.2.0"
+  }
+}

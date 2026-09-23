@@ -1,0 +1,25 @@
+# Dependencies
+node_modules/
+
+# Build / test output
+dist/
+coverage/
+.vite/
+playwright-report/
+test-results/
+
+# Runtime/local configuration
+.env
+.env.*
+!.env.example
+public/config.js
+
+# Logs / OS files
+*.log
+.DS_Store
+Thumbs.db
+
+# Local scratch / editor files
+*.tmp
+*.bak
+*.old
