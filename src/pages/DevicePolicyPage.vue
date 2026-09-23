@@ -5,7 +5,6 @@ import DevicePolicyIcon from '../components/icons/DevicePolicyIcon.vue'
 import AppCard from '../components/ui/AppCard.vue'
 import AppButton from '../components/ui/AppButton.vue'
 import InlineStatus, { type InlineStatusState } from '../components/ui/InlineStatus.vue'
-import PageArtwork from '../components/ui/PageArtwork.vue'
 import PageBannerArt from '../components/ui/PageBannerArt.vue'
 import { useContextStore } from '../stores/context'
 import { legacyApi } from '../services/legacy-supabase'
@@ -72,7 +71,7 @@ async function run(row: DeviceSlotRow, action: 'lock' | 'unlock' | 'allow_sessio
     <header class="page-banner device-header">
       <PageBannerArt tone="sun" />
       <div class="page-head-lead">
-        <PageArtwork name="schedule" tone="sun" />
+        <span class="device-policy-hero-icon" aria-hidden="true"><DevicePolicyIcon :size="30" /></span>
         <div>
           <span class="page-context"><DevicePolicyIcon />Chính sách lớp</span>
           <h1>Thiết bị điện tử</h1>
@@ -139,6 +138,7 @@ async function run(row: DeviceSlotRow, action: 'lock' | 'unlock' | 'allow_sessio
 
 <style scoped>
 .device-policy-page{max-width:1500px;margin:0 auto}
+.device-policy-hero-icon{display:grid;place-items:center;flex:none;width:66px;height:66px;border-radius:19px;color:var(--color-warning);background:color-mix(in srgb,var(--surface) 88%,var(--color-sun));box-shadow:0 6px 16px color-mix(in srgb,var(--color-sun) 12%,transparent),inset 0 0 0 1px color-mix(in srgb,var(--color-sun) 14%,transparent)}
 .device-header{display:flex;align-items:flex-start;justify-content:space-between;gap:20px;background:linear-gradient(135deg,var(--wash-sun),color-mix(in srgb,var(--wash-pink) 60%,var(--surface)))}
 .device-header h1{margin:8px 0;font-size:clamp(2rem,4vw,3rem)}
 .device-header p{margin:0;color:var(--text-muted)}
@@ -166,4 +166,6 @@ footer :deep(svg){width:16px}
 .empty-policy h2{margin-top:0}
 .empty-policy p{margin-bottom:0;color:var(--text-muted)}
 @media(max-width:820px){.device-header{flex-direction:column}}
+@media(max-width:900px){.device-policy-hero-icon{width:54px;height:54px;border-radius:16px}}
+@media(max-width:560px){.device-policy-hero-icon{width:44px;height:44px;border-radius:13px}.device-policy-hero-icon :deep(svg){width:28px;height:28px}}
 </style>
