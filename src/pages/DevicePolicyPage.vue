@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import { Laptop2, Lock, LockOpen, RefreshCw } from 'lucide-vue-next'
+import { Lock, LockOpen, RefreshCw } from 'lucide-vue-next'
+import DevicePolicyIcon from '../components/icons/DevicePolicyIcon.vue'
 import AppCard from '../components/ui/AppCard.vue'
 import AppButton from '../components/ui/AppButton.vue'
 import InlineStatus, { type InlineStatusState } from '../components/ui/InlineStatus.vue'
@@ -73,7 +74,7 @@ async function run(row: DeviceSlotRow, action: 'lock' | 'unlock' | 'allow_sessio
       <div class="page-head-lead">
         <PageArtwork name="schedule" tone="sun" />
         <div>
-          <span class="page-context"><Laptop2 />Chính sách lớp</span>
+          <span class="page-context"><DevicePolicyIcon />Chính sách lớp</span>
           <h1>Thiết bị điện tử</h1>
           <p>Tuần {{ week?.number ?? '–' }} · khóa hoặc mở việc đăng ký thiết bị theo từng tiết.</p>
         </div>

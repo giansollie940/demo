@@ -8,6 +8,7 @@ import { usePreferencesStore } from '../../stores/preferences'
 import { buildOwlContextMessages, createQuoteRotator, messageFromQuote, type OwlMessage } from '../../features/owl/owl-model'
 import { useDailyQuote } from '../../features/owl/daily-quote'
 import { useNowTicker } from '../../features/shared/useNowTicker'
+import { useDevicePolicy } from '../../features/registrations/device-policy-queries'
 
 import { useHomeworkViewStore } from '../../features/homework/view-context'
 
@@ -16,11 +17,16 @@ const MAX_PUPIL_OFFSET = 3
 const MAX_HEAD_TILT = 5
 const FOLLOW_EASE = .18
 const auth=useAuthStore(),context=useContextStore(),preferences=usePreferencesStore(),route=useRoute(),dailyQuoteQuery=useDailyQuote(),nowMs=useNowTicker(30_000)
+const deviceContext = computed(() => auth.currentUser?.role === 'teacher' && (route.path === '/device-policy' || route.path === '/schedule' && route.query.tab === 'device'))
+const adminDeviceContext = computed(() => auth.currentUser?.role === 'admin' && route.path === '/admin' && (route.query.tab === 'device' || route.query.tab === 'schedule' && route.query.scheduleTab === 'device'))
+const policyClass = computed(() => deviceContext.value ? context.selectedClassId : null)
+const policyWeek = computed(() => deviceContext.value ? context.selectedWeekId : null)
+const devicePolicy = useDevicePolicy(policyClass, policyWeek)
 const stage=ref<HTMLElement|null>(null),speechOpen=ref(false),cursor=ref(0),message=ref<OwlMessage|null>(null)
 const quoteRotator=createQuoteRotator(undefined,{recentLimit:4})
 let raf=0,currentX=0,currentY=0,targetX=0,targetY=0,currentTilt=0,targetTilt=0
 const assets=(name:string)=>`${import.meta.env.BASE_URL}assets/images/owl/${name}`
-const contextual=computed(()=>auth.currentUser?buildOwlContextMessages({state:auth.legacyState,user:auth.currentUser,path:route.path,homeworkTab:homeworkView.selectedTab,weekId:context.selectedWeekId,nowMs:nowMs.value}):[])
+const contextual=computed(()=>auth.currentUser?buildOwlContextMessages({state:auth.legacyState,user:auth.currentUser,path:route.path,homeworkTab:homeworkView.selectedTab,weekId:context.selectedWeekId,nowMs:nowMs.value,deviceTab:deviceContext.value || adminDeviceContext.value,devicePolicySlots:deviceContext.value && devicePolicy.query.isSuccess.value ? devicePolicy.query.data.value : undefined}):[])
 const urgent=computed(()=>contextual.value.some(item=>item.urgent))
 const mandatoryLearnerAlerts=computed(()=>['student','monitor'].includes(auth.currentUser?.role??''))
 
@@ -38,13 +44,17 @@ function pointer(event:PointerEvent){
 function reset(){targetX=targetY=targetTilt=0;schedule()}
 function nextMessage(){
   const contexts=contextual.value
-  if(contexts.length&&cursor.value<Math.max(2,contexts.length)){message.value=contexts[cursor.value%contexts.length];cursor.value+=1}
+  if(cursor.value===0&&(deviceContext.value||adminDeviceContext.value)){
+    message.value=contexts.find(item=>item.kind==='page')??contexts[0]??null
+    cursor.value=1
+  }
+  else if(contexts.length&&cursor.value<Math.max(2,contexts.length)){message.value=contexts[cursor.value%contexts.length];cursor.value+=1}
   else if(preferences.owlQuotesEnabled){const online=dailyQuoteQuery.data.value;message.value=messageFromQuote(quoteRotator.next(online?[online]:[]));cursor.value=0}
   else{message.value=contexts[0]??{kind:'tip',text:'Hãy chọn một mục tiêu rõ ràng cho buổi tự học này.'};cursor.value=0}
   speechOpen.value=true
 }
 function close(){speechOpen.value=false}
-function resetContext(){cursor.value=0;message.value=contextual.value[0]??null;if(message.value?.urgent&&(mandatoryLearnerAlerts.value||preferences.owlAutoOpenUrgent))speechOpen.value=true;else if(!message.value?.urgent)speechOpen.value=false}
+function resetContext(){cursor.value=0;message.value=(deviceContext.value || adminDeviceContext.value ? contextual.value.find(item=>item.kind==='page') : null)??contextual.value[0]??null;if(message.value?.urgent&&(mandatoryLearnerAlerts.value||preferences.owlAutoOpenUrgent))speechOpen.value=true;else if(!message.value?.urgent)speechOpen.value=false}
 watch([()=>route.path,()=>context.selectedClassId,()=>context.selectedWeekId,contextual],resetContext)
 watch(()=>preferences.owlEnabled,enabled=>{if(!enabled){speechOpen.value=false;reset()}})
 watch([()=>preferences.owlFollowPointer,()=>preferences.owlHeadTilt],reset)

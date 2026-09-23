@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, watch } from 'vue'
+import { computed, ref, watch, onErrorCaptured } from 'vue'
 import {
   ChevronsLeft,
   ChevronsRight,
@@ -10,6 +10,8 @@ import { useRouter } from 'vue-router'
 import SidebarNav from '../components/layout/SidebarNav.vue'
 import TopBar from '../components/layout/TopBar.vue'
 import WiseOwl from '../components/owl/WiseOwl.vue'
+import OwlMascotV2 from '../components/owl/OwlMascotV2.vue'
+import { owlMascotV2Enabled } from '../features/owl/mascot-v2'
 
 import schoolPatternUrl from '../assets/images/school-pattern-bg.png'
 
@@ -22,6 +24,11 @@ const faviconUrl =
   `${import.meta.env.BASE_URL}assets/images/favicon.png`
 
 const auth = useAuthStore()
+const mascotFailed = ref(false)
+const pilotMascot = computed(() => !mascotFailed.value && owlMascotV2Enabled(auth.currentUser?.role, import.meta.env.VITE_OWL_MASCOT_V2_ENABLED))
+onErrorCaptured((_error, instance) => {
+  if (instance?.$?.type === OwlMascotV2) { mascotFailed.value = true; return false }
+})
 const context = useContextStore()
 const preferences = usePreferencesStore()
 const router = useRouter()
@@ -171,7 +178,8 @@ async function logout() {
         <RouterView />
       </main>
 
-      <WiseOwl />
+      <OwlMascotV2 v-if="pilotMascot" />
+      <WiseOwl v-else />
 
     </div>
 

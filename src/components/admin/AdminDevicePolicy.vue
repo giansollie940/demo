@@ -13,7 +13,8 @@
 // là cách tốn ít dòng nhất và cũng là cách dễ vô tình cấp quyền ghi nhất. Ở đây
 // không có nút nào để vô tình cấp.
 import { computed, ref, watch } from 'vue'
-import { Laptop2, RefreshCw } from 'lucide-vue-next'
+import { RefreshCw } from 'lucide-vue-next'
+import DevicePolicyIcon from '../icons/DevicePolicyIcon.vue'
 import AppCard from '../ui/AppCard.vue'
 import InlineStatus, { type InlineStatusState } from '../ui/InlineStatus.vue'
 import DevicePolicyHistory from '../registrations/DevicePolicyHistory.vue'
@@ -70,7 +71,7 @@ watch([classId, weekId], load, { immediate: true })
 <template>
   <div class="admin-device-policy">
     <AppCard padding="lg">
-      <h2><Laptop2 aria-hidden="true" />Thiết bị điện tử — chế độ chỉ xem</h2>
+      <h2><DevicePolicyIcon />Thiết bị điện tử — chế độ chỉ xem</h2>
       <p class="muted">
         Quản trị <b>chỉ xem</b> trạng thái và lịch sử để hỗ trợ điều hành. Việc khóa hoặc mở
         thuộc về giáo viên được phân công lớp — trang này cố ý không có nút thao tác nào,

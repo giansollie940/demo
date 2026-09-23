@@ -10,13 +10,14 @@
 //     for and can undercount objects R2 holds but the app forgot; 'provider' is
 //     R2's own answer, used only while it is recent. An R2 answer that has gone
 //     stale is called out rather than quietly continuing to drive the lock.
-import { computed, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { AlertTriangle, DatabaseZap, HardDrive, RefreshCw, ShieldAlert, Trash2 } from 'lucide-vue-next'
 import AppButton from '../ui/AppButton.vue'
 import AppCard from '../ui/AppCard.vue'
 import InlineStatus, { type InlineStatusState } from '../ui/InlineStatus.vue'
 import { appDialog } from '../../features/shared/app-dialog'
 import { useContextStore } from '../../stores/context'
+import { useAuthStore } from '../../stores/auth'
 import {
   cleanupPendingMedia, formatBytes, levelLabels, levelTones, measureProviders,
   refreshStorage, setStorageCapacity, storageStatus,
@@ -24,6 +25,7 @@ import {
 } from '../../features/storage/api'
 
 const context = useContextStore()
+const auth = useAuthStore()
 const state = ref<StorageState | null>(null)
 const busy = ref('')
 const status = ref<InlineStatusState>('idle')
@@ -49,10 +51,25 @@ function report(error: unknown, fallback: string) {
   statusMessage.value = error instanceof Error && error.message ? error.message : fallback
 }
 
-async function load() {
-  busy.value = 'load'
-  try { state.value = await storageStatus() } catch (error) { report(error, 'Không đọc được dung lượng.') } finally { busy.value = '' }
+let pendingLoad: Promise<void> | null = null
+let polling: ReturnType<typeof setInterval> | null = null
+let lastLoadedAt = 0
+function load() {
+  if (pendingLoad) return pendingLoad
+  if (auth.currentUser?.role !== 'admin' || typeof document !== 'undefined' && document.visibilityState === 'hidden') return Promise.resolve()
+  pendingLoad = (async () => {
+    if (!state.value) busy.value = 'load'
+    try {
+      const fresh = await storageStatus() // cached metadata; never trigger an R2 provider measurement on a timer
+      state.value = fresh
+      lastLoadedAt = Date.now()
+      if (status.value === 'error') { status.value = 'success'; statusMessage.value = 'Đã cập nhật trạng thái dung lượng.' }
+    } catch (error) { report(error, 'Không đọc được dung lượng. Đang giữ số liệu cập nhật gần nhất.') }
+    finally { if (busy.value === 'load') busy.value = ''; pendingLoad = null }
+  })()
+  return pendingLoad
 }
+function refreshOnFocus() { if (Date.now() - lastLoadedAt >= 5_000 && !busy.value) void load() }
 
 async function refreshLocal() {
   busy.value = 'refresh'; status.value = 'saving'; statusMessage.value = 'Đang đo lại…'
@@ -121,7 +138,21 @@ async function cleanup() {
   } catch (error) { report(error, 'Không dọn được ảnh chờ.') } finally { busy.value = '' }
 }
 
-onMounted(load)
+onMounted(() => {
+  void load()
+  if (typeof window !== 'undefined') {
+    polling = setInterval(() => { if (!busy.value) void load() }, 45_000)
+    window.addEventListener('focus', refreshOnFocus)
+    document.addEventListener('visibilitychange', refreshOnFocus)
+  }
+})
+onBeforeUnmount(() => {
+  if (polling) clearInterval(polling)
+  if (typeof window !== 'undefined') {
+    window.removeEventListener('focus', refreshOnFocus)
+    document.removeEventListener('visibilitychange', refreshOnFocus)
+  }
+})
 </script>
 
 <template>

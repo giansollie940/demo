@@ -1,6 +1,9 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { CalendarClock, RotateCcw, Save, Sparkles } from 'lucide-vue-next'
+import { useRoute, useRouter } from 'vue-router'
+import DevicePolicyIcon from '../components/icons/DevicePolicyIcon.vue'
+import DevicePolicyPage from './DevicePolicyPage.vue'
 import AppButton from '../components/ui/AppButton.vue'
 import AppCard from '../components/ui/AppCard.vue'
 import ConfirmDialog from '../components/ui/ConfirmDialog.vue'
@@ -29,6 +32,15 @@ import type { ScheduleSlot } from '../types/legacy'
 import { appDialog } from '../features/shared/app-dialog'
 
 const auth = useAuthStore()
+const route = useRoute()
+const router = useRouter()
+const activeTab = computed(() => auth.currentUser?.role === 'teacher' && route.query.tab === 'device' ? 'device' : 'schedule')
+async function selectTab(tab: 'schedule' | 'device') {
+  if (activeTab.value === tab) return
+  if (isDirty.value && !await appDialog.confirm({ title: 'Thay đổi chưa lưu', body: 'Bỏ thay đổi chưa lưu và chuyển tab?', confirmLabel: 'Bỏ thay đổi', danger: true })) return
+  if (isDirty.value) { dirtyEditor.markClean(); loadDraft() }
+  await router.push({ path: '/schedule', query: { ...route.query, tab: tab === 'device' ? 'device' : undefined } })
+}
 const context = useContextStore()
 const createRuntime = useLegacyMutationRuntime()
 const dirtyEditor = useDirtyEditor('schedule')
@@ -155,6 +167,9 @@ async function resetToDefault() {
 
 <template>
   <div class="page-stack schedule-page">
+    <nav v-if="!readOnly" class="schedule-tabs" aria-label="Các phần của Thời khóa biểu"><button type="button" :aria-current="activeTab === 'schedule' ? 'page' : undefined" @click="selectTab('schedule')"><CalendarClock/> Thời khóa biểu</button><button type="button" :aria-current="activeTab === 'device' ? 'page' : undefined" @click="selectTab('device')"><DevicePolicyIcon/> Thiết bị điện tử</button></nav>
+    <DevicePolicyPage v-if="activeTab === 'device'" />
+    <template v-else>
     <header class="page-banner schedule-header"><PageBannerArt tone="lilac"/>
       <div class="page-head-lead"><PageArtwork name="schedule" tone="lilac"/><div>
         <span class="page-context"><CalendarClock /> Lịch học theo lớp</span>
@@ -212,10 +227,12 @@ async function resetToDefault() {
       @confirm="resetToDefault"
       @cancel="confirmReset = false"
     />
+    </template>
   </div>
 </template>
 
 <style scoped>
 .schedule-page{max-width:1500px;margin:0 auto}.schedule-header{display:flex;align-items:flex-start;justify-content:space-between;gap:20px}.schedule-header h1{font-size:clamp(2rem,4vw,3rem);margin:8px 0}.schedule-header p,.mode-help,.grid-heading p,.inherit-card p{margin:0;color:var(--text-muted)}.page-context{display:flex;align-items:center;gap:8px;color:var(--color-primary);font-size:.86rem;font-weight:800}.page-context svg{width:18px}.header-actions{display:flex;gap:8px;flex-wrap:wrap}.header-actions :deep(svg){width:18px}.mode-card{display:flex;align-items:center;justify-content:space-between;gap:16px}.mode-help{max-width:64ch}.inherit-card{display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;gap:16px;background:linear-gradient(135deg,color-mix(in srgb,var(--color-primary) 10%,var(--surface)),var(--surface))}.inherit-card>svg{width:38px;color:var(--color-primary)}.inherit-card h2,.grid-heading h2{margin:0 0 4px}.grid-heading{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;margin-bottom:20px}.grid-heading>strong{padding:8px 12px;border-radius:999px;background:var(--surface-soft);color:var(--color-primary)}.schedule-summary,.difference-summary{display:flex;gap:8px;flex-wrap:wrap;margin-top:20px}.schedule-summary span,.difference-summary span,.difference-summary>b{padding:8px 12px;border-radius:10px;background:var(--surface-soft);color:var(--text-muted);font-size:.83rem}.difference-summary>b{color:var(--text)}.reset-row{display:flex;justify-content:flex-end;margin-top:20px;padding-top:20px;border-top:1px solid var(--border)}@media(max-width:900px){.schedule-header,.mode-card{align-items:stretch;flex-direction:column}.header-actions{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr)}.inherit-card{grid-template-columns:auto minmax(0,1fr)}.inherit-card :deep(button){grid-column:1/-1}}@media(max-width:520px){.header-actions{grid-template-columns:1fr}.grid-heading{align-items:flex-start;flex-direction:column}.inherit-card{grid-template-columns:1fr}.inherit-card>svg{width:32px}}
 .conflict-actions{display:flex;gap:8px;margin-left:auto}.conflict-actions button{min-height:44px;border:1px solid currentColor;border-radius:8px;padding:8px;background:transparent;color:inherit;font-weight:800;white-space:nowrap}
+.schedule-tabs{display:flex;gap:8px;flex-wrap:wrap}.schedule-tabs button{display:flex;align-items:center;gap:8px;min-height:44px;padding:10px 16px;border:1px solid var(--border);border-radius:12px;background:var(--surface);color:var(--text);font-weight:700;cursor:pointer}.schedule-tabs button[aria-current="page"]{background:var(--color-primary);border-color:var(--color-primary);color:white}.schedule-tabs svg{width:20px;height:20px}
 </style>

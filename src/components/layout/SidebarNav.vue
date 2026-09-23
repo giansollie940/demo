@@ -2,6 +2,7 @@
 import { computed, ref, type Component } from 'vue'
 import { useRoute } from 'vue-router'
 import { Archive, Building2, CalendarClock, CalendarRange, ChartNoAxesCombined, ClipboardCheck, GraduationCap, HardDrive, History, LayoutDashboard, MessagesSquare, NotebookPen, Settings, ShieldCheck, Trash2, TriangleAlert, UsersRound } from 'lucide-vue-next'
+import DevicePolicyIcon from '../icons/DevicePolicyIcon.vue'
 import { useAuthStore } from '../../stores/auth'
 import { visibleNavigation } from '../../features/navigation/navigation'
 
@@ -9,7 +10,7 @@ const props=defineProps<{collapsed:boolean}>()
 const route=useRoute()
 const auth=useAuthStore()
 const hoveredIndex=ref<number|null>(null)
-const icons:Record<string,Component>={LayoutDashboard,NotebookPen,ClipboardCheck,UsersRound,CalendarRange,CalendarClock,GraduationCap,ChartNoAxesCombined,History,MessagesSquare,ShieldCheck,TriangleAlert,Settings,Building2,Trash2,HardDrive,Archive}
+const icons:Record<string,Component>={DevicePolicyIcon,LayoutDashboard,NotebookPen,ClipboardCheck,UsersRound,CalendarRange,CalendarClock,GraduationCap,ChartNoAxesCombined,History,MessagesSquare,ShieldCheck,TriangleAlert,Settings,Building2,Trash2,HardDrive,Archive}
 const items=computed(()=>visibleNavigation(auth.currentUser?.role))
 
 function dockScale(index:number){

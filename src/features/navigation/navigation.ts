@@ -17,7 +17,6 @@ export const navigation:NavigationItem[]=[
   item('Theo dõi cả lớp','/tracking','UsersRound',teachers),
   item('Quản lý tuần','/weeks','CalendarRange',teachers),
   item('Thời khóa biểu','/schedule','CalendarClock',teachers),
-  item('Thiết bị điện tử','/device-policy','Laptop',teachers),
   item('Học sinh','/students','GraduationCap',teachers),
   item('Thống kê','/statistics','ChartNoAxesCombined',teachers),
   item('Thống kê của tôi','/statistics','ChartNoAxesCombined',learners),
@@ -32,8 +31,7 @@ export const navigation:NavigationItem[]=[
   item('Thùng rác','/admin?tab=recycle','Trash2',admins),
   item('Dung lượng','/admin?tab=storage','HardDrive',admins),
   item('Kho lưu trữ','/admin?tab=archive','Archive',admins),
-  // FEAT-010 · Sol RC3 R-001: Quản trị xem trạng thái/audit, không khóa/mở.
-  item('Thiết bị điện tử','/admin?tab=device','Laptop',admins),
+  item('Thời khóa biểu','/admin?tab=schedule','CalendarClock',admins),
   item('Nhật ký hệ thống','/admin?tab=audit','History',admins),
   item('Cài đặt','/settings','Settings',teachers),
 ]
@@ -45,8 +43,8 @@ export const navigation:NavigationItem[]=[
 const orders:Record<UserRole,string[]>={
   student:['Tổng quan','Báo bài','Đăng ký tự học','Báo cáo lỗi','Lịch sử','Nhận xét GV','Thống kê của tôi'],
   monitor:['Tổng quan','Báo bài','Đăng ký tự học','Báo cáo lỗi','Theo dõi lớp','Lịch sử','Nhận xét GV','Thống kê của tôi'],
-  teacher:['Tổng quan','Báo bài','Duyệt đăng ký','Báo cáo lỗi','Theo dõi cả lớp','Quản lý tuần','Thời khóa biểu','Thiết bị điện tử','Học sinh','Thống kê','Cài đặt'],
-  admin:['Tổng quan','Quản trị Báo bài','Năm học','Lớp học','Học sinh','Giáo viên','Phân quyền','Thùng rác','Dung lượng','Kho lưu trữ','Thiết bị điện tử','Nhật ký hệ thống'],
+  teacher:['Tổng quan','Báo bài','Duyệt đăng ký','Báo cáo lỗi','Theo dõi cả lớp','Quản lý tuần','Thời khóa biểu','Học sinh','Thống kê','Cài đặt'],
+  admin:['Tổng quan','Quản trị Báo bài','Năm học','Lớp học','Thời khóa biểu','Học sinh','Giáo viên','Phân quyền','Thùng rác','Dung lượng','Kho lưu trữ','Nhật ký hệ thống'],
 }
 
 export function visibleNavigation(role:UserRole|null|undefined):NavigationItem[]{

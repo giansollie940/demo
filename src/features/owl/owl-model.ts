@@ -2,6 +2,7 @@ import { resolveHomeworkTab } from '../homework/view-context'
 import type { CurrentUser, LegacyState, RegistrationRecord } from '../../types/legacy'
 import { isRegistrationIssue, isRevisionOverdue, isTeacherQueueItem, needsTeacherAction, sessionStartMs } from '../registrations/registration-model'
 import { effectiveScheduleForWeek } from '../schedule/schedule-model'
+import type { DevicePolicySlot } from '../registrations/device-policy'
 
 export interface OwlQuote { id?: string; text: string; author: string; url?: string }
 export interface OwlMessage { kind: 'urgent' | 'page' | 'tip' | 'quote'; text: string; urgent?: boolean; quote?: OwlQuote }
@@ -157,7 +158,7 @@ function monitorClassSupportMessages({ state, weekId, nowMs }: { state: LegacySt
   return messages
 }
 
-export function buildOwlContextMessages({ state, user, path, weekId = state?.currentWeekId, nowMs = Date.now(), homeworkTab }: { state: LegacyState | null; user: CurrentUser; path: string; weekId?: string | null; nowMs?: number; homeworkTab?: string | null }): OwlMessage[] {
+export function buildOwlContextMessages({ state, user, path, weekId = state?.currentWeekId, nowMs = Date.now(), homeworkTab, deviceTab = false, devicePolicySlots }: { state: LegacyState | null; user: CurrentUser; path: string; weekId?: string | null; nowMs?: number; homeworkTab?: string | null; deviceTab?: boolean; devicePolicySlots?: DevicePolicySlot[] }): OwlMessage[] {
   const route = routeName(path)
   // Resolve this subsystem before reading any Registration/Schedule state.
   if (route === 'homework') {
@@ -197,8 +198,16 @@ export function buildOwlContextMessages({ state, user, path, weekId = state?.cur
     else if (route === 'tracking') messages.push({ kind:'page', text:`Theo dõi từng buổi bằng bộ lọc để tìm nhanh học sinh chưa đăng ký hoặc cần xử lý.` })
     else if (route === 'issues') messages.push({ kind:'page', text:`Báo cáo lỗi giữ hai loại đã quá giờ bắt đầu tiết: học sinh chưa sửa kịp, và đăng ký không được duyệt kịp. Cả hai đều không còn nằm trong hàng chờ giáo viên.` })
     else if (route === 'weeks') messages.push({ kind:'page', text:`Bạn đang quản lý ${weekLabel}. Tuần kế tiếp được mở sớm để học sinh đăng ký trước.` })
+    else if ((route === 'schedule' && deviceTab || route === 'device-policy') && user.role === 'teacher') {
+      if (devicePolicySlots) {
+        const locked = devicePolicySlots.filter(slot => slot.state === 'locked').length
+        const overrides = devicePolicySlots.filter(slot => slot.state === 'allow_override').length
+        messages.push({ kind:'page', text:`Thiết bị điện tử ${weekLabel}: ${locked} tiết đang khóa, ${overrides} tiết được mở riêng; xem từng tiết trong bảng để biết chính sách đang áp dụng.` })
+      } else messages.push({ kind:'page', text:`Thiết bị điện tử ${weekLabel}: mở bảng chính sách để xem trạng thái từng tiết.` })
+    }
     else if (route === 'schedule') messages.push({ kind:'page', text:`Thời khóa biểu hiện có ${state.schedule.length} tiết mặc định; tuần có lịch riêng sẽ dùng override.` })
     else if (route === 'statistics') messages.push({ kind:'page', text:`Thống kê đang so sánh đăng ký hợp lệ, cần xử lý và chưa đăng ký theo tuần.` })
+    else if (route === 'admin' && user.role === 'admin' && deviceTab) messages.push({ kind:'page', text:'Thiết bị điện tử: chọn lớp và tuần để xem trạng thái từng tiết cùng lịch sử; Admin chỉ có quyền xem.' })
     else if (route === 'admin' && user.role === 'admin') messages.push({ kind:'page', text:`Quản trị lớp, giáo viên và phân quyền vẫn dùng các Edge Function hiện có.` })
     else if (route === 'settings') messages.push({ kind:'page', text:`Cài đặt chỉ được lưu khi bạn bấm “Lưu cài đặt”.` })
     else messages.push({ kind:'page', text:`Dashboard ${weekLabel}: ${learnerCount(state)} học sinh/cán sự hoạt động.` })

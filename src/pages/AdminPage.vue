@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { computed, reactive, ref } from 'vue'
+import { computed, reactive, ref, watch } from 'vue'
 import { Building2, CalendarDays, GraduationCap, Plus, RefreshCw, ShieldCheck, UserCog } from 'lucide-vue-next'
 import { useQueryClient } from '@tanstack/vue-query'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
+import DevicePolicyIcon from '../components/icons/DevicePolicyIcon.vue'
 import AppButton from '../components/ui/AppButton.vue'
 import AppCard from '../components/ui/AppCard.vue'
 import InlineStatus, { type InlineStatusState } from '../components/ui/InlineStatus.vue'
@@ -37,9 +38,13 @@ const auth=useAuthStore()
 const context=useContextStore()
 const queryClient=useQueryClient()
 const route=useRoute()
+const router=useRouter()
+watch(() => route.query.tab, value => { if (value === 'device') void router.replace({ path: '/admin', query: { ...route.query, tab: 'schedule', scheduleTab: 'device' } }) }, { immediate: true })
+const scheduleTab=computed(() => route.query.scheduleTab === 'device' ? 'device' : 'schedule')
+function selectScheduleTab(value: 'schedule' | 'device') { void router.push({ path: '/admin', query: { ...route.query, tab: 'schedule', scheduleTab: value === 'device' ? 'device' : undefined } }) }
 const directory=useAdminDirectory()
-const validTabs=['overview','years','classes','students','teachers','permissions','recycle','storage','archive','device','audit']
-const tab=computed(()=>{const value=String(route.query.tab??'overview');return validTabs.includes(value)?value:'overview'})
+const validTabs=['overview','years','classes','students','teachers','permissions','recycle','storage','archive','schedule','audit']
+const tab=computed(()=>{const value=String(route.query.tab??'overview');return value === 'device' ? 'schedule' : validTabs.includes(value)?value:'overview'})
 // Mỗi tab một hình minh họa riêng: thanh tiêu đề của trang Quản trị dùng chung
 // một <header>, nên hình phải đi theo tab đang mở chứ không cố định.
 const ARTWORK:Record<string,{name:string;tone:'primary'|'coral'|'sky'|'lilac'|'pink'|'info'|'warning'|'success'}>={
@@ -52,7 +57,7 @@ const ARTWORK:Record<string,{name:string;tone:'primary'|'coral'|'sky'|'lilac'|'p
   recycle:{name:'admin-recycle',tone:'warning'},
   storage:{name:'admin-storage',tone:'info'},
   archive:{name:'admin-archive',tone:'lilac'},
-  device:{name:'admin-storage',tone:'warning'},
+  schedule:{name:'schedule',tone:'lilac'},
   audit:{name:'admin-audit',tone:'sky'},
 }
 const artwork=computed(()=>ARTWORK[tab.value]??ARTWORK.overview)
@@ -200,7 +205,7 @@ async function permission(payload:{classId:string;teacherId:string;enabled:boole
 
 <template>
   <div class="page-stack admin-page">
-    <header class="page-banner admin-header"><PageBannerArt :tone="artwork.tone"/><div class="page-head-lead"><PageArtwork :name="artwork.name" :tone="artwork.tone"/><div><span class="page-context"><ShieldCheck/>ROOT ADMIN · QUẢN TRỊ HỆ THỐNG</span><h1>{{ tab==='overview'?'Tổng quan hệ thống':tab==='years'?'Năm học':tab==='classes'?'Lớp học':tab==='students'?'Học sinh':tab==='teachers'?'Giáo viên':tab==='permissions'?'Phân quyền':tab==='recycle'?'Thùng rác':tab==='storage'?'Dung lượng hệ thống':tab==='archive'?'Kho lưu trữ cuối năm':tab==='device'?'Thiết bị điện tử (chỉ xem)':'Nhật ký hệ thống' }}</h1><p>Admin quản lý cấu trúc, tài khoản và quyền hệ thống; nghiệp vụ vận hành lớp thuộc Giáo viên.</p></div></div><AppButton v-if="tab!=='audit'" variant="secondary" :loading="directory.isFetching.value" @click="directory.refetch()"><RefreshCw/>Làm mới</AppButton></header>
+    <header class="page-banner admin-header"><PageBannerArt :tone="artwork.tone"/><div class="page-head-lead"><PageArtwork :name="artwork.name" :tone="artwork.tone"/><div><span class="page-context"><ShieldCheck/>ROOT ADMIN · QUẢN TRỊ HỆ THỐNG</span><h1>{{ tab==='overview'?'Tổng quan hệ thống':tab==='years'?'Năm học':tab==='classes'?'Lớp học':tab==='students'?'Học sinh':tab==='teachers'?'Giáo viên':tab==='permissions'?'Phân quyền':tab==='recycle'?'Thùng rác':tab==='storage'?'Dung lượng hệ thống':tab==='archive'?'Kho lưu trữ cuối năm':tab==='schedule'?'Thời khóa biểu':'Nhật ký hệ thống' }}</h1><p>Admin quản lý cấu trúc, tài khoản và quyền hệ thống; nghiệp vụ vận hành lớp thuộc Giáo viên.</p></div></div><AppButton v-if="tab!=='audit'" variant="secondary" :loading="directory.isFetching.value" @click="directory.refetch()"><RefreshCw/>Làm mới</AppButton></header>
     <InlineStatus :state="status" :message="statusMessage"/>
 
     <template v-if="tab==='overview'">
@@ -239,7 +244,7 @@ async function permission(payload:{classId:string;teacherId:string;enabled:boole
 
     <AdminStorageHealth v-else-if="tab==='storage'"/>
     <AdminArchive v-else-if="tab==='archive'"/>
-    <AdminDevicePolicy v-else-if="tab==='device'" :classes="context.classes" :weeks="context.weeks"/>
+    <section v-else-if="tab==='schedule'" class="admin-schedule"><nav class="schedule-tabs" aria-label="Các phần của Thời khóa biểu"><button type="button" :aria-current="scheduleTab==='schedule'?'page':undefined" @click="selectScheduleTab('schedule')"><CalendarDays/> Thời khóa biểu</button><button type="button" :aria-current="scheduleTab==='device'?'page':undefined" @click="selectScheduleTab('device')"><DevicePolicyIcon/> Thiết bị điện tử</button></nav><AdminDevicePolicy v-if="scheduleTab==='device'" :classes="context.classes" :weeks="context.weeks"/><AppCard v-else padding="lg"><h2>Thời khóa biểu theo năm học</h2><p>Admin xem và quản lý mẫu thời khóa biểu trong Năm học. Chính sách thiết bị điện tử được xem theo lớp và tuần ở tab bên cạnh.</p><AppButton variant="secondary" @click="router.push('/admin?tab=years')">Mở Năm học</AppButton></AppCard></section>
 
     <AdminAuditLog v-else-if="tab==='audit'"/>
 
@@ -251,4 +256,5 @@ async function permission(payload:{classId:string;teacherId:string;enabled:boole
 
 <style scoped>
 .admin-page{max-width:1560px;margin:0 auto}.admin-header,.section-actions{display:flex;justify-content:space-between;align-items:flex-start;gap:16px}.admin-header h1{margin:8px 0;font-size:clamp(2rem,4vw,3rem)}.admin-header p,.section-actions p,.overview-copy p{margin:0;color:var(--text-muted)}.page-context{display:flex;align-items:center;gap:7px;color:var(--color-primary);font-size:var(--font-size-ui-min);font-weight:900;letter-spacing:.04em}.page-context svg,.admin-header :deep(.app-button svg),.section-actions :deep(svg){width:17px}.summary{display:grid;grid-template-columns:repeat(5,1fr);gap:11px}.summary :deep(.app-card){display:flex;align-items:center;justify-content:space-between}.summary span{display:flex;align-items:center;gap:7px;color:var(--text-muted);font-weight:800}.summary svg{width:18px}.summary b{font-size:1.8rem}.overview-copy h2,.section-actions h2{margin:0 0 5px}.year-grid{display:grid;grid-template-columns:1fr;gap:11px}.class-grid,.student-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:11px}.teacher-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:11px}.quick-form{display:grid;grid-template-columns:1fr 2fr auto;gap:10px;align-items:end}.quick-form.year-form{grid-template-columns:1.1fr 1fr 1fr 1.3fr auto}.quick-form label{display:grid;gap:5px;font-size:var(--font-size-ui-min);font-weight:800;color:var(--text-muted)}.quick-form input,.student-filters input,.student-filters select{min-height:44px;border:1px solid var(--border);border-radius:11px;background:var(--surface);color:var(--text);padding:8px 10px}.quick-form .check-field{display:flex;align-items:center;gap:8px;min-height:44px;padding:8px 10px;border:1px solid var(--border);border-radius:11px;background:color-mix(in srgb,var(--wash-cream) 48%,var(--surface));color:var(--text)}.quick-form .check-field input{min-height:0;width:17px;height:17px}.student-filters{display:grid;grid-template-columns:minmax(220px,1.5fr) repeat(4,minmax(130px,.7fr));gap:8px}@media(max-width:1180px){.summary{grid-template-columns:repeat(3,1fr)}.quick-form.year-form{grid-template-columns:1fr 1fr}.teacher-grid{grid-template-columns:repeat(2,1fr)}.quick-form{grid-template-columns:1fr 1fr}.quick-form :deep(.app-button){width:100%}.student-filters{grid-template-columns:1fr 1fr}}@media(max-width:720px){.admin-header,.section-actions{flex-direction:column}.summary,.year-grid,.class-grid,.student-grid,.teacher-grid{grid-template-columns:1fr}.quick-form,.quick-form.year-form,.student-filters{grid-template-columns:1fr}.admin-header :deep(.app-button),.section-actions :deep(.app-button){width:100%}}
+.admin-schedule{display:grid;gap:16px}.schedule-tabs{display:flex;gap:8px;flex-wrap:wrap}.schedule-tabs button{display:flex;align-items:center;gap:8px;min-height:44px;padding:10px 16px;border:1px solid var(--border);border-radius:12px;background:var(--surface);color:var(--text);font-weight:700;cursor:pointer}.schedule-tabs button[aria-current="page"]{background:var(--color-primary);border-color:var(--color-primary);color:white}.schedule-tabs svg{width:20px;height:20px}
 </style>
