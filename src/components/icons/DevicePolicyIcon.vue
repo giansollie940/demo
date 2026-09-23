@@ -14,10 +14,19 @@
     aria-hidden="true"
     focusable="false"
   >
-    <rect x="3" y="4" width="18" height="12" rx="2" />
-    <line x1="2" y1="20" x2="22" y2="20" />
-    <rect x="10" y="11" width="4" height="4" rx="1" fill="currentColor" stroke="none" />
-    <path d="M10 11V9a2 2 0 1 1 4 0v2" />
+    <!-- Tablet -->
+    <rect x="4" y="3" width="11" height="15" rx="2" />
+    <line x1="8" y1="6" x2="11" y2="6" />
+    <circle cx="9.5" cy="15.2" r="0.7" fill="currentColor" stroke="none" />
+
+    <!-- Phone -->
+    <rect x="14.5" y="6" width="5.5" height="10" rx="1.3" />
+    <line x1="16" y1="8" x2="18.5" y2="8" />
+    <circle cx="17.25" cy="13.9" r="0.45" fill="currentColor" stroke="none" />
+
+    <!-- Lock badge -->
+    <rect x="13" y="14.2" width="6" height="4.8" rx="1.1" fill="currentColor" stroke="none" />
+    <path d="M14.4 14.2v-1a1.6 1.6 0 1 1 3.2 0v1" />
   </svg>
 </template>
 
@@ -31,7 +40,7 @@ withDefaults(
   {
     size: 18,
     color: 'currentColor',
-    strokeWidth: 2,
+    strokeWidth: 1.8,
   },
 )
 </script>
