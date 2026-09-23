@@ -105,6 +105,8 @@ jobs:
         run: npm run typecheck
 
       - name: Build production site
+        env:
+          VITE_OWL_MASCOT_V2_ENABLED: 'true'
         run: npm run build:pages
 
       - name: Configure GitHub Pages
