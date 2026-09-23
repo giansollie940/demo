@@ -10,11 +10,12 @@
 //     for and can undercount objects R2 holds but the app forgot; 'provider' is
 //     R2's own answer, used only while it is recent. An R2 answer that has gone
 //     stale is called out rather than quietly continuing to drive the lock.
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { AlertTriangle, DatabaseZap, HardDrive, RefreshCw, ShieldAlert, Trash2 } from 'lucide-vue-next'
 import AppButton from '../ui/AppButton.vue'
 import AppCard from '../ui/AppCard.vue'
 import InlineStatus, { type InlineStatusState } from '../ui/InlineStatus.vue'
+import { subscribeStorageChanges } from '../../features/storage/live'
 import { appDialog } from '../../features/shared/app-dialog'
 import { useContextStore } from '../../stores/context'
 import { useAuthStore } from '../../stores/auth'
@@ -34,6 +35,7 @@ const sourceNote = ref('')
 const checkedAt = ref(0)
 const updating = ref(false)
 const providerNote = ref('')
+const connection = ref('Đang kết nối cập nhật trực tiếp…')
 
 const providers = computed(() => [
   { key: 'database' as const, title: 'Cơ sở dữ liệu Supabase', icon: DatabaseZap, data: state.value?.providers.database },
@@ -55,15 +57,25 @@ function report(error: unknown, fallback: string) {
 }
 
 let pendingLoad: Promise<void> | null = null
-let polling: ReturnType<typeof setInterval> | null = null
+let unsubscribe: (() => void) | undefined
+let debounce: ReturnType<typeof setTimeout> | undefined
+let dirty = false
+let r2Dirty = false
+function queueRefresh(r2 = false) {
+  dirty = true; r2Dirty ||= r2
+  if (disposed || typeof document !== 'undefined' && document.visibilityState === 'hidden') return
+  if (debounce) clearTimeout(debounce)
+  debounce = setTimeout(() => { debounce = undefined; void load() }, 1200)
+}
 let lastLoadedAt = 0
-let lastProviderAttempt = -Infinity
 let disposed = false
 function load() {
   if (pendingLoad) return pendingLoad
   if (disposed || busy.value || auth.currentUser?.role !== 'admin' || typeof document !== 'undefined' && document.visibilityState === 'hidden') return Promise.resolve()
   const actor = auth.currentUser
   const stillCurrent = () => !disposed && auth.currentUser === actor && auth.currentUser?.role === 'admin'
+  const measureR2 = r2Dirty || !state.value
+  dirty = false; r2Dirty = false
   updating.value = true
   pendingLoad = (async () => {
     try {
@@ -75,24 +87,22 @@ function load() {
       lastLoadedAt = Date.now()
       checkedAt.value = lastLoadedAt
       if (status.value === 'error') { status.value = 'success'; statusMessage.value = 'Đã cập nhật trạng thái dung lượng.' }
-      const providerTime = Date.parse(fresh.providers.r2.provider_measured_at ?? '')
-      if (Date.now() - lastProviderAttempt >= 300_000 && (!Number.isFinite(providerTime) || Date.now() - providerTime >= 300_000)) {
-        lastProviderAttempt = Date.now()
+      if (measureR2) {
         try {
           const result = await measureProviders()
           if (!stillCurrent()) return
           state.value = { ...result.state, candidates: fresh.candidates }
-          providerNote.value = result.r2.ok ? '' : 'Chưa đối soát được kho ảnh; sẽ thử lại sau 5 phút. Số liệu ứng dụng vẫn được cập nhật.'
+          providerNote.value = result.r2.ok ? '' : 'Chưa đối soát được kho ảnh; hãy bấm “Hỏi kho ảnh” để thử lại. Số liệu ứng dụng vẫn được cập nhật.'
         } catch {
-          if (stillCurrent()) providerNote.value = 'Chưa kết nối được kho ảnh; sẽ thử lại sau 5 phút. Đang giữ số đo R2 gần nhất.'
+          if (stillCurrent()) providerNote.value = 'Chưa kết nối được kho ảnh; hãy bấm “Hỏi kho ảnh” để thử lại. Đang giữ số đo R2 gần nhất.'
         }
       }
     } catch (error) { if (stillCurrent()) report(error, 'Không đọc được dung lượng. Đang giữ số liệu cập nhật gần nhất.') }
-    finally { updating.value = false; pendingLoad = null }
+    finally { updating.value = false; pendingLoad = null; if (dirty && !disposed) queueRefresh(r2Dirty) }
   })()
   return pendingLoad
 }
-function refreshOnFocus() { if (Date.now() - lastLoadedAt >= 5_000 && !busy.value) void load() }
+function refreshOnFocus() { if (Date.now() - lastLoadedAt >= 5_000 && !busy.value) queueRefresh(true) }
 
 async function refreshLocal() {
   if (updating.value || busy.value) return
@@ -101,12 +111,11 @@ async function refreshLocal() {
     state.value = { ...(await refreshStorage()), candidates: state.value?.candidates }
     state.value = await storageStatus()
     status.value = 'success'; statusMessage.value = 'Đã đo lại dung lượng trong cơ sở dữ liệu.'
-  } catch (error) { report(error, 'Không đo lại được.') } finally { busy.value = '' }
+  } catch (error) { report(error, 'Không đo lại được.') } finally { busy.value = ''; if (dirty) queueRefresh(r2Dirty) }
 }
 
 async function measureAll() {
   if (updating.value || busy.value) return
-  lastProviderAttempt = Date.now()
   busy.value = 'measure'; status.value = 'saving'; statusMessage.value = 'Đang hỏi kho ảnh…'; sourceNote.value = ''
   try {
     const result = await measureProviders()
@@ -120,7 +129,7 @@ async function measureAll() {
         : 'Chưa hỏi được Cloudflare R2. Đang dùng số liệu do ứng dụng tự cộng.'
       sourceNote.value = String(result.r2.reason ?? '')
     }
-  } catch (error) { report(error, 'Chưa đọc được dung lượng từ kho ảnh.') } finally { busy.value = '' }
+  } catch (error) { report(error, 'Chưa đọc được dung lượng từ kho ảnh.') } finally { busy.value = ''; if (dirty) queueRefresh(r2Dirty) }
 }
 
 async function editCapacity(key: 'database' | 'r2', title: string) {
@@ -141,7 +150,7 @@ async function editCapacity(key: 'database' | 'r2', title: string) {
     state.value = await storageStatus()
     status.value = 'success'
     statusMessage.value = value.trim() ? `Đã đặt dung lượng cho ${title}.` : `Đã xoá dung lượng cấu hình của ${title}.`
-  } catch (error) { report(error, 'Không lưu được dung lượng.') } finally { busy.value = '' }
+  } catch (error) { report(error, 'Không lưu được dung lượng.') } finally { busy.value = ''; if (dirty) queueRefresh(r2Dirty) }
 }
 
 async function cleanup() {
@@ -161,27 +170,48 @@ async function cleanup() {
     // failure — and point at the one action that can actually lower it.
     status.value = 'success'
     statusMessage.value = result.queued
-      ? `Đã xếp ${result.queued} ảnh chờ vào hàng xoá. Số dung lượng chưa giảm ngay: tệp vẫn nằm trong kho cho tới khi tiến trình nền xoá xong. Trang tự đo lại mỗi 15 giây và đối soát kho ảnh mỗi 5 phút; bạn cũng có thể bấm “Hỏi kho ảnh”.`
+      ? `Đã xếp ${result.queued} ảnh chờ vào hàng xoá. Số dung lượng chưa giảm ngay: tệp vẫn nằm trong kho cho tới khi tiến trình nền xoá xong. Trang cập nhật khi tiến trình nền xác nhận thay đổi; bạn cũng có thể bấm “Hỏi kho ảnh”.`
       : 'Không có ảnh chờ nào quá hạn.'
-  } catch (error) { report(error, 'Không dọn được ảnh chờ.') } finally { busy.value = '' }
+  } catch (error) { report(error, 'Không dọn được ảnh chờ.') } finally { busy.value = ''; if (dirty) queueRefresh(r2Dirty) }
 }
 
+async function connect() {
+  if (auth.currentUser?.role !== 'admin' || disposed) return
+  try {
+    const stop = await subscribeStorageChanges(r2 => queueRefresh(r2), status => {
+      if (disposed) return
+      if (status === 'SUBSCRIBED') {
+        connection.value = 'Đang nhận cập nhật khi dữ liệu thay đổi'
+        queueRefresh(true)
+      } else {
+        connection.value = 'Mất kết nối cập nhật trực tiếp; số liệu có thể đã cũ. Có thể đo bằng nút bên dưới.'
+      }
+    })
+    if (disposed || auth.currentUser?.role !== 'admin') stop()
+    else unsubscribe = stop
+  } catch (error) { if (!disposed) connection.value = error instanceof Error ? error.message : 'Chưa kết nối được cập nhật trực tiếp.' }
+}
+watch(() => auth.currentUser?.role, role => {
+  if (role !== 'admin') { unsubscribe?.(); unsubscribe = undefined; if (debounce) clearTimeout(debounce); dirty = r2Dirty = false; state.value = null }
+})
 onMounted(() => {
   void load()
+  void connect()
   if (typeof window !== 'undefined') {
-    polling = setInterval(() => { if (!busy.value) void load() }, 15_000)
     window.addEventListener('focus', refreshOnFocus)
     document.addEventListener('visibilitychange', refreshOnFocus)
   }
 })
 onBeforeUnmount(() => {
   disposed = true
-  if (polling) clearInterval(polling)
+  unsubscribe?.()
+  if (debounce) clearTimeout(debounce)
   if (typeof window !== 'undefined') {
     window.removeEventListener('focus', refreshOnFocus)
     document.removeEventListener('visibilitychange', refreshOnFocus)
   }
 })
+
 </script>
 
 <template>
@@ -192,7 +222,9 @@ onBeforeUnmount(() => {
         <p v-if="state?.measured_at">Đo lần cuối {{ new Date(state.measured_at).toLocaleString('vi-VN') }}</p>
         <p v-else>Chưa có số đo nào.</p>
         <p role="status">{{ updating ? 'Đang cập nhật…' : checkedAt ? 'Cập nhật thành công lúc ' + new Date(checkedAt).toLocaleTimeString('vi-VN') : 'Đang kết nối…' }}</p>
-        <p>Tự đo mỗi 15 giây khi mở trang · Đối soát kho ảnh mỗi 5 phút.</p>
+        <p>{{ connection }}</p>
+        <p>Ảnh chờ xóa chỉ biến mất sau khi quyền tải còn hiệu lực hết hạn, cộng 3 phút an toàn và một lượt xử lý nền thành công.</p>
+        <p>Thay đổi trực tiếp trong R2: dùng “Hỏi kho ảnh” để đối soát.</p>
         <p v-if="providerNote">{{ providerNote }}</p>
       </div>
       <div class="bar-actions">

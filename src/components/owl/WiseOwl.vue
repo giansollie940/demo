@@ -18,7 +18,7 @@ const MAX_HEAD_TILT = 5
 const FOLLOW_EASE = .18
 const auth=useAuthStore(),context=useContextStore(),preferences=usePreferencesStore(),route=useRoute(),dailyQuoteQuery=useDailyQuote(),nowMs=useNowTicker(30_000)
 const deviceContext = computed(() => auth.currentUser?.role === 'teacher' && (route.path === '/device-policy' || route.path === '/schedule' && route.query.tab === 'device'))
-const adminDeviceContext = computed(() => auth.currentUser?.role === 'admin' && route.path === '/admin' && (route.query.tab === 'device' || route.query.tab === 'schedule' && route.query.scheduleTab === 'device'))
+const adminDeviceContext = computed(() => auth.currentUser?.role === 'admin' && route.path === '/admin' && (route.query.tab === 'device' || ['schedule', 'years'].includes(String(route.query.tab)) && route.query.scheduleTab === 'device'))
 const policyClass = computed(() => deviceContext.value ? context.selectedClassId : null)
 const policyWeek = computed(() => deviceContext.value ? context.selectedWeekId : null)
 const devicePolicy = useDevicePolicy(policyClass, policyWeek)

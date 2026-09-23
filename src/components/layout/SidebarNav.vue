@@ -47,7 +47,7 @@ function dockLiftX(index:number){return hoveredIndex.value===index?(props.collap
       :key="`${item.to}-${item.label}`"
       :to="item.to"
       class="nav-item"
-      :class="{active:route.fullPath===item.to||(route.path===item.to&&!item.to.includes('?'))}"
+      :class="{active:route.fullPath===item.to||(item.to==='/admin?tab=years' && route.path==='/admin' && ['years','schedule','device'].includes(String(route.query.tab)))||(route.path===item.to&&!item.to.includes('?'))}"
       :style="{'--dock-scale':String(dockScale(index)),'--dock-shift-y':`${dockShift(index)}px`,'--dock-lift-x':`${dockLiftX(index)}px`,'--dock-gap-before':`${dockGap(index).before}px`,'--dock-gap-after':`${dockGap(index).after}px`}"
       :aria-label="collapsed?item.label:undefined"
       @mouseenter="hoveredIndex=index"

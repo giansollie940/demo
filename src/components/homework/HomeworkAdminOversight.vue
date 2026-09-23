@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import HomeworkHardDeleteDialog from './HomeworkHardDeleteDialog.vue';
 import HomeworkImage from "./HomeworkImage.vue";
 import {computed,onMounted,onUnmounted,reactive,ref,watch} from 'vue';
 import PageArtwork from '../ui/PageArtwork.vue';
@@ -20,7 +21,7 @@ const result=ref<Oversight|null>(null),classData=ref<HomeworkData|null>(null),ca
 const filters=reactive({actor_id:'',status:'',event_type:'',from:'',to:''});const offset=ref(0);
 const loading=ref(false),busy=ref(false),error=ref(''),message=ref('');let generation=0;
 const defaults=()=>({id:'',grade:grade.value||7,name:'',short_name:'',icon:'📚',sort_order:0,is_active:true,is_english:false});
-const form=reactive(defaults());const target=ref<Notice|null>(null),reason=ref(''),confirmed=ref(false),seed=ref(3),alert=ref('system');
+const form=reactive(defaults());const target=ref<Notice|null>(null),seed=ref(3),alert=ref('system');
 const labels:Record<string,string>={published:'Đã đăng',week:'Đăng trong tuần',pending:'Chờ GV xử lý',deleted:'Đã xóa',contributors:'HS đóng góp'};
 const events:Record<string,string>={submit:'Đăng/sửa Báo bài',notice_invalidated:'Xóa Báo bài',notice_restored:'Khôi phục',hard_delete:'Xóa vĩnh viễn',review_keep_existing:'Giữ bài cũ',review_replace_existing:'Thay bằng bài mới',review_keep_both:'Giữ cả hai',reminder:'Nhắc lại',ai_settings:'Cài đặt AI',subject_save:'Môn của lớp',catalog_save:'Danh mục môn khối',group_save:'Nhóm Tiếng Anh',group_assign:'Phân nhóm',settings:'Cấu hình tuyên dương'};
 function fail(e:unknown){return e instanceof Error?e.message:'Không thực hiện được thao tác';}
@@ -33,7 +34,7 @@ async function load(){const seq=++generation;loading.value=true;error.value='';r
  if(local){seed.value=local.settings.seed_threshold;alert.value=local.alert_level||'system';}
  }catch(e){if(seq===generation)error.value=fail(e);}finally{if(seq===generation)loading.value=false;}}
 async function initialize(){loading.value=true;try{context.value=await homeworkRpc<HomeworkContext>('context','');await load();}catch(e){error.value=fail(e);loading.value=false;}}
-function resetScope(){generation++;offset.value=0;week.value='';filters.actor_id='';target.value=null;reason.value='';confirmed.value=false;message.value='';Object.assign(form,defaults());}
+function resetScope(){generation++;offset.value=0;week.value='';filters.actor_id='';target.value=null;message.value='';Object.assign(form,defaults());}
 watch(grade,()=>{classId.value='';resetScope();void load();});
 watch(classId,()=>{view.scopeClassId=classId.value;resetScope();void load();});
 view.scopeClassId='';
@@ -44,8 +45,8 @@ async function mutation(action:string,payload:Record<string,unknown>,scope=class
  try{const outcome=await homeworkRpc<{media_cleanup?:string}>(action,scope,payload);if(seq!==generation)return;target.value=null;message.value=outcome?.media_cleanup==='queued'?'Đã xóa nội dung bài; ảnh đang được dọn và sẽ tự thử lại nếu kho ảnh gặp lỗi.':'Đã lưu thay đổi.';view.refreshVersion++;await load();}catch(e){if(seq===generation)error.value=fail(e);}finally{busy.value=false;}}
 async function saveCatalog(){await mutation('catalog_save',{...form,id:form.id||null},'');if(!error.value)Object.assign(form,defaults());}
 function editCatalog(s:CatalogSubject){Object.assign(form,{id:s.id,grade:s.grade,name:s.name,short_name:s.short_name,icon:s.icon,sort_order:s.sort_order,is_active:s.is_active,is_english:s.is_english});}
-function selectDelete(n:Notice){target.value=n;reason.value='';confirmed.value=false;}
-function hardDelete(){if(target.value&&confirmed.value&&reason.value.trim())void mutation('hard_delete',{id:target.value.id,hard_delete_reason:reason.value.trim(),confirm_irreversible:true},target.value.class_id);}
+function selectDelete(n:Notice){error.value='';target.value={...n};}
+function hardDelete(reason:string){if(target.value&&reason.trim())void mutation('hard_delete',{id:target.value.id,hard_delete_reason:reason.trim(),confirm_irreversible:true},target.value.class_id);}
 function classLabel(id:string){return context.value.classes.find(c=>c.id===id)?.code||id;}
 onMounted(initialize);onUnmounted(()=>{generation++;});
 </script>
@@ -65,7 +66,7 @@ onMounted(initialize);onUnmounted(()=>{generation++;});
  </AppCard>
  <AppCard v-if="tab==='awards'"><h2>Tuyên dương theo lớp</h2><p v-if="!classId">Chọn một lớp để xem tuyên dương.</p><template v-else-if="classData"><label>Thời gian<select v-model="week"><option value="">Năm học của lớp</option><option v-for="w in weeks" :key="w.id" :value="w.id">Tuần {{w.week_number}}</option></select></label><div class="form-grid"><section><h3>🐦 Chim sẻ đưa tin</h3><p v-for="p in classData.leaderboard.filter(p=>p.notices>0).sort((a,b)=>a.notice_rank-b.notice_rank)" :key="p.id">#{{p.notice_rank}} · {{p.full_name}} · {{p.notices}} bài</p></section><section><h3>⭐ Ngôi sao dẫn đường</h3><p v-for="p in classData.leaderboard.filter(p=>p.hearts>0).sort((a,b)=>a.heart_rank-b.heart_rank)" :key="p.id">#{{p.heart_rank}} · {{p.full_name}} · {{p.hearts}} tim</p></section><section><h3>🌱 Mầm xanh đóng góp</h3><p v-for="p in classData.leaderboard.filter(p=>p.seed_at)" :key="p.id">{{p.full_name}} · {{p.year_notices}} bài</p></section></div><p v-if="!classData.leaderboard.some(p=>p.notices||p.hearts)">Chưa có đóng góp hợp lệ trong thời gian này.</p></template></AppCard>
 <AppCard v-if="tab==='trash'"><h2>Thùng rác theo lớp</h2><p>Xóa vĩnh viễn từng bài đã xóa. Không thể hoàn tác.</p><article v-for="n in result.trash" :key="n.id"><h3>{{n.title}}</h3><p>{{classLabel(n.class_id)}} · {{n.delete_reason}}</p><p>Người gỡ: {{n.deleted_actor_type==='system'?'System':n.deleted_by}}</p><AppButton variant="danger" :disabled="busy" @click="selectDelete(n)">Xóa vĩnh viễn</AppButton></article><p v-if="!result.trash.length">Thùng rác trống trong phạm vi này.</p></AppCard>
- <AppCard v-if="target" role="dialog" aria-label="Xóa vĩnh viễn"><h2>Xóa vĩnh viễn: {{target.title}}</h2><form @submit.prevent="hardDelete"><label>Lý do<textarea v-model="reason" required maxlength="500" :disabled="busy" /></label><label class="check"><input v-model="confirmed" type="checkbox" :disabled="busy">Tôi xác nhận thao tác không thể hoàn tác</label><div class="toolbar"><AppButton type="submit" variant="danger" :disabled="busy||!confirmed||!reason.trim()">Xác nhận xóa vĩnh viễn</AppButton><AppButton variant="secondary" type="button" :disabled="busy" @click="target=null">Hủy</AppButton></div></form></AppCard>
+ <HomeworkHardDeleteDialog v-if="target" :key="target.id" :notice="target" :class-label="classLabel(target.class_id)" :busy="busy" :error="error" @confirm="hardDelete" @close="target=null" />
  <AppCard v-if="tab==='settings'"><h2>Cấu hình quản trị</h2><p v-if="!classData">Chọn một lớp để cấu hình tuyên dương.</p><template v-else><form @submit.prevent="mutation('settings',{seed_threshold:seed})"><label>Số bài để nhận Mầm xanh<input v-model.number="seed" type="number" min="1" max="100" required></label><AppButton type="submit" :disabled="busy">Lưu cấu hình</AppButton></form><form @submit.prevent="mutation('alert_settings',{alert_level:alert})"><label>Cảnh báo Admin<select v-model="alert"><option value="system">Chỉ lỗi hệ thống</option><option value="backlog">Lỗi hệ thống + tồn đọng</option><option value="all">Tất cả cảnh báo</option></select></label><AppButton type="submit" :disabled="busy">Lưu cảnh báo</AppButton></form></template></AppCard>
  <div v-if="['history','audit','trash'].includes(tab)" class="toolbar"><AppButton variant="secondary" :disabled="offset===0||loading" @click="offset=Math.max(0,offset-100)">Trang trước</AppButton><span>Trang {{offset/100+1}}</span><AppButton variant="secondary" :disabled="loading||(tab==='history'?result.history.length:tab==='trash'?result.trash.length:Math.max(result.audit.length,result.catalog_audit.length))<100" @click="offset+=100">Trang sau</AppButton></div>
  </template>

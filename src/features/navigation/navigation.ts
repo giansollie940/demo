@@ -31,7 +31,6 @@ export const navigation:NavigationItem[]=[
   item('Thùng rác','/admin?tab=recycle','Trash2',admins),
   item('Dung lượng','/admin?tab=storage','HardDrive',admins),
   item('Kho lưu trữ','/admin?tab=archive','Archive',admins),
-  item('Thời khóa biểu','/admin?tab=schedule','CalendarClock',admins),
   item('Nhật ký hệ thống','/admin?tab=audit','History',admins),
   item('Cài đặt','/settings','Settings',teachers),
 ]
@@ -44,7 +43,7 @@ const orders:Record<UserRole,string[]>={
   student:['Tổng quan','Báo bài','Đăng ký tự học','Báo cáo lỗi','Lịch sử','Nhận xét GV','Thống kê của tôi'],
   monitor:['Tổng quan','Báo bài','Đăng ký tự học','Báo cáo lỗi','Theo dõi lớp','Lịch sử','Nhận xét GV','Thống kê của tôi'],
   teacher:['Tổng quan','Báo bài','Duyệt đăng ký','Báo cáo lỗi','Theo dõi cả lớp','Quản lý tuần','Thời khóa biểu','Học sinh','Thống kê','Cài đặt'],
-  admin:['Tổng quan','Quản trị Báo bài','Năm học','Lớp học','Thời khóa biểu','Học sinh','Giáo viên','Phân quyền','Thùng rác','Dung lượng','Kho lưu trữ','Nhật ký hệ thống'],
+  admin:['Tổng quan','Quản trị Báo bài','Năm học','Lớp học','Học sinh','Giáo viên','Phân quyền','Thùng rác','Dung lượng','Kho lưu trữ','Nhật ký hệ thống'],
 }
 
 export function visibleNavigation(role:UserRole|null|undefined):NavigationItem[]{

@@ -39,12 +39,12 @@ const context=useContextStore()
 const queryClient=useQueryClient()
 const route=useRoute()
 const router=useRouter()
-watch(() => route.query.tab, value => { if (value === 'device') void router.replace({ path: '/admin', query: { ...route.query, tab: 'schedule', scheduleTab: 'device' } }) }, { immediate: true })
+watch(() => route.query.tab, value => { if (value === 'device' || value === 'schedule') void router.replace({ path: '/admin', query: { ...route.query, tab: 'years', scheduleTab: value === 'device' ? 'device' : route.query.scheduleTab } }) }, { immediate: true })
 const scheduleTab=computed(() => route.query.scheduleTab === 'device' ? 'device' : 'schedule')
-function selectScheduleTab(value: 'schedule' | 'device') { void router.push({ path: '/admin', query: { ...route.query, tab: 'schedule', scheduleTab: value === 'device' ? 'device' : undefined } }) }
+function selectScheduleTab(value: 'schedule' | 'device') { void router.push({ path: '/admin', query: { ...route.query, tab: 'years', scheduleTab: value === 'device' ? 'device' : undefined } }) }
 const directory=useAdminDirectory()
 const validTabs=['overview','years','classes','students','teachers','permissions','recycle','storage','archive','schedule','audit']
-const tab=computed(()=>{const value=String(route.query.tab??'overview');return value === 'device' ? 'schedule' : validTabs.includes(value)?value:'overview'})
+const tab=computed(()=>{const value=String(route.query.tab??'overview');return ['device','schedule'].includes(value) ? 'years' : validTabs.includes(value)?value:'overview'})
 // Mỗi tab một hình minh họa riêng: thanh tiêu đề của trang Quản trị dùng chung
 // một <header>, nên hình phải đi theo tab đang mở chứ không cố định.
 const ARTWORK:Record<string,{name:string;tone:'primary'|'coral'|'sky'|'lilac'|'pink'|'info'|'warning'|'success'}>={
@@ -214,9 +214,16 @@ async function permission(payload:{classId:string;teacherId:string;enabled:boole
     </template>
 
     <template v-else-if="tab==='years'">
+      <nav class="schedule-tabs" aria-label="Năm học và thời khóa biểu">
+        <button type="button" :aria-current="scheduleTab==='schedule'?'page':undefined" @click="selectScheduleTab('schedule')"><CalendarDays/> Năm học · Thời khóa biểu</button>
+        <button type="button" :aria-current="scheduleTab==='device'?'page':undefined" @click="selectScheduleTab('device')"><DevicePolicyIcon/> Thiết bị điện tử</button>
+      </nav>
+      <AdminDevicePolicy v-if="scheduleTab==='device'" :classes="context.classes" :weeks="context.weeks"/>
+      <template v-else>
       <div class="section-actions"><div><h2>Năm học</h2><p>{{ schoolYearCount }} năm học. Mỗi năm có thể có nhiều mẫu thời khóa biểu.</p></div><AppButton @click="showYearForm=!showYearForm"><Plus/>Tạo năm học</AppButton></div>
       <AppCard v-if="showYearForm" padding="md"><form class="quick-form year-form" novalidate @submit.prevent="submitYear"><label>Tên năm học<input v-model="yearForm.name" required maxlength="40" placeholder="2027–2028"></label><label>Ngày bắt đầu tuần 1<input v-model="yearForm.startDate" type="date" required></label><label>Ngày kết thúc năm học<input v-model="yearForm.endDate" type="date" required></label><label class="check-field"><input v-model="yearForm.setActive" type="checkbox">Đặt là năm học đang hoạt động</label><AppButton type="submit" :loading="busyKey==='create-year'">Tạo năm học</AppButton></form></AppCard>
       <section class="year-grid"><AdminSchoolYearCard v-for="item in mergedSchoolYears" :key="item.id" :item="item" :weeks="yearWeeks(item.id)" :classes="classesForYear(item.id)" :templates="yearTemplates(item.id)" :versions="yearVersions(item.id)" :assignments="yearTimetableAssignments(item.id)" :busy="busyKey===`year:${item.id}`" :busy-week-id="busyKey?.startsWith('week:')?busyKey.slice(5):null" :busy-timetable="timetableBusyForYear(item.id)" :timetable-feedback="timetableFeedback?.schoolYearId===item.id?timetableFeedback:undefined" :busy-assignment="Boolean(busyKey?.startsWith('timetable-assignment:'))" @activate="activateYear" @save-week="saveYearWeek" @create-template="createYearTimetable" @save-version="saveYearTimetableVersion" @assign-template="assignYearTimetable"/></section>
+      </template>
     </template>
 
     <template v-else-if="tab==='classes'">
@@ -244,7 +251,7 @@ async function permission(payload:{classId:string;teacherId:string;enabled:boole
 
     <AdminStorageHealth v-else-if="tab==='storage'"/>
     <AdminArchive v-else-if="tab==='archive'"/>
-    <section v-else-if="tab==='schedule'" class="admin-schedule"><nav class="schedule-tabs" aria-label="Các phần của Thời khóa biểu"><button type="button" :aria-current="scheduleTab==='schedule'?'page':undefined" @click="selectScheduleTab('schedule')"><CalendarDays/> Thời khóa biểu</button><button type="button" :aria-current="scheduleTab==='device'?'page':undefined" @click="selectScheduleTab('device')"><DevicePolicyIcon/> Thiết bị điện tử</button></nav><AdminDevicePolicy v-if="scheduleTab==='device'" :classes="context.classes" :weeks="context.weeks"/><AppCard v-else padding="lg"><h2>Thời khóa biểu theo năm học</h2><p>Admin xem và quản lý mẫu thời khóa biểu trong Năm học. Chính sách thiết bị điện tử được xem theo lớp và tuần ở tab bên cạnh.</p><AppButton variant="secondary" @click="router.push('/admin?tab=years')">Mở Năm học</AppButton></AppCard></section>
+
 
     <AdminAuditLog v-else-if="tab==='audit'"/>
 

@@ -48,5 +48,5 @@ export function createOwlMascotController(now: () => number = Date.now, cooldown
 
 /** Rollback is a build-time flag; user roles are checked independently. */
 export function owlMascotV2Enabled(role: string | undefined, flag: string | undefined): boolean {
-  return flag === 'true' && role === 'admin'
+  return flag === 'true' && ['admin', 'teacher', 'monitor', 'student'].includes(role ?? '')
 }
