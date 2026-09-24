@@ -4,6 +4,8 @@ import { legacyApi } from '../services/legacy-supabase'
 import { useAuthStore } from '../stores/auth'
 import { useContextStore } from '../stores/context'
 import { dirtyRegistry } from '../features/shared/dirty-registry'
+import type { RealtimeChange } from '../types/legacy'
+import { createRealtimeSupervisor } from './realtime-supervisor'
 
 const registrationEditors = ['registration-dialog', 'approval-detail'] as const
 const structuralTables=['classes','class_teachers','class_settings','class_weeks','weeks','study_schedule','week_schedule_overrides','profiles']
@@ -38,35 +40,60 @@ export function devicePolicyInvalidations(table:unknown):string[][]|null{
 }
 
 export function useRealtimeInvalidation(){
-  const queryClient=useQueryClient();const auth=useAuthStore();const context=useContextStore();let subscribed=false
-  async function stop(){if(!subscribed)return;await legacyApi.unsubscribeRealtime();subscribed=false}
-  async function start(){
-    if(!auth.isAuthenticated||subscribed)return
-    await Promise.resolve(legacyApi.subscribeRealtime(async change=>{
-      if(change.table==='registrations'){
-        auth.applyRealtimeChange(change)
-        dirtyRegistry.notifyServerChange(registrationEditors)
-        await queryClient.invalidateQueries({queryKey:['week-data']})
-        return
-      }
-      const devicePolicyKeys=devicePolicyInvalidations(change.table)
-      if(devicePolicyKeys){
-        await Promise.all(devicePolicyKeys.map(queryKey=>queryClient.invalidateQueries({queryKey})))
-        return
-      }
-      if(change.table==='teacher_notifications'){
-        auth.applyRealtimeChange(change)
-        return
-      }
-      if(change.structural||structuralTables.includes(String(change.table||''))){
-        dirtyRegistry.notifyServerChange()
-        await auth.reload(context.selectedClassId,context.selectedSchoolYearId)
-        context.hydrate(auth.legacyState)
-        await queryClient.invalidateQueries()
-      }
-    },()=>{}))
-    subscribed=true
+  const queryClient=useQueryClient()
+  const auth=useAuthStore()
+  const context=useContextStore()
+
+  async function catchUp(){
+    await Promise.all([
+      queryClient.invalidateQueries({queryKey:['device-policy']}),
+      queryClient.invalidateQueries({queryKey:['week-data']}),
+    ])
   }
-  watch(()=>auth.isAuthenticated,enabled=>{if(enabled)void start();else void stop()},{immediate:true})
-  onBeforeUnmount(()=>{void stop()})
+
+  async function handleChange(change:RealtimeChange){
+    if(change.table==='registrations'){
+      auth.applyRealtimeChange(change)
+      dirtyRegistry.notifyServerChange(registrationEditors)
+      await queryClient.invalidateQueries({queryKey:['week-data']})
+      return
+    }
+    const devicePolicyKeys=devicePolicyInvalidations(change.table)
+    if(devicePolicyKeys){
+      await Promise.all(devicePolicyKeys.map(queryKey=>queryClient.invalidateQueries({queryKey})))
+      return
+    }
+    if(change.table==='teacher_notifications'){
+      auth.applyRealtimeChange(change)
+      return
+    }
+    if(change.structural||structuralTables.includes(String(change.table||''))){
+      dirtyRegistry.notifyServerChange()
+      await auth.reload(context.selectedClassId,context.selectedSchoolYearId)
+      context.hydrate(auth.legacyState)
+      await queryClient.invalidateQueries()
+    }
+  }
+
+  const realtime=createRealtimeSupervisor<RealtimeChange>({
+    subscribe:(onChange,onStatus)=>legacyApi.subscribeRealtime(
+      change=>{void Promise.resolve(onChange(change)).catch(error=>console.error('Realtime change failed',error))},
+      onStatus,
+    ),
+    unsubscribe:()=>legacyApi.unsubscribeRealtime(),
+    onChange:handleChange,
+    onCatchUp:catchUp,
+  })
+
+  watch(()=>auth.isAuthenticated,enabled=>{if(enabled)void realtime.start();else void realtime.stop()},{immediate:true})
+
+  const onVisibility=()=>{if(document.visibilityState==='visible')void realtime.foreground()}
+  document.addEventListener('visibilitychange',onVisibility)
+  window.addEventListener('focus',onVisibility)
+
+  onBeforeUnmount(()=>{
+    document.removeEventListener('visibilitychange',onVisibility)
+    window.removeEventListener('focus',onVisibility)
+    void realtime.stop()
+  })
 }
