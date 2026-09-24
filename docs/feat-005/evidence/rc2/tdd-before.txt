@@ -1,0 +1,6 @@
+Before application fixes, new tests were run against RC1 source.
+UI command: npx vitest run --config tests/feat-005/vitest.config.ts
+Result: 2 failed, 5 passed. Missing revision-comparison and published subject name.
+Browser command: node tests/feat-005/rc2-browser.mjs
+Result: exit 1. R-002 focus enters correction editor: expected true, received false.
+The browser failure JSON is retained in browser-before.json.

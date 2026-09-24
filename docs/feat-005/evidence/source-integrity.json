@@ -1,0 +1,13 @@
+{
+  "baseline_archive_sha256": "8c073b3fdfb7c227b8481f1d092268bea144efd1453258849a38f738b647a315",
+  "specification_sha256": {
+    "FINAL_SPEC_SYSTEM_ACTOR_RESOLVED.md": "08720b4571b538488322924739ae0bce5c02660448a86285fbca6e49595963e0",
+    "DECISIONS_UPDATE_SYSTEM_ACTOR_RESOLVED.md": "d76c91506f127023ac2f183bdb7d5312d94d6d7d00ddbd2ea251d0428f36374e"
+  },
+  "changes": 31,
+  "notes": [
+    "No baseline Git commits exist; diff is against supplied archive.",
+    "Build output dist, node_modules, caches and FEAT-005 documentation are excluded from source diff.",
+    "Original documents and archive are retained untouched."
+  ]
+}

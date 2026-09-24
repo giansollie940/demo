@@ -1,0 +1,116 @@
+[
+  {
+    "name": "homework_private.actionable",
+    "liveSha256": "d1fe8f50ad12ce797c6aafce6813590fc60b838bc9b77cda4832765e3b3688f5",
+    "localSha256": "d1fe8f50ad12ce797c6aafce6813590fc60b838bc9b77cda4832765e3b3688f5",
+    "exactMatch": true
+  },
+  {
+    "name": "homework_private.actor",
+    "liveSha256": "577480b8fcc2ce885c2d9ce90d39c21ce55f4243fee2aba394e755ef42180906",
+    "localSha256": "577480b8fcc2ce885c2d9ce90d39c21ce55f4243fee2aba394e755ef42180906",
+    "exactMatch": true
+  },
+  {
+    "name": "homework_private.ai_config",
+    "liveSha256": "f837a48649e47dd501e1689a9849164999ff55fdfd63cf61962f9ba4fe248717",
+    "localSha256": "f837a48649e47dd501e1689a9849164999ff55fdfd63cf61962f9ba4fe248717",
+    "exactMatch": true
+  },
+  {
+    "name": "homework_private.api_v3",
+    "liveSha256": "f4344e9960a87e48018b3fc23943cf06f927f647cdaded9832dcfd33fe06510f",
+    "localSha256": "f4344e9960a87e48018b3fc23943cf06f927f647cdaded9832dcfd33fe06510f",
+    "exactMatch": true
+  },
+  {
+    "name": "homework_private.audit",
+    "liveSha256": "e7945bf77addbac365fd87cd11afdbd931bcfa8afd70a64af3d69ce911c0757c",
+    "localSha256": "e7945bf77addbac365fd87cd11afdbd931bcfa8afd70a64af3d69ce911c0757c",
+    "exactMatch": true
+  },
+  {
+    "name": "homework_private.backlog",
+    "liveSha256": "04ba620000d2c443aed0a4c86f3cce5b95c112c0504b6082112d92ab9a479586",
+    "localSha256": "04ba620000d2c443aed0a4c86f3cce5b95c112c0504b6082112d92ab9a479586",
+    "exactMatch": true
+  },
+  {
+    "name": "homework_private.candidates",
+    "liveSha256": "602e936a9c1495061efe007296b41bbd533742745e6c6fe481e96f97ba5cf9c8",
+    "localSha256": "602e936a9c1495061efe007296b41bbd533742745e6c6fe481e96f97ba5cf9c8",
+    "exactMatch": true
+  },
+  {
+    "name": "homework_private.card",
+    "liveSha256": "d4633f265e68d9eba66e597ddb68156c4bbebd8ecc4b17be2049a20feec1720c",
+    "localSha256": "d4633f265e68d9eba66e597ddb68156c4bbebd8ecc4b17be2049a20feec1720c",
+    "exactMatch": true
+  },
+  {
+    "name": "homework_private.class_subject_catalog_guard",
+    "liveSha256": "a7e22151bfc9dd005cab8c70bbd2789289a763c8021cec79987d31fb4d92a044",
+    "localSha256": "a7e22151bfc9dd005cab8c70bbd2789289a763c8021cec79987d31fb4d92a044",
+    "exactMatch": true
+  },
+  {
+    "name": "homework_private.hard_delete",
+    "liveSha256": "36cce0df468f451a044e6dec6851c7779f96bef91cd0b8e2fc297c3e6caf29e8",
+    "localSha256": "36cce0df468f451a044e6dec6851c7779f96bef91cd0b8e2fc297c3e6caf29e8",
+    "exactMatch": true
+  },
+  {
+    "name": "homework_private.immutable_grade",
+    "liveSha256": "4bf8c2befbeff7b0672fe7522f8cc00c22a4e5a5e32ecc29d3a0df83acc2227d",
+    "localSha256": "4bf8c2befbeff7b0672fe7522f8cc00c22a4e5a5e32ecc29d3a0df83acc2227d",
+    "exactMatch": true
+  },
+  {
+    "name": "homework_private.immutable_tombstone",
+    "liveSha256": "de0369a08b2bb8696fca0b10bb01e9586441f1a5c46d912de64d8fc83e8ac002",
+    "localSha256": "de0369a08b2bb8696fca0b10bb01e9586441f1a5c46d912de64d8fc83e8ac002",
+    "exactMatch": true
+  },
+  {
+    "name": "homework_private.notification_visible",
+    "liveSha256": "11bbbc79169942cf6dd4185f14e873fd9735c5bbc760d825d6420ea3ebcb36a5",
+    "localSha256": "11bbbc79169942cf6dd4185f14e873fd9735c5bbc760d825d6420ea3ebcb36a5",
+    "exactMatch": true
+  },
+  {
+    "name": "homework_private.notify_managers",
+    "liveSha256": "0b88ab4da6f5dc19fe2c8c8b70ee8a4972e664e9032ef1cd415e8f140819f9a8",
+    "localSha256": "0b88ab4da6f5dc19fe2c8c8b70ee8a4972e664e9032ef1cd415e8f140819f9a8",
+    "exactMatch": true
+  },
+  {
+    "name": "homework_private.queue_card",
+    "liveSha256": "eb5c77fddc18d230b28b373b9825f251e905de2081a4f284a3c430b6f624421c",
+    "localSha256": "eb5c77fddc18d230b28b373b9825f251e905de2081a4f284a3c430b6f624421c",
+    "exactMatch": true
+  },
+  {
+    "name": "homework_private.visible",
+    "liveSha256": "93a305449d4952ef9f8d291dc773a3fe87c7fbdbec250149bed7b857362ddfca",
+    "localSha256": "93a305449d4952ef9f8d291dc773a3fe87c7fbdbec250149bed7b857362ddfca",
+    "exactMatch": true
+  },
+  {
+    "name": "public.homework_ai",
+    "liveSha256": "1cfc0393b6d2ebfdfae9cd9410e562fe54a93eccb27a691c10fb14ae8170a988",
+    "localSha256": "1cfc0393b6d2ebfdfae9cd9410e562fe54a93eccb27a691c10fb14ae8170a988",
+    "exactMatch": true
+  },
+  {
+    "name": "public.homework_api",
+    "liveSha256": "c786ad9e74794fad84772d72f5bdd6f2c3f260466173b1aab8bbf62192f198f2",
+    "localSha256": "c786ad9e74794fad84772d72f5bdd6f2c3f260466173b1aab8bbf62192f198f2",
+    "exactMatch": true
+  },
+  {
+    "name": "public.homework_maintenance",
+    "liveSha256": "cb6871b640659691b9932b3870a9df4650417522b5fdaa8729602a9ffa8b31ff",
+    "localSha256": "cb6871b640659691b9932b3870a9df4650417522b5fdaa8729602a9ffa8b31ff",
+    "exactMatch": true
+  }
+]

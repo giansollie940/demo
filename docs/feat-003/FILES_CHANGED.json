@@ -1,0 +1,25 @@
+{
+  "baseline": "FEAT-002-BAO-BAI-REVIEW.zip",
+  "changed": [
+    "dist/index.html",
+    "package.json",
+    "src/pages/HomeworkPage.vue",
+    "tests/bug-001/regression.test.ts"
+  ],
+  "added": [
+    "REVIEW_FEAT003.md",
+    "dist/assets/index-Bj9GzNFw.js",
+    "dist/assets/index-Bj9GzNFw.js.map",
+    "dist/assets/index-BqjlQiuM.css",
+    "dist/assets/index-CqzDK8Mi.js",
+    "dist/assets/index-CqzDK8Mi.js.map",
+    "dist/assets/index-D-NtqA0k.css",
+    "src/components/homework/HomeworkAiSettings.vue",
+    "src/components/homework/HomeworkGroupManager.vue",
+    "src/features/homework/management.css",
+    "tests/feat-003/ui.test.ts",
+    "tests/feat-003/vitest.config.ts"
+  ],
+  "deleted": [],
+  "documentation": "docs/feat-003/**"
+}

@@ -1,0 +1,217 @@
+--- /dev/null
++++ b/deploy/feat-006/rc1-monitor-read-fix.sql
+@@ -0,0 +1,83 @@
++-- FEAT-006 RC1 -> RC2 function-only patch, after RC1 migration 10.
++-- For fresh RC2 installs use updated migration 10 instead. No data rewrite.
++begin;
++create or replace function public.homework_media(p_action text,p_data jsonb default '{}'::jsonb) returns jsonb
++language plpgsql security definer set search_path=pg_catalog,public as $$
++declare c uuid:=(p_data->>'class_id')::uuid; a public.profiles; m public.homework_attachments;
++ n public.homework_notices;cor public.homework_corrections; target uuid:=nullif(p_data->>'notice_id','')::uuid;
++ rid uuid:=nullif(p_data->>'request_id','')::uuid; mid uuid; until_time timestamptz;
++begin
++ a:=homework_private.actor(c);
++ perform pg_advisory_xact_lock(hashtextextended('homework:'||c::text,0));
++ if p_action='prepare' then
++  if a.role::text not in('student','monitor','teacher') then raise exception 'Chỉ tác giả được tải ảnh' using errcode='42501';end if;
++  if rid is null then raise exception 'Thiếu mã yêu cầu';end if;
++  if target is not null then
++   select * into n from public.homework_notices where id=target and class_id=c for update;
++   if n.id is null or n.author_id<>a.id or n.status in('deleted','replaced') then raise exception 'Không có quyền thay ảnh' using errcode='42501';end if;
++   select * into cor from public.homework_corrections where notice_id=target and status in('awaiting_author','awaiting_teacher');
++   if cor.id is not null then
++    if cor.status<>'awaiting_author' or cor.id is distinct from nullif(p_data->>'correction_id','')::uuid or cor.round is distinct from (p_data->>'round')::smallint or cor.version is distinct from (p_data->>'version')::int
++     or exists(select 1 from public.homework_correction_rounds where correction_id=cor.id and round=cor.round and due_at<=clock_timestamp()) then raise exception 'Yêu cầu chỉnh sửa đã thay đổi';end if;
++   elsif nullif(p_data->>'correction_id','') is not null or n.revision is distinct from (p_data->>'revision')::int then raise exception 'Bài đã thay đổi';end if;
++  elsif nullif(p_data->>'correction_id','') is not null then raise exception 'Không có bản chỉnh sửa';end if;
++  select * into m from public.homework_attachments where owner_id=a.id and upload_id=coalesce(nullif(p_data->>'upload_id','')::uuid,rid);
++  if m.id is not null then
++   if m.class_id<>c or m.notice_id is distinct from target or m.checksum is distinct from p_data->>'checksum' or m.size_bytes is distinct from (p_data->>'size_bytes')::int or m.width is distinct from (p_data->>'width')::int or m.height is distinct from (p_data->>'height')::int
++    or m.correction_id is distinct from cor.id or m.status<>'pending' or m.expires_at<=clock_timestamp() then raise exception 'Yêu cầu tải ảnh đã thay đổi hoặc hết hạn';end if;
++   return to_jsonb(m);
++  end if;
++  mid:=gen_random_uuid();
++  insert into public.homework_attachments(id,owner_id,class_id,school_year_id,notice_id,request_id,upload_id,base_revision,correction_id,correction_round,object_key,staging_key,size_bytes,width,height,checksum)
++  values(mid,a.id,c,(select school_year_id from public.classes where id=c),target,rid,coalesce(nullif(p_data->>'upload_id','')::uuid,rid),n.revision,cor.id,cor.round,
++   'homework/'||c::text||'/'||mid::text||'/image.webp','pending/'||c::text||'/'||mid::text||'/upload.webp',
++   (p_data->>'size_bytes')::int,(p_data->>'width')::int,(p_data->>'height')::int,p_data->>'checksum')returning * into m;
++  return to_jsonb(m);
++ end if;
++ select * into m from public.homework_attachments where id=(p_data->>'attachment_id')::uuid and class_id=c for update;
++ if m.id is null or m.status='deleting' then raise exception 'Không có ảnh khả dụng' using errcode='42501';end if;
++ if p_action in('ticket','cancel') then
++  if m.owner_id<>a.id or a.role::text='admin' or m.status<>'pending' then raise exception 'Chỉ tác giả dùng ảnh chờ' using errcode='42501';end if;
++  if p_action='cancel' then perform homework_private.media_enqueue(m.id,'pending_canceled');return '{"ok":true,"cleanup":"queued"}';end if;
++  if m.expires_at<=clock_timestamp() then raise exception 'Ảnh chờ đã hết hạn 24 giờ';end if;
++  if m.notice_id is not null then
++   select * into n from public.homework_notices where id=m.notice_id and author_id=a.id and class_id=c;
++   if n.id is null or n.status in('deleted','replaced') then raise exception 'Bài không còn nhận ảnh';end if;
++   if m.correction_id is not null then
++    if not exists(select 1 from public.homework_corrections x join public.homework_correction_rounds r on r.correction_id=x.id and r.round=x.round where x.id=m.correction_id and x.notice_id=n.id and x.round=m.correction_round and x.status='awaiting_author' and r.due_at>clock_timestamp()) then raise exception 'Correction không còn nhận ảnh';end if;
++   elsif n.revision<>m.base_revision or exists(select 1 from public.homework_corrections where notice_id=n.id and status in('awaiting_author','awaiting_teacher')) then raise exception 'Bài đã thay đổi';end if;
++  end if;
++  -- Covers short PUT/signing + bounded promotion work; cleanup sweeps again after this grant.
++  until_time:=least(m.expires_at,clock_timestamp()+interval '5 minutes');
++  update public.homework_attachments set grant_until=until_time where id=m.id returning * into m;
++  return to_jsonb(m);
++ elsif p_action='read' then
++  if m.status='pending' then
++   if a.id<>m.owner_id or m.verified_at is null or m.expires_at<=clock_timestamp() then raise exception 'Ảnh chờ riêng tư' using errcode='42501';end if;
++  else
++   select * into n from public.homework_notices where id=m.notice_id and class_id=c;
++   if n.id is null then raise exception 'Ảnh đã gỡ' using errcode='42501';end if;
++   if exists(select 1 from public.homework_notice_media where notice_id=n.id and attachment_id=m.id) then
++    -- FEAT-006 P1: peer image access requires active English membership for
++    -- Student AND Monitor; the legacy visible() helper exempts Monitor.
++    if not (n.author_id=a.id or a.role::text in('teacher','admin') or (n.status='published' and (
++     n.english_group_id is null or exists(
++      select 1 from public.english_group_members membership
++      where membership.english_group_id=n.english_group_id
++       and membership.student_id=a.id and membership.left_at is null
++     )
++    ))) then raise exception 'Ngoài phạm vi bài' using errcode='42501';end if;
++   elsif exists(select 1 from public.homework_media_history where notice_id=n.id and attachment_id=m.id) then
++    if not(n.author_id=a.id or a.role::text in('teacher','admin')) then raise exception 'Lịch sử ảnh riêng tư' using errcode='42501';end if;
++   elsif exists(select 1 from public.homework_correction_rounds r join public.homework_corrections x on x.id=r.correction_id where x.notice_id=n.id and r.attachment_id=m.id) then
++    if not(n.author_id=a.id or a.role::text='teacher') then raise exception 'Ảnh chỉnh sửa riêng tư' using errcode='42501';end if;
++   else raise exception 'Ảnh không còn tham chiếu' using errcode='42501';end if;
++  end if;
++  return jsonb_build_object('id',m.id,'object_key',m.object_key,'width',m.width,'height',m.height);
++ end if;
++ raise exception 'Thao tác ảnh không hợp lệ';
++end $$;
++
++revoke all on function public.homework_media(text,jsonb) from public,anon,authenticated;
++grant execute on function public.homework_media(text,jsonb) to authenticated;
++commit;
+--- /dev/null
++++ b/tests/feat-006/fixtures/rc1-media-function.sql
+@@ -0,0 +1,69 @@
++-- TEST ONLY: exact RC1 function body, reproduced for upgrade regression.
++create or replace function public.homework_media(p_action text,p_data jsonb default '{}'::jsonb) returns jsonb
++language plpgsql security definer set search_path=pg_catalog,public as $$
++declare c uuid:=(p_data->>'class_id')::uuid; a public.profiles; m public.homework_attachments;
++ n public.homework_notices;cor public.homework_corrections; target uuid:=nullif(p_data->>'notice_id','')::uuid;
++ rid uuid:=nullif(p_data->>'request_id','')::uuid; mid uuid; until_time timestamptz;
++begin
++ a:=homework_private.actor(c);
++ perform pg_advisory_xact_lock(hashtextextended('homework:'||c::text,0));
++ if p_action='prepare' then
++  if a.role::text not in('student','monitor','teacher') then raise exception 'Chỉ tác giả được tải ảnh' using errcode='42501';end if;
++  if rid is null then raise exception 'Thiếu mã yêu cầu';end if;
++  if target is not null then
++   select * into n from public.homework_notices where id=target and class_id=c for update;
++   if n.id is null or n.author_id<>a.id or n.status in('deleted','replaced') then raise exception 'Không có quyền thay ảnh' using errcode='42501';end if;
++   select * into cor from public.homework_corrections where notice_id=target and status in('awaiting_author','awaiting_teacher');
++   if cor.id is not null then
++    if cor.status<>'awaiting_author' or cor.id is distinct from nullif(p_data->>'correction_id','')::uuid or cor.round is distinct from (p_data->>'round')::smallint or cor.version is distinct from (p_data->>'version')::int
++     or exists(select 1 from public.homework_correction_rounds where correction_id=cor.id and round=cor.round and due_at<=clock_timestamp()) then raise exception 'Yêu cầu chỉnh sửa đã thay đổi';end if;
++   elsif nullif(p_data->>'correction_id','') is not null or n.revision is distinct from (p_data->>'revision')::int then raise exception 'Bài đã thay đổi';end if;
++  elsif nullif(p_data->>'correction_id','') is not null then raise exception 'Không có bản chỉnh sửa';end if;
++  select * into m from public.homework_attachments where owner_id=a.id and upload_id=coalesce(nullif(p_data->>'upload_id','')::uuid,rid);
++  if m.id is not null then
++   if m.class_id<>c or m.notice_id is distinct from target or m.checksum is distinct from p_data->>'checksum' or m.size_bytes is distinct from (p_data->>'size_bytes')::int or m.width is distinct from (p_data->>'width')::int or m.height is distinct from (p_data->>'height')::int
++    or m.correction_id is distinct from cor.id or m.status<>'pending' or m.expires_at<=clock_timestamp() then raise exception 'Yêu cầu tải ảnh đã thay đổi hoặc hết hạn';end if;
++   return to_jsonb(m);
++  end if;
++  mid:=gen_random_uuid();
++  insert into public.homework_attachments(id,owner_id,class_id,school_year_id,notice_id,request_id,upload_id,base_revision,correction_id,correction_round,object_key,staging_key,size_bytes,width,height,checksum)
++  values(mid,a.id,c,(select school_year_id from public.classes where id=c),target,rid,coalesce(nullif(p_data->>'upload_id','')::uuid,rid),n.revision,cor.id,cor.round,
++   'homework/'||c::text||'/'||mid::text||'/image.webp','pending/'||c::text||'/'||mid::text||'/upload.webp',
++   (p_data->>'size_bytes')::int,(p_data->>'width')::int,(p_data->>'height')::int,p_data->>'checksum')returning * into m;
++  return to_jsonb(m);
++ end if;
++ select * into m from public.homework_attachments where id=(p_data->>'attachment_id')::uuid and class_id=c for update;
++ if m.id is null or m.status='deleting' then raise exception 'Không có ảnh khả dụng' using errcode='42501';end if;
++ if p_action in('ticket','cancel') then
++  if m.owner_id<>a.id or a.role::text='admin' or m.status<>'pending' then raise exception 'Chỉ tác giả dùng ảnh chờ' using errcode='42501';end if;
++  if p_action='cancel' then perform homework_private.media_enqueue(m.id,'pending_canceled');return '{"ok":true,"cleanup":"queued"}';end if;
++  if m.expires_at<=clock_timestamp() then raise exception 'Ảnh chờ đã hết hạn 24 giờ';end if;
++  if m.notice_id is not null then
++   select * into n from public.homework_notices where id=m.notice_id and author_id=a.id and class_id=c;
++   if n.id is null or n.status in('deleted','replaced') then raise exception 'Bài không còn nhận ảnh';end if;
++   if m.correction_id is not null then
++    if not exists(select 1 from public.homework_corrections x join public.homework_correction_rounds r on r.correction_id=x.id and r.round=x.round where x.id=m.correction_id and x.notice_id=n.id and x.round=m.correction_round and x.status='awaiting_author' and r.due_at>clock_timestamp()) then raise exception 'Correction không còn nhận ảnh';end if;
++   elsif n.revision<>m.base_revision or exists(select 1 from public.homework_corrections where notice_id=n.id and status in('awaiting_author','awaiting_teacher')) then raise exception 'Bài đã thay đổi';end if;
++  end if;
++  -- Covers short PUT/signing + bounded promotion work; cleanup sweeps again after this grant.
++  until_time:=least(m.expires_at,clock_timestamp()+interval '5 minutes');
++  update public.homework_attachments set grant_until=until_time where id=m.id returning * into m;
++  return to_jsonb(m);
++ elsif p_action='read' then
++  if m.status='pending' then
++   if a.id<>m.owner_id or m.verified_at is null or m.expires_at<=clock_timestamp() then raise exception 'Ảnh chờ riêng tư' using errcode='42501';end if;
++  else
++   select * into n from public.homework_notices where id=m.notice_id and class_id=c;
++   if n.id is null then raise exception 'Ảnh đã gỡ' using errcode='42501';end if;
++   if exists(select 1 from public.homework_notice_media where notice_id=n.id and attachment_id=m.id) then
++    if not (n.author_id=a.id or a.role::text in('teacher','admin') or (n.status='published' and homework_private.visible(n,a))) then raise exception 'Ngoài phạm vi bài' using errcode='42501';end if;
++   elsif exists(select 1 from public.homework_media_history where notice_id=n.id and attachment_id=m.id) then
++    if not(n.author_id=a.id or a.role::text in('teacher','admin')) then raise exception 'Lịch sử ảnh riêng tư' using errcode='42501';end if;
++   elsif exists(select 1 from public.homework_correction_rounds r join public.homework_corrections x on x.id=r.correction_id where x.notice_id=n.id and r.attachment_id=m.id) then
++    if not(n.author_id=a.id or a.role::text='teacher') then raise exception 'Ảnh chỉnh sửa riêng tư' using errcode='42501';end if;
++   else raise exception 'Ảnh không còn tham chiếu' using errcode='42501';end if;
++  end if;
++  return jsonb_build_object('id',m.id,'object_key',m.object_key,'width',m.width,'height',m.height);
++ end if;
++ raise exception 'Thao tác ảnh không hợp lệ';
++end $$;
+--- a/database/upgrade/10-FEAT-006-HOMEWORK-MEDIA.sql
++++ b/database/upgrade/10-FEAT-006-HOMEWORK-MEDIA.sql
+@@ -129,7 +129,15 @@
+    select * into n from public.homework_notices where id=m.notice_id and class_id=c;
+    if n.id is null then raise exception 'Ảnh đã gỡ' using errcode='42501';end if;
+    if exists(select 1 from public.homework_notice_media where notice_id=n.id and attachment_id=m.id) then
+-    if not (n.author_id=a.id or a.role::text in('teacher','admin') or (n.status='published' and homework_private.visible(n,a))) then raise exception 'Ngoài phạm vi bài' using errcode='42501';end if;
++    -- FEAT-006 P1: peer image access requires active English membership for
++    -- Student AND Monitor; the legacy visible() helper exempts Monitor.
++    if not (n.author_id=a.id or a.role::text in('teacher','admin') or (n.status='published' and (
++     n.english_group_id is null or exists(
++      select 1 from public.english_group_members membership
++      where membership.english_group_id=n.english_group_id
++       and membership.student_id=a.id and membership.left_at is null
++     )
++    ))) then raise exception 'Ngoài phạm vi bài' using errcode='42501';end if;
+    elsif exists(select 1 from public.homework_media_history where notice_id=n.id and attachment_id=m.id) then
+     if not(n.author_id=a.id or a.role::text in('teacher','admin')) then raise exception 'Lịch sử ảnh riêng tư' using errcode='42501';end if;
+    elsif exists(select 1 from public.homework_correction_rounds r join public.homework_corrections x on x.id=r.correction_id where x.notice_id=n.id and r.attachment_id=m.id) then
+--- a/tests/feat-006/database.test.mjs
++++ b/tests/feat-006/database.test.mjs
+@@ -117,3 +117,37 @@
+  assert.equal((await db.query('select soft_delete_actor_type from homework_tombstones where notice_id=$1',[n.id])).rows[0].soft_delete_actor_type,'system');
+  }finally{await db.close();}
+ });
++test('P1 Monitor published-image reads require active English membership; Teacher and Admin oversight unchanged',async()=>{
++ const db=await setup();try{let n=await seed(db);const a=await prepare(db,n);await seal(db,a);n=await rpc(db,ids.s,'submit',{...n,attachment_id:a.id});
++ // No English-group restriction for ordinary class notices.
++ assert.ok(await media(db,ids.m,'read',{attachment_id:a.id}));
++ const e1=await rpc(db,ids.t,'group_save',{name:'E1'}),e2=await rpc(db,ids.t,'group_save',{name:'E2'});
++ await db.query('update homework_notices set english_group_id=$1 where id=$2',[e1.id,n.id]);
++ await assert.rejects(media(db,ids.m,'read',{attachment_id:a.id}),{code:'42501'});
++ await rpc(db,ids.t,'group_assign',{student_id:ids.m,english_group_id:e2.id});
++ await assert.rejects(media(db,ids.m,'read',{attachment_id:a.id}),{code:'42501'});
++ await rpc(db,ids.t,'group_assign',{student_id:ids.m,english_group_id:e1.id});
++ assert.equal((await media(db,ids.m,'read',{attachment_id:a.id})).object_key,a.object_key);
++ // Existing assignment API closes E1 membership when moving to E2.
++ await rpc(db,ids.t,'group_assign',{student_id:ids.m,english_group_id:e2.id});
++ await assert.rejects(media(db,ids.m,'read',{attachment_id:a.id}),{code:'42501'});
++ for(const user of [ids.t,ids.a])assert.ok(await media(db,user,'read',{attachment_id:a.id}));
++ assert.ok((await db.query('select 1 from english_group_members where student_id=$1 and english_group_id=$2 and left_at is not null',[ids.m,e1.id])).rows.length);
++ }finally{await db.close();}
++});
++test('RC1 function-only upgrade preserves media data, denies Monitor bypass, and is repeatable',async()=>{
++ const db=await setup();try{let n=await seed(db);const a=await prepare(db,n);await seal(db,a);n=await rpc(db,ids.s,'submit',{...n,attachment_id:a.id});
++ const e1=await rpc(db,ids.t,'group_save',{name:'E1'});await db.query('update homework_notices set english_group_id=$1 where id=$2',[e1.id,n.id]);
++ await db.exec(await readFile(new URL('./fixtures/rc1-media-function.sql',import.meta.url),'utf8'));
++ assert.ok(await media(db,ids.m,'read',{attachment_id:a.id})); // reproduce exact RC1 behavior
++ const before=(await db.query('select to_jsonb(x) data from homework_attachments x order by id')).rows;
++ const visible=(await db.query("select pg_get_functiondef('homework_private.visible(public.homework_notices,public.profiles)'::regprocedure) definition")).rows;
++ const patch=await readFile(new URL('../../deploy/feat-006/rc1-monitor-read-fix.sql',import.meta.url),'utf8');
++ await db.exec(patch);await db.exec(patch);
++ assert.deepEqual((await db.query('select to_jsonb(x) data from homework_attachments x order by id')).rows,before);
++ assert.deepEqual((await db.query("select pg_get_functiondef('homework_private.visible(public.homework_notices,public.profiles)'::regprocedure) definition")).rows,visible);
++ await assert.rejects(media(db,ids.m,'read',{attachment_id:a.id}),{code:'42501'});
++ await db.exec('set role anon');await assert.rejects(db.query("select homework_media('read',$1::jsonb)",[JSON.stringify({class_id:classId,attachment_id:a.id})]),{code:'42501'});await db.exec('reset role');
++ for(const user of [ids.t,ids.a])assert.ok(await media(db,user,'read',{attachment_id:a.id}));
++ }finally{await db.close();}
++});

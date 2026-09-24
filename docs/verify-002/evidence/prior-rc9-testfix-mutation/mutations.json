@@ -1,0 +1,871 @@
+[
+  {
+    "name": "M1",
+    "total": 68,
+    "failed": 19,
+    "passed": 49,
+    "failing": [
+      "1/3 khoá một buổi chưa bắt đầu, và tuần sau vẫn khoá",
+      "2 buổi đã bắt đầu trước lúc khoá thì không bị sửa",
+      "4/5 mở khoá chỉ mở buổi bắt đầu sau đó; tuần trong khoảng cũ vẫn khoá mãi",
+      "7/8 EC-010-006: mở riêng đúng một buổi, tuần sau trở lại khoá",
+      "9 hủy mở riêng trước giờ học trả buổi đó về khoá, và giữ lại lịch sử",
+      "10 học sinh gửi thẳng device=true vào REST trong buổi đang khoá vẫn không có thiết bị",
+      "11 lớp trưởng gửi thẳng device=true vào REST trong buổi đang khoá vẫn không có thiết bị",
+      "12 AC-010-010: đăng ký bổ sung không phải quyền vượt khoá",
+      "13 EC-010-013: AI ghi được phát hiện thiết bị nhưng không bật được quyền",
+      "14/26 EC-010-011: khoá không đưa một đăng ký đã duyệt trở lại hàng chờ",
+      "15 AC-010-013: khoá rồi mở trước giờ học trả lại đúng lựa chọn cũ, không ai phải nhập lại",
+      "16 một buổi lịch sử nằm trong khoảng khoá vẫn false sau khi mở khoá về sau",
+      "19/20 AC-010-020: ghi đăng ký và đổi policy xếp hàng trên cùng một khoá slot",
+      "27/28 hồi quy: cột hiệu lực đọc được cùng lúc với phần còn lại của đăng ký",
+      "29 hồi quy: vòng đời tuần và thời khoá biểu không bị FEAT-010 chạm vào",
+      "trigger của FEAT-010 chạy sau trigger điền class_id, và điền đúng ngay từ INSERT",
+      "RC1-P1 override của chu kỳ khoá cũ không sống lại ở chu kỳ khoá mới",
+      "RC4-R-003 năm học active thì giáo viên vẫn khoá được — chốt chặn không chặn nhầm",
+      "RC7-R-008 sau Lock A → ALLOW → Unlock A → Lock B, state của người quản lý vẫn đọc được"
+    ],
+    "broken": false,
+    "valid": true,
+    "exitCode": 1,
+    "wipeout": false,
+    "caught": true,
+    "what": "trigger không bao giờ hạ quyền: hiệu lực luôn bằng yêu cầu"
+  },
+  {
+    "name": "M2",
+    "total": 68,
+    "failed": 1,
+    "passed": 67,
+    "failing": [
+      "5/16 BR-010-005: hai biên bằng nhau nghiêng về \"không hồi tố\""
+    ],
+    "broken": false,
+    "valid": true,
+    "exitCode": 1,
+    "wipeout": false,
+    "caught": true,
+    "what": "BR-010-005: khoá hồi tố cả buổi bắt đầu đúng lúc bấm Lock (> thành >=)"
+  },
+  {
+    "name": "M3",
+    "total": 68,
+    "failed": 1,
+    "passed": 67,
+    "failing": [
+      "5/16 BR-010-005: hai biên bằng nhau nghiêng về \"không hồi tố\""
+    ],
+    "broken": false,
+    "valid": true,
+    "exitCode": 1,
+    "wipeout": false,
+    "caught": true,
+    "what": "BR-010-005: mở khoá hồi tố buổi bắt đầu đúng lúc bấm Unlock (<= thành <)"
+  },
+  {
+    "name": "M4",
+    "total": 68,
+    "failed": 9,
+    "passed": 59,
+    "failing": [
+      "4/5 mở khoá chỉ mở buổi bắt đầu sau đó; tuần trong khoảng cũ vẫn khoá mãi",
+      "5/16 BR-010-005: hai biên bằng nhau nghiêng về \"không hồi tố\"",
+      "6 EC-010-005: khoá thứ Hai, mở thứ Năm, thì thứ Sáu cùng tuần mở",
+      "EC-010-007 mở khoá toàn cục trước buổi học làm override thành thừa, không thành xung đột",
+      "15 AC-010-013: khoá rồi mở trước giờ học trả lại đúng lựa chọn cũ, không ai phải nhập lại",
+      "16 một buổi lịch sử nằm trong khoảng khoá vẫn false sau khi mở khoá về sau",
+      "21 EC-010-008: biên dùng thời khoá biểu có hiệu lực cho buổi đó, không phải giờ mặc định",
+      "RC1-P1 override tạo khi slot chưa khoá phải bị từ chối",
+      "RC4-R-003 năm học active thì giáo viên vẫn khoá được — chốt chặn không chặn nhầm"
+    ],
+    "broken": false,
+    "valid": true,
+    "exitCode": 1,
+    "wipeout": false,
+    "caught": true,
+    "what": "DEC-104: quên hẳn unlocked_at — đã khoá là khoá mãi mãi"
+  },
+  {
+    "name": "M5",
+    "total": 68,
+    "failed": 10,
+    "passed": 58,
+    "failing": [
+      "1/3 khoá một buổi chưa bắt đầu, và tuần sau vẫn khoá",
+      "2 buổi đã bắt đầu trước lúc khoá thì không bị sửa",
+      "7/8 EC-010-006: mở riêng đúng một buổi, tuần sau trở lại khoá",
+      "14/26 EC-010-011: khoá không đưa một đăng ký đã duyệt trở lại hàng chờ",
+      "15 AC-010-013: khoá rồi mở trước giờ học trả lại đúng lựa chọn cũ, không ai phải nhập lại",
+      "19/20 AC-010-020: ghi đăng ký và đổi policy xếp hàng trên cùng một khoá slot",
+      "27/28 hồi quy: cột hiệu lực đọc được cùng lúc với phần còn lại của đăng ký",
+      "RC1-P1 override của chu kỳ khoá cũ không sống lại ở chu kỳ khoá mới",
+      "RC4-R-003 năm học active thì giáo viên vẫn khoá được — chốt chặn không chặn nhầm",
+      "RC7-R-008 sau Lock A → ALLOW → Unlock A → Lock B, state của người quản lý vẫn đọc được"
+    ],
+    "broken": false,
+    "valid": true,
+    "exitCode": 1,
+    "wipeout": false,
+    "caught": true,
+    "what": "Lock không tính lại các đăng ký đã có"
+  },
+  {
+    "name": "M6",
+    "total": 68,
+    "failed": 2,
+    "passed": 66,
+    "failing": [
+      "15 AC-010-013: khoá rồi mở trước giờ học trả lại đúng lựa chọn cũ, không ai phải nhập lại",
+      "RC4-R-003 năm học active thì giáo viên vẫn khoá được — chốt chặn không chặn nhầm"
+    ],
+    "broken": false,
+    "valid": true,
+    "exitCode": 1,
+    "wipeout": false,
+    "caught": true,
+    "what": "Unlock không tính lại các đăng ký đã có"
+  },
+  {
+    "name": "M7",
+    "total": 68,
+    "failed": 2,
+    "passed": 66,
+    "failing": [
+      "9 hủy mở riêng trước giờ học trả buổi đó về khoá, và giữ lại lịch sử",
+      "RC7-R-008 mở riêng → hủy → mở riêng lại trong cùng một chu kỳ vẫn trả đúng một ngoại lệ"
+    ],
+    "broken": false,
+    "valid": true,
+    "exitCode": 1,
+    "wipeout": false,
+    "caught": true,
+    "what": "DEC-113: override đã hủy vẫn có hiệu lực"
+  },
+  {
+    "name": "M8",
+    "total": 68,
+    "failed": 1,
+    "passed": 67,
+    "failing": [
+      "DEC-113 hủy mở riêng sau khi buổi đã bắt đầu bị từ chối, và công thức cũng không hồi tố"
+    ],
+    "broken": false,
+    "valid": true,
+    "exitCode": 1,
+    "wipeout": false,
+    "caught": true,
+    "what": "override hồi tố: mở cả những buổi đã bắt đầu trước khi nó được tạo"
+  },
+  {
+    "name": "M9",
+    "total": 68,
+    "failed": 1,
+    "passed": 67,
+    "failing": [
+      "18 DEC-109: Admin xem được nhưng không thay giáo viên khoá/mở"
+    ],
+    "broken": false,
+    "valid": true,
+    "exitCode": 1,
+    "wipeout": false,
+    "caught": true,
+    "what": "DEC-109: Admin được thay giáo viên khoá/mở (teacher_has_class → can_manage_class)"
+  },
+  {
+    "name": "M10",
+    "total": 68,
+    "failed": 1,
+    "passed": 67,
+    "failing": [
+      "17 AC-010-017: giáo viên không thao tác được lớp ngoài phân công"
+    ],
+    "broken": false,
+    "valid": true,
+    "exitCode": 1,
+    "wipeout": false,
+    "caught": true,
+    "what": "bỏ coalesce ở kiểm tra quyền đọc — NULL trở thành \"được phép\""
+  },
+  {
+    "name": "M11",
+    "total": 68,
+    "failed": 4,
+    "passed": 64,
+    "failing": [
+      "30 §13: học sinh và lớp trưởng không ghi thẳng được vào bảng policy",
+      "giáo viên được phân công không ghi thẳng vào bảng policy — chỉ qua RPC",
+      "RC1-§8 history chỉ dành cho người quản lý lớp; state của học sinh không mang thông tin tác nhân",
+      "RC3-R-002 ba bảng của FEAT-010 cũng không được lộ cho anon"
+    ],
+    "broken": false,
+    "valid": true,
+    "exitCode": 1,
+    "wipeout": false,
+    "caught": true,
+    "what": "§13: mở cho authenticated ghi thẳng vào bảng policy"
+  },
+  {
+    "name": "M12",
+    "total": 68,
+    "failed": 1,
+    "passed": 67,
+    "failing": [
+      "19/20 AC-010-020: ghi đăng ký và đổi policy xếp hàng trên cùng một khoá slot"
+    ],
+    "broken": false,
+    "valid": true,
+    "exitCode": 1,
+    "wipeout": false,
+    "caught": true,
+    "what": "BR-010-018: bỏ khoá tư vấn ở đường ghi đăng ký"
+  },
+  {
+    "name": "M13",
+    "total": 68,
+    "failed": 1,
+    "passed": 67,
+    "failing": [
+      "22b vì sao nhánh fail-safe của trigger không tới được, và điều gì giữ nó như vậy"
+    ],
+    "broken": false,
+    "valid": true,
+    "exitCode": 1,
+    "wipeout": false,
+    "caught": true,
+    "what": "EC-010-010: đoán \"open\" thay vì báo lỗi khi không giải được giờ bắt đầu"
+  },
+  {
+    "name": "M14",
+    "total": 68,
+    "failed": 1,
+    "passed": 67,
+    "failing": [
+      "EC-010-001/EC-010-002: khoá hai lần không tạo khoảng chồng; mở khi đang mở là no-op"
+    ],
+    "broken": false,
+    "valid": true,
+    "exitCode": 1,
+    "wipeout": false,
+    "caught": true,
+    "what": "EC-010-001: bỏ ràng buộc \"chỉ một khoảng đang mở\""
+  },
+  {
+    "name": "M15",
+    "total": 68,
+    "failed": 1,
+    "passed": 67,
+    "failing": [
+      "14/26 EC-010-011: khoá không đưa một đăng ký đã duyệt trở lại hàng chờ"
+    ],
+    "broken": false,
+    "valid": true,
+    "exitCode": 1,
+    "wipeout": false,
+    "caught": true,
+    "what": "DEC-107: hàm tính lại cũng đụng vào status, nên policy kích hoạt review"
+  },
+  {
+    "name": "M16",
+    "total": 68,
+    "failed": 20,
+    "passed": 48,
+    "failing": [
+      "1/3 khoá một buổi chưa bắt đầu, và tuần sau vẫn khoá",
+      "2 buổi đã bắt đầu trước lúc khoá thì không bị sửa",
+      "4/5 mở khoá chỉ mở buổi bắt đầu sau đó; tuần trong khoảng cũ vẫn khoá mãi",
+      "7/8 EC-010-006: mở riêng đúng một buổi, tuần sau trở lại khoá",
+      "9 hủy mở riêng trước giờ học trả buổi đó về khoá, và giữ lại lịch sử",
+      "10 học sinh gửi thẳng device=true vào REST trong buổi đang khoá vẫn không có thiết bị",
+      "11 lớp trưởng gửi thẳng device=true vào REST trong buổi đang khoá vẫn không có thiết bị",
+      "12 AC-010-010: đăng ký bổ sung không phải quyền vượt khoá",
+      "13 EC-010-013: AI ghi được phát hiện thiết bị nhưng không bật được quyền",
+      "14/26 EC-010-011: khoá không đưa một đăng ký đã duyệt trở lại hàng chờ",
+      "15 AC-010-013: khoá rồi mở trước giờ học trả lại đúng lựa chọn cũ, không ai phải nhập lại",
+      "16 một buổi lịch sử nằm trong khoảng khoá vẫn false sau khi mở khoá về sau",
+      "19/20 AC-010-020: ghi đăng ký và đổi policy xếp hàng trên cùng một khoá slot",
+      "24/25 hồi quy: đăng ký, sửa, và vòng AI vẫn chạy y như cũ khi không có policy",
+      "27/28 hồi quy: cột hiệu lực đọc được cùng lúc với phần còn lại của đăng ký",
+      "29 hồi quy: vòng đời tuần và thời khoá biểu không bị FEAT-010 chạm vào",
+      "trigger của FEAT-010 chạy sau trigger điền class_id, và điền đúng ngay từ INSERT",
+      "RC1-P1 override của chu kỳ khoá cũ không sống lại ở chu kỳ khoá mới",
+      "RC4-R-003 năm học active thì giáo viên vẫn khoá được — chốt chặn không chặn nhầm",
+      "RC7-R-008 sau Lock A → ALLOW → Unlock A → Lock B, state của người quản lý vẫn đọc được"
+    ],
+    "broken": false,
+    "valid": true,
+    "exitCode": 1,
+    "wipeout": false,
+    "caught": true,
+    "what": "DEC-106: AND thành OR — policy tự bật thiết bị cho người không xin"
+  },
+  {
+    "name": "M17",
+    "total": 68,
+    "failed": 1,
+    "passed": 67,
+    "failing": [
+      "DEC-113 hủy mở riêng sau khi buổi đã bắt đầu bị từ chối, và công thức cũng không hồi tố"
+    ],
+    "broken": false,
+    "valid": true,
+    "exitCode": 1,
+    "wipeout": false,
+    "caught": true,
+    "what": "BR-010-007: cho phép hủy override sau khi buổi đã bắt đầu"
+  },
+  {
+    "name": "M18",
+    "total": 68,
+    "failed": 10,
+    "passed": 58,
+    "failing": [
+      "1/3 khoá một buổi chưa bắt đầu, và tuần sau vẫn khoá",
+      "7/8 EC-010-006: mở riêng đúng một buổi, tuần sau trở lại khoá",
+      "9 hủy mở riêng trước giờ học trả buổi đó về khoá, và giữ lại lịch sử",
+      "EC-010-007 mở khoá toàn cục trước buổi học làm override thành thừa, không thành xung đột",
+      "10 học sinh gửi thẳng device=true vào REST trong buổi đang khoá vẫn không có thiết bị",
+      "11 lớp trưởng gửi thẳng device=true vào REST trong buổi đang khoá vẫn không có thiết bị",
+      "15 AC-010-013: khoá rồi mở trước giờ học trả lại đúng lựa chọn cũ, không ai phải nhập lại",
+      "27/28 hồi quy: cột hiệu lực đọc được cùng lúc với phần còn lại của đăng ký",
+      "RC4-R-003 năm học active thì giáo viên vẫn khoá được — chốt chặn không chặn nhầm",
+      "RC7-R-008 và sau khi ALLOW lại dưới Lock B, state trả đúng ngoại lệ của chu kỳ đang chạy"
+    ],
+    "broken": false,
+    "valid": true,
+    "exitCode": 1,
+    "wipeout": false,
+    "caught": true,
+    "what": "BR-010-008: khoá ghi đè luôn lựa chọn gốc của học sinh"
+  },
+  {
+    "name": "M19",
+    "total": 68,
+    "failed": 1,
+    "passed": 67,
+    "failing": [
+      "trigger của FEAT-010 chạy sau trigger điền class_id, và điền đúng ngay từ INSERT"
+    ],
+    "broken": false,
+    "valid": true,
+    "exitCode": 1,
+    "wipeout": false,
+    "caught": true,
+    "what": "đổi tên trigger để nó chạy trước trigger điền class_id"
+  },
+  {
+    "name": "M20",
+    "total": 68,
+    "failed": 1,
+    "passed": 67,
+    "failing": [
+      "RC1-P1 override tạo khi slot chưa khoá phải bị từ chối"
+    ],
+    "broken": false,
+    "valid": true,
+    "exitCode": 1,
+    "wipeout": false,
+    "caught": true,
+    "what": "RC1-P1: allow_session gắn vào một khoảng bất kỳ của slot, không phải khoảng đang khoá buổi đó"
+  },
+  {
+    "name": "M21",
+    "total": 68,
+    "failed": 3,
+    "passed": 65,
+    "failing": [
+      "RC1-P1 override của chu kỳ khoá cũ không sống lại ở chu kỳ khoá mới",
+      "RC7-R-008 sau Lock A → ALLOW → Unlock A → Lock B, state của người quản lý vẫn đọc được",
+      "RC7-R-008 và sau khi ALLOW lại dưới Lock B, state trả đúng ngoại lệ của chu kỳ đang chạy"
+    ],
+    "broken": false,
+    "valid": true,
+    "exitCode": 1,
+    "wipeout": false,
+    "caught": true,
+    "what": "RC1-P1: đánh giá override theo lớp+tuần+ô thay vì theo khoảng khoá — override chu kỳ cũ sống lại"
+  },
+  {
+    "name": "M22",
+    "total": 68,
+    "failed": 2,
+    "passed": 66,
+    "failing": [
+      "RC1-P2 state phải dùng lịch hiệu lực của tuần, không phải lịch nền",
+      "RC1-P2 buổi bị lịch tuần gỡ bỏ thì không còn trong state"
+    ],
+    "broken": false,
+    "valid": true,
+    "exitCode": 1,
+    "wipeout": false,
+    "caught": true,
+    "what": "RC1-P2: state quay lại dùng lịch nền thay vì lịch hiệu lực của tuần"
+  },
+  {
+    "name": "M23",
+    "total": 68,
+    "failed": 3,
+    "passed": 65,
+    "failing": [
+      "RC1-P3 hàm trợ giúp SECURITY DEFINER không được lộ ra cho client",
+      "RC1-§8 học sinh không xem được lớp khác, và người chưa đăng nhập không gọi được hàm nào",
+      "RC1-P3 đúng một hàm của FEAT-010 gọi được từ client, và đó là wrapper"
+    ],
+    "broken": false,
+    "valid": true,
+    "exitCode": 1,
+    "wipeout": false,
+    "caught": true,
+    "what": "RC1-P3: cấp lại EXECUTE hàm trợ giúp cho client"
+  },
+  {
+    "name": "M24",
+    "total": 68,
+    "failed": 2,
+    "passed": 66,
+    "failing": [
+      "RC1-§8 history chỉ dành cho người quản lý lớp; state của học sinh không mang thông tin tác nhân",
+      "RC4-R-003 đọc vẫn mở sau khi năm học đã lưu trữ"
+    ],
+    "broken": false,
+    "valid": true,
+    "exitCode": 1,
+    "wipeout": false,
+    "caught": true,
+    "what": "RC1-§8: history dùng chung kiểm tra quyền với state — học sinh đọc được ai bấm nút"
+  },
+  {
+    "name": "M25",
+    "total": 68,
+    "failed": 2,
+    "passed": 66,
+    "failing": [
+      "RC1-§8 history chỉ dành cho người quản lý lớp; state của học sinh không mang thông tin tác nhân",
+      "RC7-R-008 state của học sinh không đổi, và vẫn không mang override_id"
+    ],
+    "broken": false,
+    "valid": true,
+    "exitCode": 1,
+    "wipeout": false,
+    "caught": true,
+    "what": "RC1-§8: state trả bản đầy đủ cho mọi người, kể cả học sinh"
+  },
+  {
+    "name": "M26",
+    "total": 68,
+    "failed": 1,
+    "passed": 67,
+    "failing": [
+      "RC1-§10 state phân biệt trạng thái lịch sử của buổi với trạng thái hiện tại của slot"
+    ],
+    "broken": false,
+    "valid": true,
+    "exitCode": 1,
+    "wipeout": false,
+    "caught": true,
+    "what": "RC1-§10: current_recurring_state chỉ lặp lại state của buổi đang xem"
+  },
+  {
+    "name": "M27",
+    "total": 68,
+    "failed": 2,
+    "passed": 66,
+    "failing": [
+      "30 §13: học sinh và lớp trưởng không ghi thẳng được vào bảng policy",
+      "RC1-§8 history chỉ dành cho người quản lý lớp; state của học sinh không mang thông tin tác nhân"
+    ],
+    "broken": false,
+    "valid": true,
+    "exitCode": 1,
+    "wipeout": false,
+    "caught": true,
+    "what": "RC1-§8: mở lại quyền đọc thẳng bảng policy cho học sinh của lớp"
+  },
+  {
+    "name": "M28",
+    "total": 68,
+    "failed": 1,
+    "passed": 67,
+    "failing": [
+      "RC2-§8 học sinh phải quan sát được \"policy vừa đổi\" qua thứ em ấy được phép đọc"
+    ],
+    "broken": false,
+    "valid": true,
+    "exitCode": 1,
+    "wipeout": false,
+    "caught": true,
+    "what": "RC2-§8: tín hiệu chỉ cho người quản lý đọc — học sinh lại không nhận được realtime"
+  },
+  {
+    "name": "M29",
+    "total": 68,
+    "failed": 1,
+    "passed": 67,
+    "failing": [
+      "RC2-§8 học sinh phải quan sát được \"policy vừa đổi\" qua thứ em ấy được phép đọc"
+    ],
+    "broken": false,
+    "valid": true,
+    "exitCode": 1,
+    "wipeout": false,
+    "caught": true,
+    "what": "RC2-§8: Lock không phát tín hiệu"
+  },
+  {
+    "name": "M30",
+    "total": 68,
+    "failed": 1,
+    "passed": 67,
+    "failing": [
+      "RC2-§8 học sinh phải quan sát được \"policy vừa đổi\" qua thứ em ấy được phép đọc"
+    ],
+    "broken": false,
+    "valid": true,
+    "exitCode": 1,
+    "wipeout": false,
+    "caught": true,
+    "what": "RC2-§8: Unlock không phát tín hiệu"
+  },
+  {
+    "name": "M31",
+    "total": 68,
+    "failed": 1,
+    "passed": 67,
+    "failing": [
+      "RC2-§8 học sinh phải quan sát được \"policy vừa đổi\" qua thứ em ấy được phép đọc"
+    ],
+    "broken": false,
+    "valid": true,
+    "exitCode": 1,
+    "wipeout": false,
+    "caught": true,
+    "what": "RC2-§8: mở riêng / hủy mở riêng không phát tín hiệu"
+  },
+  {
+    "name": "M32",
+    "total": 68,
+    "failed": 1,
+    "passed": 67,
+    "failing": [
+      "RC2-§8 học sinh phải quan sát được \"policy vừa đổi\" qua thứ em ấy được phép đọc"
+    ],
+    "broken": false,
+    "valid": true,
+    "exitCode": 1,
+    "wipeout": false,
+    "caught": true,
+    "what": "RC2-§8: tín hiệu mang thêm ai vừa đổi policy — mở lại đúng thứ §8 đóng"
+  },
+  {
+    "name": "M33",
+    "total": 68,
+    "failed": 3,
+    "passed": 65,
+    "failing": [
+      "RC2-§8 học sinh phải quan sát được \"policy vừa đổi\" qua thứ em ấy được phép đọc",
+      "RC2-§8 tín hiệu chỉ ghi được qua RPC, không ghi thẳng được",
+      "RC3-R-002 ba bảng của FEAT-010 cũng không được lộ cho anon"
+    ],
+    "broken": false,
+    "valid": true,
+    "exitCode": 1,
+    "wipeout": false,
+    "caught": true,
+    "what": "RC2-§8: mở cho client ghi thẳng vào bảng tín hiệu"
+  },
+  {
+    "name": "M34",
+    "total": 68,
+    "failed": 1,
+    "passed": 67,
+    "failing": [
+      "RC1-P3 đúng một hàm của FEAT-010 gọi được từ client, và đó là wrapper"
+    ],
+    "broken": false,
+    "valid": true,
+    "exitCode": 1,
+    "wipeout": false,
+    "caught": true,
+    "what": "RC3-R-002: wrapper chỉ revoke khỏi PUBLIC — anon giữ nguyên EXECUTE tường minh"
+  },
+  {
+    "name": "M35",
+    "total": 68,
+    "failed": 1,
+    "passed": 67,
+    "failing": [
+      "RC1-P3 đúng một hàm của FEAT-010 gọi được từ client, và đó là wrapper"
+    ],
+    "broken": false,
+    "valid": true,
+    "exitCode": 1,
+    "wipeout": false,
+    "caught": true,
+    "what": "RC3-R-002: bỏ hàm trigger khỏi danh sách thu hồi"
+  },
+  {
+    "name": "M36",
+    "total": 68,
+    "failed": 1,
+    "passed": 67,
+    "failing": [
+      "RC3-R-002 ba bảng của FEAT-010 cũng không được lộ cho anon"
+    ],
+    "broken": false,
+    "valid": true,
+    "exitCode": 1,
+    "wipeout": false,
+    "caught": true,
+    "what": "RC3-R-002: bảng tín hiệu chỉ revoke khỏi authenticated — anon giữ toàn quyền DML"
+  },
+  {
+    "name": "M37",
+    "total": 68,
+    "failed": 2,
+    "passed": 66,
+    "failing": [
+      "RC4-R-003 năm học archiving (đang đóng gói lưu trữ): cả bốn thao tác ghi bị từ chối",
+      "RC4-R-003 năm học archived_read_only (đã lưu trữ, chỉ đọc): cả bốn thao tác ghi bị từ chối"
+    ],
+    "broken": false,
+    "valid": true,
+    "exitCode": 1,
+    "wipeout": false,
+    "caught": true,
+    "what": "RC4-R-003: bỏ chốt chặn năm học khỏi wrapper — nhánh no-op lọt qua"
+  },
+  {
+    "name": "M38",
+    "total": 68,
+    "failed": 2,
+    "passed": 66,
+    "failing": [
+      "RC4-R-003 năm học archiving (đang đóng gói lưu trữ): cả bốn thao tác ghi bị từ chối",
+      "RC5-R-004 không ai ghi thẳng được vào bảng policy khi năm học đã đóng băng — kể cả chủ sở hữu database"
+    ],
+    "broken": false,
+    "valid": true,
+    "exitCode": 1,
+    "wipeout": false,
+    "caught": true,
+    "what": "RC4-R-003: chỉ chặn năm đã lưu trữ, thả `archiving` — nửa bản sửa"
+  },
+  {
+    "name": "M39",
+    "total": 68,
+    "failed": 1,
+    "passed": 67,
+    "failing": [
+      "RC4-R-003 đọc vẫn mở sau khi năm học đã lưu trữ"
+    ],
+    "broken": false,
+    "valid": true,
+    "exitCode": 1,
+    "wipeout": false,
+    "caught": true,
+    "what": "RC4-R-003: chốt chặn đặt trước cả nhánh đọc — năm đã lưu trữ thành không xem được"
+  },
+  {
+    "name": "M40",
+    "total": 68,
+    "failed": 5,
+    "passed": 63,
+    "failing": [
+      "RC5-R-004 không ai ghi thẳng được vào bảng policy khi năm học đã đóng băng — kể cả chủ sở hữu database",
+      "RC5-R-004 đổi chủ sở hữu bị kiểm ở cả lớp cũ lẫn lớp mới",
+      "RC9-R-009 direct child DELETE trong frozen year vẫn bị chặn",
+      "RC9-R-010 frozen OLD → active NEW UPDATE bị chặn bởi OLD-side guard",
+      "RC9-R-010 active OLD → frozen NEW UPDATE bị chặn bởi NEW-side guard"
+    ],
+    "broken": false,
+    "valid": true,
+    "exitCode": 1,
+    "wipeout": false,
+    "caught": true,
+    "what": "RC5-R-004: bỏ hai trigger đang hoạt động — owner ghi thẳng năm frozen được"
+  },
+  {
+    "name": "M41",
+    "total": 68,
+    "failed": 2,
+    "passed": 66,
+    "failing": [
+      "RC5-R-004 đổi chủ sở hữu bị kiểm ở cả lớp cũ lẫn lớp mới",
+      "RC9-R-010 frozen OLD → active NEW UPDATE bị chặn bởi OLD-side guard"
+    ],
+    "broken": false,
+    "valid": true,
+    "exitCode": 1,
+    "wipeout": false,
+    "caught": true,
+    "what": "RC5-R-004: đảo điều kiện đổi owner — không kiểm OLD khi chuyển lớp"
+  },
+  {
+    "name": "M42",
+    "total": 68,
+    "failed": 1,
+    "passed": 67,
+    "failing": [
+      "RC5-R-005 thao tác policy phải khoá dòng năm học, không chỉ đọc nó"
+    ],
+    "broken": false,
+    "valid": true,
+    "exitCode": 1,
+    "wipeout": false,
+    "caught": true,
+    "what": "RC5-R-005: FOR KEY SHARE thay vì FOR SHARE — không xung đột với archive_begin"
+  },
+  {
+    "name": "M43",
+    "total": 68,
+    "failed": 1,
+    "passed": 67,
+    "failing": [
+      "RC5-R-005 thao tác policy phải khoá dòng năm học, không chỉ đọc nó"
+    ],
+    "broken": false,
+    "valid": true,
+    "exitCode": 1,
+    "wipeout": false,
+    "caught": true,
+    "what": "RC5-R-005: đọc archive_state mà không khoá dòng năm học"
+  },
+  {
+    "name": "M44",
+    "total": 68,
+    "failed": 2,
+    "passed": 66,
+    "failing": [
+      "RC5-R-004 không ai ghi thẳng được vào bảng policy khi năm học đã đóng băng — kể cả chủ sở hữu database",
+      "RC9-R-009 direct child DELETE trong frozen year vẫn bị chặn"
+    ],
+    "broken": false,
+    "valid": true,
+    "exitCode": 1,
+    "wipeout": false,
+    "caught": true,
+    "what": "RC5-R-004: interval trigger chỉ chạy INSERT/UPDATE — xoá trực tiếp năm frozen được"
+  },
+  {
+    "name": "M45",
+    "total": 68,
+    "failed": 2,
+    "passed": 66,
+    "failing": [
+      "RC6-R-006 override không thể trỏ tới khoảng khoá của một lớp khác",
+      "RC6-R-006 override phải cùng buổi với khoảng khoá nó là ngoại lệ"
+    ],
+    "broken": false,
+    "valid": true,
+    "exitCode": 1,
+    "wipeout": false,
+    "caught": true,
+    "what": "RC6-R-006: FK một cột thay vì FK hợp thành — override lại trỏ được sang lớp khác"
+  },
+  {
+    "name": "M46",
+    "total": 68,
+    "failed": 1,
+    "passed": 67,
+    "failing": [
+      "RC6-R-006 override phải cùng buổi với khoảng khoá nó là ngoại lệ"
+    ],
+    "broken": false,
+    "valid": true,
+    "exitCode": 1,
+    "wipeout": false,
+    "caught": true,
+    "what": "RC6-R-006: FK hợp thành bỏ thứ và tiết — override lệch buổi với khoảng khoá của nó"
+  },
+  {
+    "name": "M47",
+    "total": 68,
+    "failed": 1,
+    "passed": 67,
+    "failing": [
+      "RC6-R-006 override phải thuộc một tuần của chính năm học đó"
+    ],
+    "broken": false,
+    "valid": true,
+    "exitCode": 1,
+    "wipeout": false,
+    "caught": true,
+    "what": "RC6-R-006: bỏ trigger kiểm tuần — override dùng được tuần của năm học khác"
+  },
+  {
+    "name": "M48",
+    "total": 68,
+    "failed": 1,
+    "passed": 67,
+    "failing": [
+      "RC6-R-006 override phải thuộc một tuần của chính năm học đó"
+    ],
+    "broken": false,
+    "valid": true,
+    "exitCode": 1,
+    "wipeout": false,
+    "caught": true,
+    "what": "RC6-R-006: kiểm tuần chỉ cần tuần tồn tại, không cần cùng năm học"
+  },
+  {
+    "name": "M49",
+    "total": 68,
+    "failed": 1,
+    "passed": 67,
+    "failing": [
+      "RC6-R-007 service_role không còn ghi thẳng vào bảng policy, kể cả năm học còn active"
+    ],
+    "broken": false,
+    "valid": true,
+    "exitCode": 1,
+    "wipeout": false,
+    "caught": true,
+    "what": "RC6-R-007: trả lại DML cho service_role — API ghi thứ hai với bất biến yếu hơn"
+  },
+  {
+    "name": "M50",
+    "total": 68,
+    "failed": 2,
+    "passed": 66,
+    "failing": [
+      "RC7-R-008 sau Lock A → ALLOW → Unlock A → Lock B, state của người quản lý vẫn đọc được",
+      "RC7-R-008 và sau khi ALLOW lại dưới Lock B, state trả đúng ngoại lệ của chu kỳ đang chạy"
+    ],
+    "broken": false,
+    "valid": true,
+    "exitCode": 1,
+    "wipeout": false,
+    "caught": true,
+    "what": "RC7-R-008: JSON của người quản lý tự tra override theo lớp+tuần+ô — chính là mã RC7 đã gửi"
+  },
+  {
+    "name": "M51",
+    "total": 68,
+    "failed": 1,
+    "passed": 67,
+    "failing": [
+      "RC9-R-009 active-year class có interval + override + signal vẫn parent-delete cascade sạch"
+    ],
+    "broken": false,
+    "valid": true,
+    "exitCode": 1,
+    "wipeout": false,
+    "caught": true,
+    "what": "RC9-R-009: bỏ parent-missing DELETE bypass — class cascade lại gãy như RC8"
+  },
+  {
+    "name": "M52",
+    "total": 68,
+    "failed": 2,
+    "passed": 66,
+    "failing": [
+      "RC5-R-004 đổi chủ sở hữu bị kiểm ở cả lớp cũ lẫn lớp mới",
+      "RC9-R-010 frozen OLD → active NEW UPDATE bị chặn bởi OLD-side guard"
+    ],
+    "broken": false,
+    "valid": true,
+    "exitCode": 1,
+    "wipeout": false,
+    "caught": true,
+    "what": "RC9-R-010: bỏ OLD-side UPDATE guard — mang row ra khỏi năm frozen được"
+  }
+]

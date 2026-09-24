@@ -1,0 +1,15 @@
+{
+  "status": "PASS",
+  "executedAt": "2026-09-15T13:04:23.463Z",
+  "environment": "Headless Chrome + real Vue page + PGlite 05–09; deterministic local AI; no live Auth/Edge deployment",
+  "events": [
+    "Monitor report submitted; edit/delete/remind absent.",
+    "Assigned Teacher sees report and requests correction.",
+    "Private draft saved; published board unchanged; author resubmission stops timer.",
+    "Round 2 final warning; Teacher approval runs actual duplicate logic with local deterministic AI provider.",
+    "Emergency removal hides notice from board.",
+    "Admin Trash attribution visible; daily moderation actions absent.",
+    "No browser console/page errors; 390px width has no horizontal overflow."
+  ],
+  "errors": []
+}

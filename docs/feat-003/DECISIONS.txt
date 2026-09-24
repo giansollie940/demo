@@ -1,0 +1,545 @@
+# DECISIONS HIỆN HÀNH — FEAT-002
+
+DEC-033–037 của Sol áp dụng cho FEAT-002. Các mục cũ bên dưới được lưu làm lịch sử và đánh dấu superseded đúng phạm vi.
+
+# DECISIONS
+
+Bản chuẩn đóng gói R3: giữ DEC-001–028 hiện hành và đăng ký nguyên văn các giá trị Product Owner đã chốt tại DEC-029–032. Người ghi nhận: Astra; không tự đặt lại quy tắc sản phẩm. Sol re-review bản ghi này.
+
+Tài liệu này lưu các quyết định sản phẩm và kiến trúc đã được chốt.
+
+Các model phải xem đây là nguồn ưu tiên cao hơn PROJECT_CONTEXT.
+
+Không được tự thay đổi quyết định có `STATUS: ACTIVE`.
+
+Nếu một quyết định cần thay đổi:
+
+* không xóa quyết định cũ;
+* đánh dấu quyết định cũ `SUPERSEDED`;
+* tạo một quyết định mới có ID mới;
+* ghi rõ quyết định mới thay thế quyết định nào.
+
+---
+
+## DEC-001 — Mô hình một lớp hoạt động
+
+**STATUS:** ACTIVE
+
+Hệ thống hiện được thiết kế để quản lý một lớp hoạt động chính.
+
+Không tự mở rộng thành hệ thống nhiều lớp nếu chưa có SPEC mới được người dùng chấp thuận.
+
+---
+
+## DEC-002 — Một admin gốc
+
+**STATUS:** ACTIVE
+
+Hệ thống duy trì một admin gốc có quyền quản trị cao nhất.
+
+Việc chuyển hoặc bổ sung quyền admin phải được thực hiện có chủ đích và không được coder tự suy diễn từ quyền Teacher.
+
+---
+
+## DEC-003 — Teacher và Admin là hai trách nhiệm khác nhau
+
+**STATUS:** ACTIVE
+
+Admin không mặc nhiên thay thế Teacher trong các quy trình nghiệp vụ.
+
+Một tác vụ thuộc trách nhiệm Teacher không tự động trở thành trách nhiệm bắt buộc của Admin chỉ vì Admin có quyền cao hơn.
+
+---
+
+## DEC-004 — Không làm phiền Admin bằng tác vụ Teacher thông thường
+
+**STATUS:** ACTIVE
+
+Các thông báo cần Teacher xử lý không mặc nhiên tạo nghĩa vụ xử lý hoặc nhắc nhở bắt buộc đối với Admin.
+
+Admin chỉ tham gia khi:
+
+* business rule yêu cầu;
+* có sự cố cần quản trị;
+* hoặc người dùng thiết kế rõ chức năng dành cho Admin.
+
+---
+
+## DEC-005 — Business rule thuộc quyền quyết định của Product/Owner
+
+**STATUS:** ACTIVE
+
+Model implementation không được tự thay đổi business rule để làm code dễ hơn.
+
+Nếu implementation phát hiện business rule:
+
+* mâu thuẫn;
+* không khả thi;
+* gây rủi ro;
+* hoặc cần thay đổi;
+
+phải báo `BLOCKED` và trả vấn đề về Sol/Product Owner.
+
+---
+
+## DEC-006 — FINAL SPEC là hợp đồng triển khai của task
+
+**STATUS:** ACTIVE
+
+Astra chỉ được triển khai task khi SPEC có:
+
+`STATUS: FINAL`
+
+Sau khi SPEC đã FINAL:
+
+* Astra được quyết định HOW;
+* Astra không được tự thay WHAT.
+
+---
+
+## DEC-007 — Astra là model implementation chính
+
+**STATUS:** ACTIVE
+
+GPT-6 Astra được ưu tiên cho:
+
+* khảo sát code;
+* implementation;
+* database/backend;
+* migration;
+* RLS;
+* testing;
+* debugging;
+* self-review.
+
+Không sử dụng Astra cho brainstorming thông thường nếu Sol có thể xử lý tốt, nhằm tiết kiệm hạn mức Astra.
+
+---
+
+## DEC-008 — Sol High là model Product + Reviewer
+
+**STATUS:** ACTIVE
+
+GPT-5.6 Sol ở mức High được sử dụng cho:
+
+* phân tích yêu cầu;
+* business rules;
+* thiết kế logic;
+* FINAL SPEC;
+* independent review;
+* re-review khi cần.
+
+Sol không phải model implementation chính trong workflow này.
+
+---
+
+## DEC-009 — Independent Review sau implementation
+
+**STATUS:** ACTIVE
+
+Sau khi Astra hoàn tất implementation và self-review, Sol thực hiện independent review đối với các task có ảnh hưởng đáng kể đến logic ứng dụng.
+
+Sol phải đối chiếu:
+
+* FINAL SPEC;
+* Business Rules;
+* Acceptance Criteria;
+* implementation;
+* test evidence.
+
+Không được APPROVE chỉ vì Astra báo `PASS`.
+
+---
+
+## DEC-010 — Human giữ quyền release cuối cùng
+
+**STATUS:** ACTIVE
+
+AI có thể:
+
+* thiết kế;
+* implement;
+* test;
+* review;
+* đề xuất APPROVED.
+
+Quyết định cuối cùng về:
+
+* merge;
+* deploy production;
+* migration có rủi ro;
+* thao tác phá hủy dữ liệu;
+
+thuộc về người dùng.
+
+---
+
+## DEC-011 — Không phá dữ liệu cũ
+
+**STATUS:** ACTIVE
+
+Feature mới phải ưu tiên bảo toàn dữ liệu hiện có.
+
+Không:
+
+* xóa dữ liệu production;
+* reset bảng;
+* bỏ dữ liệu lịch sử;
+* thay schema phá hủy dữ liệu;
+
+trừ khi FINAL SPEC yêu cầu rõ và người dùng đã chấp thuận.
+
+---
+
+## DEC-012 — Database change phải có đường triển khai rõ ràng
+
+**STATUS:** ACTIVE
+
+Schema change phải sử dụng migration hoặc cơ chế tương đương có thể kiểm tra và truy vết.
+
+Không sửa trực tiếp production database chỉ để làm implementation nhanh hơn.
+
+---
+
+## DEC-013 — Security không chỉ nằm ở frontend
+
+**STATUS:** ACTIVE
+
+Ẩn nút hoặc chặn thao tác trên giao diện không đủ để thực thi permission.
+
+Các chức năng liên quan dữ liệu/quyền phải xem xét:
+
+* authentication;
+* authorization;
+* Supabase RLS;
+* database constraints;
+* direct API access;
+* privilege escalation.
+
+---
+
+## DEC-014 — Bài đăng trùng không xuất hiện lại trong thông báo chung
+
+**STATUS:** ACTIVE
+
+Khi một bài đăng được xác định là trùng theo business rule hiện hành, bài đó không được tạo thêm một thông báo chung gây lặp nội dung.
+
+---
+
+## DEC-015 — Bài đăng trùng vẫn được giữ trong lịch sử học sinh
+
+**STATUS:** ACTIVE
+
+Việc bài đăng bị xác định trùng không đồng nghĩa với xóa bài khỏi lịch sử hoạt động của học sinh.
+
+Lịch sử phải tiếp tục phản ánh việc học sinh đã thực hiện hành động đăng bài.
+
+---
+
+## DEC-016 — Không tự suy ra quy tắc thi đua từ trạng thái bài trùng
+
+**STATUS:** ACTIVE
+
+Trạng thái `duplicate` và quy tắc tính thi đua là hai khái niệm riêng.
+
+Implementation không được tự suy ra:
+
+`duplicate = không tính thi đua`
+
+hoặc:
+
+`duplicate = luôn tính thi đua`
+
+nếu FINAL SPEC của chức năng thi đua chưa quy định rõ trường hợp tương ứng.
+
+---
+
+## DEC-017 — Danh sách môn Báo bài do GV/Admin cấu hình
+
+**STATUS:** SUPERSEDED bởi DEC-037 (phần quyền được FEAT-002 thay đổi; nội dung lịch sử bên dưới được giữ nguyên).
+
+Trong Báo bài V1, danh sách môn không được hard-code ở frontend.
+
+GV/Admin cấu hình môn cho lớp hoạt động hiện tại; UI lấy dữ liệu động từ nguồn cấu hình.
+
+V1 vẫn tuân thủ `DEC-001` và không mở rộng vận hành sang mô hình nhiều lớp.
+
+---
+
+## DEC-018 — Tiếng Anh dùng English group riêng
+
+**STATUS:** SUPERSEDED bởi DEC-037 (phần quyền được FEAT-002 thay đổi; nội dung lịch sử bên dưới được giữ nguyên).
+
+Báo bài môn Tiếng Anh phải được gắn với English group/lớp trình độ được GV/Admin cấu hình và gán học sinh.
+
+Visibility và duplicate detection của Tiếng Anh phải tôn trọng đúng English group áp dụng.
+
+---
+
+## DEC-019 — Báo bài kiểm tra trùng trước khi công bố
+
+**STATUS:** ACTIVE
+
+Báo bài V1 phải kiểm tra duplicate trước khi notice mới được công bố chính thức.
+
+Ưu tiên kiểm tra xác định/normalized trước; AI semantic chỉ xử lý candidate phù hợp sau khi đã lọc phạm vi.
+
+Trường hợp chưa chắc chắn được chuyển về Teacher theo FINAL SPEC.
+
+---
+
+## DEC-020 — Notice được công bố trước được ưu tiên khi trùng
+
+**STATUS:** ACTIVE
+
+Khi notice mới bị xác định trùng với notice đã tồn tại, mặc định giữ notice được công bố trước.
+
+Notice mới không tự động thay thế notice cũ.
+
+Teacher có thể override theo các lựa chọn trong FINAL SPEC.
+
+---
+
+## DEC-021 — Quy tắc thi đua khi xử lý duplicate của Báo bài
+
+**STATUS:** ACTIVE
+
+Quyết định này áp dụng riêng cho subsystem Báo bài và cung cấp rule cụ thể theo `DEC-016`.
+
+- `pending_duplicate_review`: không tính đóng góp, không nhận tim;
+- duplicate bị loại/giữ bài cũ: notice mới không tính đóng góp;
+- giữ bài mới: notice mới được tính khi đã publish chính thức;
+- `keep_both`: cả hai notice được publish chính thức, đều được tính đóng góp và nhận tim bình thường;
+- notice bị xóa hoặc không còn là bản hợp lệ được giữ chính thức không tiếp tục được tính.
+
+---
+
+## DEC-022 — Quy tắc tim của Báo bài
+
+**STATUS:** ACTIVE
+
+Mỗi user được tối đa một tim trên một notice.
+
+Không cho phép user tự tim notice do chính mình đăng.
+
+Nguồn sự thật là dữ liệu reaction; không lưu/chỉnh một tổng tim thủ công làm nguồn sự thật.
+
+---
+
+## DEC-023 — Tách riêng hai loại thành tích đóng góp
+
+**STATUS:** ACTIVE
+
+Báo bài không tạo một điểm đóng góp tổng hợp giữa số notice hợp lệ và số tim nhận được.
+
+Hai thước đo được thống kê/xếp hạng độc lập:
+
+- số notice hợp lệ được công bố;
+- số reaction hợp lệ nhận được.
+
+---
+
+## DEC-024 — Tên danh hiệu Báo bài V1
+
+**STATUS:** ACTIVE
+
+Ba danh hiệu của Báo bài V1 là:
+
+- 🐦 `Chim sẻ đưa tin` — ghi nhận số notice hợp lệ;
+- ⭐ `Ngôi sao dẫn đường` — ghi nhận số tim hợp lệ nhận được;
+- 🌱 `Mầm xanh đóng góp` — achievement cho mốc đóng góp ban đầu theo FINAL SPEC.
+
+Không tự đổi tên hoặc hợp nhất ba danh hiệu trong implementation.
+
+---
+
+## DEC-025 — Teacher vận hành Báo bài, Admin giám sát hệ thống
+
+**STATUS:** SUPERSEDED bởi DEC-033 (phần quyền được FEAT-002 thay đổi; nội dung lịch sử bên dưới được giữ nguyên).
+
+Quyết định này cụ thể hóa `DEC-003` và `DEC-004` cho subsystem Báo bài.
+
+Teacher là actor xử lý nghiệp vụ Báo bài hằng ngày, gồm duplicate queue, nội dung và reminder theo quyền.
+
+Admin có quyền quản trị/override khi cần nhưng mặc định không nhận hoặc xử lý công việc Báo bài thường nhật.
+
+Mức cảnh báo mặc định của Admin đối với Báo bài là chỉ lỗi hệ thống; các mức sâu hơn do Admin chủ động cấu hình theo FINAL SPEC.
+
+---
+
+## DEC-026 — Báo bài là subsystem riêng
+
+**STATUS:** ACTIVE
+
+Báo bài V1 phải được thiết kế như subsystem nghiệp vụ riêng, không gắn trực tiếp logic Báo bài vào module đăng ký tự học.
+
+Có thể reuse hạ tầng chung như user, class, school year, notification framework, audit và AI infrastructure khi phù hợp, nhưng dữ liệu và logic nghiệp vụ Báo bài phải tách biệt để giảm coupling và regression.
+
+## DEC-027 — Cán sự chỉ xem read-only queue AI nghi trùng trong phạm vi lớp
+
+**STATUS:** ACTIVE
+
+Trong Báo bài V1, quyền `Xem danh sách AI nghi trùng` của `monitor` là quyền đọc có giới hạn.
+
+Monitor chỉ được xem các case `pending_duplicate_review` thuộc lớp hoạt động mà mình được cấp quyền, với thông tin nghiệp vụ cơ bản của bài mới và bài đang được so sánh: môn, English group nếu có, tiêu đề, nội dung, deadline, tên hiển thị/role người đăng, thời gian đăng và trạng thái.
+
+Monitor không được xem exact AI similarity score, AI reason/prompt/raw response, lịch sử AI kỹ thuật hoặc review/audit nội bộ ngoài phạm vi nghiệp vụ cần thiết.
+
+Monitor không được quyết định duplicate, override AI, đổi duplicate status hoặc thay đổi cấu hình/ngưỡng AI.
+
+Các case đã resolve/rejected và AI history của người khác không thuộc limited queue của monitor.
+
+---
+
+## DEC-028 — Teacher không được cấu hình thi đua trong Báo bài V1
+
+**STATUS:** ACTIVE
+
+Trong Báo bài V1, quyền thay đổi cấu hình thi đua chỉ thuộc `admin`.
+
+`teacher`, `monitor`, `student` không có quyền thay đổi cấu hình thi đua. V1 không triển khai cơ chế Admin cấp hoặc thu hồi quyền cấu hình thi đua cho Teacher.
+
+Teacher vẫn được xem thống kê và bảng tuyên dương.
+
+Trong V1, cấu hình thi đua runtime mà Admin được thay đổi chỉ gồm ngưỡng đạt `🌱 Mầm xanh đóng góp`, mặc định là 3 thông báo hợp lệ và phải là số nguyên dương.
+
+Các business rules thi đua còn lại trong FINAL SPEC là cố định và không được thay đổi bằng cấu hình runtime.
+
+---
+
+## DEC-029 — Cửa sổ deadline candidate duplicate V1
+
+**STATUS:** ACTIVE
+**APPROVED BY:** Product Owner — xác nhận “chốt” cả bốn quy tắc R-001 trong hội thoại ngày 09/09/2026.
+
+Candidate duplicate phải cùng class, subject, English group đúng scope, chưa xóa và thỏa `abs(new_due_at - candidate_due_at) ≤ 24 giờ`. Cửa sổ này cố định trong V1, không cấu hình runtime.
+
+---
+
+## DEC-030 — Ngưỡng sửa deadline phải re-check
+
+**STATUS:** ACTIVE
+**APPROVED BY:** Product Owner — cùng xác nhận R-001 ngày 09/09/2026.
+
+Nếu `abs(new_due_at - old_due_at) ≥ 24 giờ` thì bắt buộc duplicate check lại. Thay subject, English group, nhiệm vụ chính hoặc nội dung thay đổi bản chất luôn re-check bất kể mức chênh deadline.
+
+---
+
+## DEC-031 — Rate-limit reminder Báo bài V1
+
+**STATUS:** ACTIVE
+**APPROVED BY:** Product Owner — cùng xác nhận R-001 ngày 09/09/2026.
+
+Mỗi notice tối đa 2 reminder / rolling 24 giờ; hai reminder của cùng notice cách nhau tối thiểu 6 giờ bất kể ai gửi. Mỗi actor tối đa 10 reminder / rolling 24 giờ trên toàn bộ Báo bài. Lượt bị rate-limit không tạo reminder event.
+
+---
+
+## DEC-032 — Cảnh báo backlog Báo bài V1
+
+**STATUS:** ACTIVE
+**APPROVED BY:** Product Owner — cùng xác nhận R-001 ngày 09/09/2026.
+
+Chỉ áp dụng với Admin chọn “Lỗi hệ thống + tồn đọng” hoặc “Tất cả cảnh báo”. Trigger khi có ≥5 notice pending_duplicate_review mà mỗi notice đã chờ ≥24 giờ. Khi điều kiện còn tồn tại, tối đa 1 cảnh báo / 24 giờ. Khi queue đủ tuổi giảm dưới ngưỡng, backlog được coi là resolved; lần vượt ngưỡng sau được cảnh báo lại.
+
+---
+
+# Nguyên tắc cập nhật Decision Log
+
+Khi người dùng thay đổi một quyết định:
+
+Ví dụ:
+
+`DEC-001` không còn đúng.
+
+Không xóa DEC-001.
+
+Thay bằng:
+
+## DEC-XXX — Tên quyết định mới
+
+**STATUS:** ACTIVE
+**SUPERSEDES:** DEC-001
+
+Nội dung quyết định mới...
+
+Sau đó đổi:
+
+`DEC-001 STATUS: SUPERSEDED`
+
+Nhờ vậy các model có thể hiểu lịch sử thay đổi mà không nhầm business rule cũ với rule hiện tại.
+
+
+# DECISIONS UPDATE — FEAT-002
+
+## DEC-033 — Teacher vận hành Báo bài; Admin chuyển sang oversight
+
+**STATUS:** ACTIVE  
+**SUPERSEDES:** DEC-025
+
+Teacher là actor vận hành Báo bài hằng ngày.
+
+Admin chỉ giám sát board/audit/thống kê và thực hiện hard delete theo FINAL SPEC FEAT-002; Admin không còn create/edit/remind/soft-delete/restore/duplicate-decision/manage-subject/manage-English-group hoặc sửa AI operational settings.
+
+Các quyền hệ thống khác không trực tiếp vận hành notice giữ nguyên nếu không mâu thuẫn FEAT-002.
+
+---
+
+## DEC-034 — Teacher sở hữu AI operational settings của Báo bài
+
+**STATUS:** ACTIVE
+
+Teacher được cấu hình:
+
+- semantic duplicate enabled/disabled;
+- duplicate review threshold mặc định 70;
+- duplicate auto threshold mặc định 90;
+
+với constraint `0 <= lower < upper <= 100` và giá trị integer.
+
+Student, Monitor và Admin không được sửa các setting này.
+
+Secret/provider/model infrastructure không thuộc operational settings và không được expose cho Teacher.
+
+---
+
+## DEC-035 — Deleted duplicate không còn là actionable work item
+
+**STATUS:** ACTIVE
+
+Notice duplicate/pending đã soft-delete không xuất hiện trong Teacher actionable queue, không tính pending/backlog và không tạo cảnh báo cần xử lý.
+
+Notice vẫn thuộc history/audit cho tới khi hard delete.
+
+Nếu notice được restore và duplicate case chưa resolve, notice trở lại actionable queue.
+
+---
+
+## DEC-036 — Admin hard delete chỉ áp dụng sau soft delete và phải giữ audit tombstone
+
+**STATUS:** ACTIVE
+
+Hard delete:
+
+- chỉ Admin;
+- chỉ notice đã soft-delete;
+- từng notice trong V1;
+- irreversible;
+- bắt buộc confirmation + reason;
+- không auto/bulk purge.
+
+Trước purge phải ghi immutable audit tombstone. Tombstone giữ ID/class/author/subject-English scope/timestamps/soft-delete metadata/hard-delete metadata/prior status/duplicate decision summary, nhưng không giữ title/content/deadline/exact AI data/reaction identities/reminder details.
+
+Hard delete phải bảo toàn referential integrity và không cascade xóa notice/user/class/subsystem khác.
+
+Tác giả gốc chỉ còn thấy redacted history marker sau hard delete.
+
+---
+
+## DEC-037 — Cấu hình môn và English group của Báo bài thuộc Teacher
+
+**STATUS:** ACTIVE  
+**SUPERSEDES:** DEC-017, DEC-018
+
+Danh sách môn vẫn lấy động và English group vẫn là cơ chế scope bắt buộc cho môn Tiếng Anh, nhưng quyền cấu hình/gán trong Báo bài thuộc Teacher, không thuộc Admin.
+
+Visibility, duplicate scoping và mô hình một lớp của các quyết định cũ vẫn giữ nguyên.

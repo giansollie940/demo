@@ -1,0 +1,110 @@
+[
+  {
+    "name": "device-database",
+    "started": "2026-09-21T06:05:56.472Z",
+    "exitCode": 1,
+    "status": "FAIL"
+  },
+  {
+    "name": "device-ui",
+    "started": "2026-09-21T06:05:56.676Z",
+    "exitCode": 1,
+    "status": "FAIL"
+  },
+  {
+    "name": "archive-database",
+    "started": "2026-09-21T06:05:56.707Z",
+    "exitCode": 1,
+    "status": "FAIL"
+  },
+  {
+    "name": "archive-ui",
+    "started": "2026-09-21T06:05:56.873Z",
+    "exitCode": 1,
+    "status": "FAIL"
+  },
+  {
+    "name": "storage-database",
+    "started": "2026-09-21T06:05:56.902Z",
+    "exitCode": 1,
+    "status": "FAIL"
+  },
+  {
+    "name": "storage-database-on-12",
+    "started": "2026-09-21T06:05:57.016Z",
+    "exitCode": 1,
+    "status": "FAIL"
+  },
+  {
+    "name": "storage-ui",
+    "started": "2026-09-21T06:05:57.135Z",
+    "exitCode": 1,
+    "status": "FAIL"
+  },
+  {
+    "name": "media-database",
+    "started": "2026-09-21T06:05:57.164Z",
+    "exitCode": 1,
+    "status": "FAIL"
+  },
+  {
+    "name": "media-database-on-12",
+    "started": "2026-09-21T06:05:57.284Z",
+    "exitCode": 1,
+    "status": "FAIL"
+  },
+  {
+    "name": "database-on-12",
+    "started": "2026-09-21T06:05:57.429Z",
+    "exitCode": 1,
+    "status": "FAIL"
+  },
+  {
+    "name": "media-ui",
+    "started": "2026-09-21T06:05:57.589Z",
+    "exitCode": 1,
+    "status": "FAIL"
+  },
+  {
+    "name": "database",
+    "started": "2026-09-21T06:05:57.613Z",
+    "exitCode": 1,
+    "status": "FAIL"
+  },
+  {
+    "name": "legacy-database",
+    "started": "2026-09-21T06:05:57.773Z",
+    "exitCode": 1,
+    "status": "FAIL"
+  },
+  {
+    "name": "feat004-database",
+    "started": "2026-09-21T06:05:57.938Z",
+    "exitCode": 1,
+    "status": "FAIL"
+  },
+  {
+    "name": "static",
+    "started": "2026-09-21T06:05:58.031Z",
+    "exitCode": 1,
+    "status": "FAIL"
+  },
+  {
+    "name": "ui",
+    "started": "2026-09-21T06:05:58.174Z",
+    "exitCode": 1,
+    "status": "FAIL"
+  },
+  {
+    "name": "typecheck",
+    "started": "2026-09-21T06:05:58.197Z",
+    "exitCode": 1,
+    "status": "FAIL"
+  },
+  {
+    "name": "build",
+    "started": "2026-09-21T06:05:58.220Z",
+    "exitCode": 1,
+    "status": "FAIL"
+  }
+]

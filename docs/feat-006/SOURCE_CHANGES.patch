@@ -1,0 +1,1505 @@
+--- /dev/null
++++ b/database/upgrade/10-FEAT-006-HOMEWORK-MEDIA.sql
+@@ -0,0 +1,284 @@
++-- FEAT-006, apply after RC2 migration 09. Transactional, no existing data rewrite.
++begin;
++create table public.homework_attachments (
++ id uuid primary key default gen_random_uuid(), owner_id uuid not null references public.profiles,
++ class_id uuid not null references public.classes, school_year_id uuid not null references public.school_years,
++ notice_id uuid, request_id uuid not null, upload_id uuid not null, base_revision integer,
++ correction_id uuid, correction_round smallint,
++ object_key text not null unique, staging_key text not null unique,
++ mime_type text not null default 'image/webp' check(mime_type='image/webp'),
++ size_bytes integer not null check(size_bytes between 1 and 500000),
++ width integer not null check(width between 1 and 1600), height integer not null check(height between 1 and 1600),
++ checksum text not null check(checksum ~ '^[a-f0-9]{64}$'),
++ status text not null default 'pending' check(status in('pending','active','deleting')),
++ created_at timestamptz not null default clock_timestamp(), expires_at timestamptz not null default clock_timestamp()+interval '24 hours',
++ verified_at timestamptz, finalized_at timestamptz, grant_until timestamptz,
++ unique(owner_id,upload_id), check((correction_id is null)=(correction_round is null))
++);
++create index homework_attachments_expiry on public.homework_attachments(expires_at) where status='pending';
++create index homework_attachments_notice on public.homework_attachments(notice_id);
++create table public.homework_notice_media (
++ notice_id uuid primary key references public.homework_notices on delete cascade,
++ attachment_id uuid not null references public.homework_attachments
++);
++-- Historical published images remain retained with the notice, including soft deletion.
++create table public.homework_media_history (
++ notice_id uuid not null references public.homework_notices on delete cascade,
++ attachment_id uuid not null references public.homework_attachments,
++ revision integer not null, primary key(notice_id,revision)
++);
++alter table public.homework_correction_rounds add column attachment_id uuid references public.homework_attachments;
++alter table public.homework_correction_rounds add column media_set boolean not null default false;
++create table public.homework_media_outbox (
++ attachment_id uuid primary key references public.homework_attachments on delete cascade,
++ reason text not null, kind text not null default 'purge' check(kind in('purge','staging')), token uuid not null default gen_random_uuid(), safe_after timestamptz not null, next_attempt_at timestamptz not null default clock_timestamp(),
++ attempts integer not null default 0, last_error text, created_at timestamptz not null default clock_timestamp()
++);
++create index homework_media_outbox_due on public.homework_media_outbox(next_attempt_at);
++-- Receipts make an image-bearing retry idempotent even if the HTTP response was lost.
++create table public.homework_media_receipts (
++ owner_id uuid not null references public.profiles, operation_id uuid not null,
++ notice_id uuid not null references public.homework_notices on delete cascade,
++ class_id uuid not null references public.classes, payload_hash text not null,
++ correction_id uuid, primary key(owner_id,operation_id)
++);
++alter table public.homework_attachments enable row level security;
++alter table public.homework_notice_media enable row level security;
++alter table public.homework_media_history enable row level security;
++alter table public.homework_media_outbox enable row level security;
++alter table public.homework_media_receipts enable row level security;
++revoke all on public.homework_attachments,public.homework_notice_media,public.homework_media_history,public.homework_media_outbox,public.homework_media_receipts from public,anon,authenticated;
++
++create function homework_private.media_referenced(target uuid) returns boolean language sql stable set search_path=pg_catalog,public as $$
++ select exists(select 1 from public.homework_notice_media where attachment_id=target)
++ or exists(select 1 from public.homework_media_history where attachment_id=target)
++ or exists(select 1 from public.homework_correction_rounds where attachment_id=target)
++$$;
++create function homework_private.media_enqueue(target uuid,why text) returns void language plpgsql set search_path=pg_catalog,public as $$
++declare m public.homework_attachments;begin
++ select * into m from public.homework_attachments where id=target for update;
++ if m.id is null then return;end if;
++ update public.homework_attachments set status='deleting' where id=target;
++ insert into public.homework_media_outbox(attachment_id,reason,safe_after)
++ values(target,why,greatest(clock_timestamp(),coalesce(m.grant_until,clock_timestamp()))+interval '3 minutes')
++ on conflict(attachment_id) do update set kind='purge',reason=excluded.reason,token=gen_random_uuid(),next_attempt_at=clock_timestamp(),safe_after=greatest(homework_media_outbox.safe_after,excluded.safe_after);
++end $$;
++create function homework_private.media_before_purge() returns trigger language plpgsql set search_path=pg_catalog,public as $$
++declare m record;begin
++ for m in select id from public.homework_attachments where notice_id=old.id loop
++  perform homework_private.media_enqueue(m.id,'notice_hard_delete');
++ end loop;
++ return old;
++end $$;
++create trigger homework_media_before_purge before delete on public.homework_notices for each row execute function homework_private.media_before_purge();
++
++create function public.homework_media(p_action text,p_data jsonb default '{}'::jsonb) returns jsonb
++language plpgsql security definer set search_path=pg_catalog,public as $$
++declare c uuid:=(p_data->>'class_id')::uuid; a public.profiles; m public.homework_attachments;
++ n public.homework_notices;cor public.homework_corrections; target uuid:=nullif(p_data->>'notice_id','')::uuid;
++ rid uuid:=nullif(p_data->>'request_id','')::uuid; mid uuid; until_time timestamptz;
++begin
++ a:=homework_private.actor(c);
++ perform pg_advisory_xact_lock(hashtextextended('homework:'||c::text,0));
++ if p_action='prepare' then
++  if a.role::text not in('student','monitor','teacher') then raise exception 'Chỉ tác giả được tải ảnh' using errcode='42501';end if;
++  if rid is null then raise exception 'Thiếu mã yêu cầu';end if;
++  if target is not null then
++   select * into n from public.homework_notices where id=target and class_id=c for update;
++   if n.id is null or n.author_id<>a.id or n.status in('deleted','replaced') then raise exception 'Không có quyền thay ảnh' using errcode='42501';end if;
++   select * into cor from public.homework_corrections where notice_id=target and status in('awaiting_author','awaiting_teacher');
++   if cor.id is not null then
++    if cor.status<>'awaiting_author' or cor.id is distinct from nullif(p_data->>'correction_id','')::uuid or cor.round is distinct from (p_data->>'round')::smallint or cor.version is distinct from (p_data->>'version')::int
++     or exists(select 1 from public.homework_correction_rounds where correction_id=cor.id and round=cor.round and due_at<=clock_timestamp()) then raise exception 'Yêu cầu chỉnh sửa đã thay đổi';end if;
++   elsif nullif(p_data->>'correction_id','') is not null or n.revision is distinct from (p_data->>'revision')::int then raise exception 'Bài đã thay đổi';end if;
++  elsif nullif(p_data->>'correction_id','') is not null then raise exception 'Không có bản chỉnh sửa';end if;
++  select * into m from public.homework_attachments where owner_id=a.id and upload_id=coalesce(nullif(p_data->>'upload_id','')::uuid,rid);
++  if m.id is not null then
++   if m.class_id<>c or m.notice_id is distinct from target or m.checksum is distinct from p_data->>'checksum' or m.size_bytes is distinct from (p_data->>'size_bytes')::int or m.width is distinct from (p_data->>'width')::int or m.height is distinct from (p_data->>'height')::int
++    or m.correction_id is distinct from cor.id or m.status<>'pending' or m.expires_at<=clock_timestamp() then raise exception 'Yêu cầu tải ảnh đã thay đổi hoặc hết hạn';end if;
++   return to_jsonb(m);
++  end if;
++  mid:=gen_random_uuid();
++  insert into public.homework_attachments(id,owner_id,class_id,school_year_id,notice_id,request_id,upload_id,base_revision,correction_id,correction_round,object_key,staging_key,size_bytes,width,height,checksum)
++  values(mid,a.id,c,(select school_year_id from public.classes where id=c),target,rid,coalesce(nullif(p_data->>'upload_id','')::uuid,rid),n.revision,cor.id,cor.round,
++   'homework/'||c::text||'/'||mid::text||'/image.webp','pending/'||c::text||'/'||mid::text||'/upload.webp',
++   (p_data->>'size_bytes')::int,(p_data->>'width')::int,(p_data->>'height')::int,p_data->>'checksum')returning * into m;
++  return to_jsonb(m);
++ end if;
++ select * into m from public.homework_attachments where id=(p_data->>'attachment_id')::uuid and class_id=c for update;
++ if m.id is null or m.status='deleting' then raise exception 'Không có ảnh khả dụng' using errcode='42501';end if;
++ if p_action in('ticket','cancel') then
++  if m.owner_id<>a.id or a.role::text='admin' or m.status<>'pending' then raise exception 'Chỉ tác giả dùng ảnh chờ' using errcode='42501';end if;
++  if p_action='cancel' then perform homework_private.media_enqueue(m.id,'pending_canceled');return '{"ok":true,"cleanup":"queued"}';end if;
++  if m.expires_at<=clock_timestamp() then raise exception 'Ảnh chờ đã hết hạn 24 giờ';end if;
++  if m.notice_id is not null then
++   select * into n from public.homework_notices where id=m.notice_id and author_id=a.id and class_id=c;
++   if n.id is null or n.status in('deleted','replaced') then raise exception 'Bài không còn nhận ảnh';end if;
++   if m.correction_id is not null then
++    if not exists(select 1 from public.homework_corrections x join public.homework_correction_rounds r on r.correction_id=x.id and r.round=x.round where x.id=m.correction_id and x.notice_id=n.id and x.round=m.correction_round and x.status='awaiting_author' and r.due_at>clock_timestamp()) then raise exception 'Correction không còn nhận ảnh';end if;
++   elsif n.revision<>m.base_revision or exists(select 1 from public.homework_corrections where notice_id=n.id and status in('awaiting_author','awaiting_teacher')) then raise exception 'Bài đã thay đổi';end if;
++  end if;
++  -- Covers short PUT/signing + bounded promotion work; cleanup sweeps again after this grant.
++  until_time:=least(m.expires_at,clock_timestamp()+interval '5 minutes');
++  update public.homework_attachments set grant_until=until_time where id=m.id returning * into m;
++  return to_jsonb(m);
++ elsif p_action='read' then
++  if m.status='pending' then
++   if a.id<>m.owner_id or m.verified_at is null or m.expires_at<=clock_timestamp() then raise exception 'Ảnh chờ riêng tư' using errcode='42501';end if;
++  else
++   select * into n from public.homework_notices where id=m.notice_id and class_id=c;
++   if n.id is null then raise exception 'Ảnh đã gỡ' using errcode='42501';end if;
++   if exists(select 1 from public.homework_notice_media where notice_id=n.id and attachment_id=m.id) then
++    -- FEAT-006 P1: peer image access requires active English membership for
++    -- Student AND Monitor; the legacy visible() helper exempts Monitor.
++    if not (n.author_id=a.id or a.role::text in('teacher','admin') or (n.status='published' and (
++     n.english_group_id is null or exists(
++      select 1 from public.english_group_members membership
++      where membership.english_group_id=n.english_group_id
++       and membership.student_id=a.id and membership.left_at is null
++     )
++    ))) then raise exception 'Ngoài phạm vi bài' using errcode='42501';end if;
++   elsif exists(select 1 from public.homework_media_history where notice_id=n.id and attachment_id=m.id) then
++    if not(n.author_id=a.id or a.role::text in('teacher','admin')) then raise exception 'Lịch sử ảnh riêng tư' using errcode='42501';end if;
++   elsif exists(select 1 from public.homework_correction_rounds r join public.homework_corrections x on x.id=r.correction_id where x.notice_id=n.id and r.attachment_id=m.id) then
++    if not(n.author_id=a.id or a.role::text='teacher') then raise exception 'Ảnh chỉnh sửa riêng tư' using errcode='42501';end if;
++   else raise exception 'Ảnh không còn tham chiếu' using errcode='42501';end if;
++  end if;
++  return jsonb_build_object('id',m.id,'object_key',m.object_key,'width',m.width,'height',m.height);
++ end if;
++ raise exception 'Thao tác ảnh không hợp lệ';
++end $$;
++
++create function public.homework_media_service(p_action text,p_data jsonb default '{}'::jsonb) returns jsonb
++language plpgsql security definer set search_path=pg_catalog,public as $$
++declare m public.homework_attachments;j public.homework_media_outbox;row_item record;result jsonb;begin
++ if current_setting('role',true) is distinct from 'service_role' then raise exception 'Service only' using errcode='42501';end if;
++ if p_action='seal' then
++  select * into m from public.homework_attachments where id=(p_data->>'attachment_id')::uuid;
++  perform pg_advisory_xact_lock(hashtextextended('homework:'||m.class_id::text,0));
++  select * into m from public.homework_attachments where id=m.id for update;
++  if m.id is null or m.owner_id is distinct from (p_data->>'owner_id')::uuid or m.status<>'pending' or m.expires_at<=clock_timestamp() or m.grant_until is null or m.grant_until<=clock_timestamp() then raise exception 'Ảnh chờ không còn khả dụng';end if;
++  update public.homework_attachments set verified_at=clock_timestamp() where id=m.id;
++  return '{"ok":true}';
++ elsif p_action='jobs' then
++  for row_item in select id,class_id from public.homework_attachments where status='pending' and expires_at<=clock_timestamp() order by expires_at limit 100 loop
++   perform pg_advisory_xact_lock(hashtextextended('homework:'||row_item.class_id::text,0));
++   if exists(select 1 from public.homework_attachments where id=row_item.id and status='pending' and expires_at<=clock_timestamp()) then perform homework_private.media_enqueue(row_item.id,'pending_expired');end if;
++  end loop;
++  with picked as(select attachment_id from public.homework_media_outbox where next_attempt_at<=clock_timestamp() and (p_data->>'attachment_id' is null or attachment_id=(p_data->>'attachment_id')::uuid) order by next_attempt_at for update skip locked limit 50),
++  claimed as(update public.homework_media_outbox o set token=gen_random_uuid(),attempts=attempts+1,next_attempt_at=clock_timestamp()+interval '5 minutes' from picked p where p.attachment_id=o.attachment_id returning o.*)
++  select coalesce(jsonb_agg(jsonb_build_object('id',att.id,'staging_key',att.staging_key,'object_key',att.object_key,'safe_after',x.safe_after,'kind',x.kind,'token',x.token)),'[]') into result from claimed x join public.homework_attachments att on att.id=x.attachment_id;
++  return result;
++ elsif p_action='ack' then
++  select * into j from public.homework_media_outbox where attachment_id=(p_data->>'attachment_id')::uuid for update;
++  if j.attachment_id is null or j.token is distinct from (p_data->>'token')::uuid then return '{"ok":true}';end if;
++  if p_data->'success'='true'::jsonb then
++   if clock_timestamp()>=j.safe_after and j.kind='staging' then
++    delete from public.homework_media_outbox where attachment_id=j.attachment_id;
++   elsif clock_timestamp()>=j.safe_after and not homework_private.media_referenced(j.attachment_id) then
++    delete from public.homework_attachments where id=j.attachment_id and status='deleting';
++   else update public.homework_media_outbox set next_attempt_at=greatest(j.safe_after,clock_timestamp()+interval '1 minute'),last_error=null where attachment_id=j.attachment_id;end if;
++  else update public.homework_media_outbox set next_attempt_at=clock_timestamp()+interval '1 minute',last_error='R2_DELETE_FAILED' where attachment_id=j.attachment_id;end if;
++  return '{"ok":true}';
++ end if;
++ raise exception 'Unknown media service action';
++end $$;
++
++create function homework_private.media_after_attach() returns trigger language plpgsql set search_path=pg_catalog,public as $$
++begin
++ if new.status='active' and old.status='pending' then
++  insert into public.homework_media_outbox(attachment_id,kind,reason,safe_after,next_attempt_at)
++  values(new.id,'staging','promoted_staging',greatest(clock_timestamp(),coalesce(new.grant_until,clock_timestamp()))+interval '3 minutes',greatest(clock_timestamp(),coalesce(new.grant_until,clock_timestamp()))+interval '3 minutes')
++  on conflict do nothing;
++ end if;return new;
++end $$;
++create trigger homework_media_after_attach after update on public.homework_attachments for each row execute function homework_private.media_after_attach();
++
++alter function homework_private.card(public.homework_notices,uuid) rename to card_v5;
++create function homework_private.card(n public.homework_notices,p_user uuid) returns jsonb language sql stable set search_path=pg_catalog,public as $$
++ select homework_private.card_v5(n,p_user)||jsonb_build_object('attachment_id',(select attachment_id from public.homework_notice_media where notice_id=n.id))
++$$;
++alter function public.homework_api(text,jsonb) set schema homework_private;
++alter function homework_private.homework_api(text,jsonb) rename to api_v5;
++create function public.homework_api(p_action text,p_data jsonb default '{}'::jsonb) returns jsonb language plpgsql security definer set search_path=pg_catalog,public as $$
++declare a public.profiles;c uuid:=nullif(p_data->>'class_id','')::uuid;n public.homework_notices;
++ m public.homework_attachments;cor public.homework_corrections;rr public.homework_correction_rounds;
++ out_data jsonb;mid uuid:=nullif(p_data->>'attachment_id','')::uuid;old_mid uuid;new_mid uuid;
++ supplied boolean:=p_data ? 'attachment_id';op uuid:=nullif(p_data->>'media_operation_id','')::uuid;
++ receipt public.homework_media_receipts;payload_hash text:=md5(p_action||p_data::text);
++begin
++ if p_action not in('submit','correction_save','correction_submit','correction_decide','correction_request','hard_delete') then
++  if supplied then raise exception 'Thao tác không nhận ảnh';end if;
++  return homework_private.api_v5(p_action,p_data);
++ end if;
++ a:=homework_private.actor(c);
++ perform pg_advisory_xact_lock(hashtextextended('homework:'||c::text,0));
++ if op is not null then
++  select * into receipt from public.homework_media_receipts where owner_id=a.id and operation_id=op;
++  if receipt.owner_id is not null then
++   if receipt.class_id<>c or receipt.payload_hash<>payload_hash then raise exception 'Yêu cầu gửi lại đã thay đổi';end if;
++   if receipt.correction_id is not null then return (select to_jsonb(x)||'{"ok":true}'::jsonb from public.homework_corrections x where x.id=receipt.correction_id);end if;
++   return (select homework_private.card(x,a.id) from public.homework_notices x where x.id=receipt.notice_id);
++  end if;
++ end if;
++ if p_action='submit' and nullif(p_data->>'id','') is null then
++  select * into n from public.homework_notices where author_id=a.id and request_id=nullif(p_data->>'request_id','')::uuid;
++  if n.id is not null then
++   if n.class_id<>c then raise exception 'Request không thuộc lớp';end if;
++   return homework_private.card(n,a.id);
++  end if;
++ end if;
++ select * into n from public.homework_notices where id=nullif(p_data->>'id','')::uuid and class_id=c for update;
++ select attachment_id into old_mid from public.homework_notice_media where notice_id=n.id;
++ if n.id is not null then
++  select * into cor from public.homework_corrections where notice_id=n.id and status in('awaiting_author','awaiting_teacher');
++  select * into rr from public.homework_correction_rounds where correction_id=cor.id and round=cor.round;
++ end if;
++ if supplied then
++  if p_action not in('submit','correction_save','correction_submit') or a.role::text='admin' or (n.id is not null and n.author_id<>a.id) then raise exception 'Chỉ tác giả thay ảnh' using errcode='42501';end if;
++  if mid is not null then
++   select * into m from public.homework_attachments where id=mid for update;
++   if m.id is null or m.owner_id<>a.id or m.class_id<>c or m.status='deleting' or m.verified_at is null then raise exception 'Ảnh chưa được xác minh hoặc không thuộc tác giả' using errcode='42501';end if;
++   if m.status='pending' then
++    if m.expires_at<=clock_timestamp() or m.notice_id is distinct from n.id then raise exception 'Ảnh chờ hết hạn hoặc sai bài';end if;
++    if n.id is null and m.request_id is distinct from nullif(p_data->>'request_id','')::uuid then raise exception 'Sai yêu cầu tạo bài';end if;
++    if p_action='submit' and (m.correction_id is not null or (n.id is not null and m.base_revision<>n.revision)) then raise exception 'Ảnh thuộc revision khác';end if;
++    if p_action<>'submit' and (m.correction_id is distinct from cor.id or m.correction_round is distinct from cor.round) then raise exception 'Ảnh thuộc correction khác';end if;
++   elsif m.notice_id is distinct from n.id or (mid is distinct from old_mid and mid is distinct from rr.attachment_id) then raise exception 'Không thể dùng lại ảnh của bản khác';end if;
++  end if;
++ end if;
++ out_data:=homework_private.api_v5(p_action,p_data-'attachment_id'-'media_operation_id');
++ if coalesce((out_data->>'expired')::boolean,false) then return out_data;end if;
++ if p_action='hard_delete' then
++  if exists(select 1 from public.homework_attachments where notice_id=(p_data->>'id')::uuid and status='deleting') then out_data:=out_data||'{"media_cleanup":"queued"}'::jsonb;end if;
++  return out_data;
++ elsif p_action='correction_request' then
++  update public.homework_correction_rounds set media_set=true,attachment_id=old_mid where correction_id=(out_data->>'id')::uuid and round=1;
++ elsif p_action in('correction_save','correction_submit') then
++  if supplied then
++   update public.homework_correction_rounds set media_set=true,attachment_id=mid where correction_id=cor.id and round=cor.round;
++   if mid is not null then update public.homework_attachments set status='active',finalized_at=coalesce(finalized_at,clock_timestamp()) where id=mid;end if;
++   -- Old unsubmitted drafts have no history reference; submitted rounds remain retained.
++   if rr.attachment_id is not null and not homework_private.media_referenced(rr.attachment_id) then perform homework_private.media_enqueue(rr.attachment_id,'superseded_draft');end if;
++  end if;
++ elsif p_action='submit' or (p_action='correction_decide' and p_data->>'decision'='approved') then
++  if old_mid is not null then insert into public.homework_media_history(notice_id,attachment_id,revision) values(n.id,old_mid,n.revision) on conflict do nothing;end if;
++  new_mid:=case when p_action='correction_decide' then case when rr.media_set then rr.attachment_id else old_mid end when supplied then mid else old_mid end;
++  if new_mid is null then delete from public.homework_notice_media where notice_id=(out_data->>'id')::uuid;
++  else
++   insert into public.homework_notice_media(notice_id,attachment_id)values((out_data->>'id')::uuid,new_mid)on conflict(notice_id)do update set attachment_id=excluded.attachment_id;
++   update public.homework_attachments set status='active',notice_id=(out_data->>'id')::uuid,finalized_at=coalesce(finalized_at,clock_timestamp())where id=new_mid;
++  end if;
++  out_data:=out_data||jsonb_build_object('attachment_id',new_mid);
++ elsif p_action='correction_decide' and p_data->>'decision'='rejected' and cor.round=1 then
++  update public.homework_correction_rounds set media_set=rr.media_set,attachment_id=rr.attachment_id where correction_id=cor.id and round=2;
++ end if;
++ if supplied then perform homework_private.audit(c,coalesce(n.id,(out_data->>'id')::uuid),a.id,'media_reference',jsonb_build_object('attachment_id',old_mid),jsonb_build_object('attachment_id',mid,'action',p_action));end if;
++ if op is not null then insert into public.homework_media_receipts(owner_id,operation_id,notice_id,class_id,payload_hash,correction_id) values(a.id,op,coalesce(n.id,(out_data->>'id')::uuid),c,payload_hash,case when p_action in('correction_save','correction_submit') then cor.id end);end if;
++ return out_data;
++end $$;
++revoke all on all functions in schema homework_private from public,anon,authenticated;
++revoke all on function public.homework_media(text,jsonb),public.homework_media_service(text,jsonb),public.homework_api(text,jsonb) from public,anon,authenticated;
++grant execute on function public.homework_media(text,jsonb),public.homework_api(text,jsonb) to authenticated;
++grant execute on function public.homework_media_service(text,jsonb) to service_role;
++commit;
+--- /dev/null
++++ b/deploy/feat-006/config-fragment.toml
+@@ -0,0 +1,7 @@
++# Merge only these sections into the deployment project's supabase/config.toml.
++# Both endpoints authenticate explicitly in their handlers.
++[functions.homework-media]
++verify_jwt = false
++
++[functions.homework-media-cleanup]
++verify_jwt = false
+--- /dev/null
++++ b/deploy/feat-006/r2-cors.json
+@@ -0,0 +1,9 @@
++[
++  {
++    "AllowedOrigins": ["https://giansollie940.github.io"],
++    "AllowedMethods": ["GET", "PUT"],
++    "AllowedHeaders": ["Content-Type", "Content-Length"],
++    "ExposeHeaders": ["ETag"],
++    "MaxAgeSeconds": 300
++  }
++]
+--- /dev/null
++++ b/deploy/feat-006/rc1-monitor-read-fix.sql
+@@ -0,0 +1,83 @@
++-- FEAT-006 RC1 -> RC2 function-only patch, after RC1 migration 10.
++-- For fresh RC2 installs use updated migration 10 instead. No data rewrite.
++begin;
++create or replace function public.homework_media(p_action text,p_data jsonb default '{}'::jsonb) returns jsonb
++language plpgsql security definer set search_path=pg_catalog,public as $$
++declare c uuid:=(p_data->>'class_id')::uuid; a public.profiles; m public.homework_attachments;
++ n public.homework_notices;cor public.homework_corrections; target uuid:=nullif(p_data->>'notice_id','')::uuid;
++ rid uuid:=nullif(p_data->>'request_id','')::uuid; mid uuid; until_time timestamptz;
++begin
++ a:=homework_private.actor(c);
++ perform pg_advisory_xact_lock(hashtextextended('homework:'||c::text,0));
++ if p_action='prepare' then
++  if a.role::text not in('student','monitor','teacher') then raise exception 'Chỉ tác giả được tải ảnh' using errcode='42501';end if;
++  if rid is null then raise exception 'Thiếu mã yêu cầu';end if;
++  if target is not null then
++   select * into n from public.homework_notices where id=target and class_id=c for update;
++   if n.id is null or n.author_id<>a.id or n.status in('deleted','replaced') then raise exception 'Không có quyền thay ảnh' using errcode='42501';end if;
++   select * into cor from public.homework_corrections where notice_id=target and status in('awaiting_author','awaiting_teacher');
++   if cor.id is not null then
++    if cor.status<>'awaiting_author' or cor.id is distinct from nullif(p_data->>'correction_id','')::uuid or cor.round is distinct from (p_data->>'round')::smallint or cor.version is distinct from (p_data->>'version')::int
++     or exists(select 1 from public.homework_correction_rounds where correction_id=cor.id and round=cor.round and due_at<=clock_timestamp()) then raise exception 'Yêu cầu chỉnh sửa đã thay đổi';end if;
++   elsif nullif(p_data->>'correction_id','') is not null or n.revision is distinct from (p_data->>'revision')::int then raise exception 'Bài đã thay đổi';end if;
++  elsif nullif(p_data->>'correction_id','') is not null then raise exception 'Không có bản chỉnh sửa';end if;
++  select * into m from public.homework_attachments where owner_id=a.id and upload_id=coalesce(nullif(p_data->>'upload_id','')::uuid,rid);
++  if m.id is not null then
++   if m.class_id<>c or m.notice_id is distinct from target or m.checksum is distinct from p_data->>'checksum' or m.size_bytes is distinct from (p_data->>'size_bytes')::int or m.width is distinct from (p_data->>'width')::int or m.height is distinct from (p_data->>'height')::int
++    or m.correction_id is distinct from cor.id or m.status<>'pending' or m.expires_at<=clock_timestamp() then raise exception 'Yêu cầu tải ảnh đã thay đổi hoặc hết hạn';end if;
++   return to_jsonb(m);
++  end if;
++  mid:=gen_random_uuid();
++  insert into public.homework_attachments(id,owner_id,class_id,school_year_id,notice_id,request_id,upload_id,base_revision,correction_id,correction_round,object_key,staging_key,size_bytes,width,height,checksum)
++  values(mid,a.id,c,(select school_year_id from public.classes where id=c),target,rid,coalesce(nullif(p_data->>'upload_id','')::uuid,rid),n.revision,cor.id,cor.round,
++   'homework/'||c::text||'/'||mid::text||'/image.webp','pending/'||c::text||'/'||mid::text||'/upload.webp',
++   (p_data->>'size_bytes')::int,(p_data->>'width')::int,(p_data->>'height')::int,p_data->>'checksum')returning * into m;
++  return to_jsonb(m);
++ end if;
++ select * into m from public.homework_attachments where id=(p_data->>'attachment_id')::uuid and class_id=c for update;
++ if m.id is null or m.status='deleting' then raise exception 'Không có ảnh khả dụng' using errcode='42501';end if;
++ if p_action in('ticket','cancel') then
++  if m.owner_id<>a.id or a.role::text='admin' or m.status<>'pending' then raise exception 'Chỉ tác giả dùng ảnh chờ' using errcode='42501';end if;
++  if p_action='cancel' then perform homework_private.media_enqueue(m.id,'pending_canceled');return '{"ok":true,"cleanup":"queued"}';end if;
++  if m.expires_at<=clock_timestamp() then raise exception 'Ảnh chờ đã hết hạn 24 giờ';end if;
++  if m.notice_id is not null then
++   select * into n from public.homework_notices where id=m.notice_id and author_id=a.id and class_id=c;
++   if n.id is null or n.status in('deleted','replaced') then raise exception 'Bài không còn nhận ảnh';end if;
++   if m.correction_id is not null then
++    if not exists(select 1 from public.homework_corrections x join public.homework_correction_rounds r on r.correction_id=x.id and r.round=x.round where x.id=m.correction_id and x.notice_id=n.id and x.round=m.correction_round and x.status='awaiting_author' and r.due_at>clock_timestamp()) then raise exception 'Correction không còn nhận ảnh';end if;
++   elsif n.revision<>m.base_revision or exists(select 1 from public.homework_corrections where notice_id=n.id and status in('awaiting_author','awaiting_teacher')) then raise exception 'Bài đã thay đổi';end if;
++  end if;
++  -- Covers short PUT/signing + bounded promotion work; cleanup sweeps again after this grant.
++  until_time:=least(m.expires_at,clock_timestamp()+interval '5 minutes');
++  update public.homework_attachments set grant_until=until_time where id=m.id returning * into m;
++  return to_jsonb(m);
++ elsif p_action='read' then
++  if m.status='pending' then
++   if a.id<>m.owner_id or m.verified_at is null or m.expires_at<=clock_timestamp() then raise exception 'Ảnh chờ riêng tư' using errcode='42501';end if;
++  else
++   select * into n from public.homework_notices where id=m.notice_id and class_id=c;
++   if n.id is null then raise exception 'Ảnh đã gỡ' using errcode='42501';end if;
++   if exists(select 1 from public.homework_notice_media where notice_id=n.id and attachment_id=m.id) then
++    -- FEAT-006 P1: peer image access requires active English membership for
++    -- Student AND Monitor; the legacy visible() helper exempts Monitor.
++    if not (n.author_id=a.id or a.role::text in('teacher','admin') or (n.status='published' and (
++     n.english_group_id is null or exists(
++      select 1 from public.english_group_members membership
++      where membership.english_group_id=n.english_group_id
++       and membership.student_id=a.id and membership.left_at is null
++     )
++    ))) then raise exception 'Ngoài phạm vi bài' using errcode='42501';end if;
++   elsif exists(select 1 from public.homework_media_history where notice_id=n.id and attachment_id=m.id) then
++    if not(n.author_id=a.id or a.role::text in('teacher','admin')) then raise exception 'Lịch sử ảnh riêng tư' using errcode='42501';end if;
++   elsif exists(select 1 from public.homework_correction_rounds r join public.homework_corrections x on x.id=r.correction_id where x.notice_id=n.id and r.attachment_id=m.id) then
++    if not(n.author_id=a.id or a.role::text='teacher') then raise exception 'Ảnh chỉnh sửa riêng tư' using errcode='42501';end if;
++   else raise exception 'Ảnh không còn tham chiếu' using errcode='42501';end if;
++  end if;
++  return jsonb_build_object('id',m.id,'object_key',m.object_key,'width',m.width,'height',m.height);
++ end if;
++ raise exception 'Thao tác ảnh không hợp lệ';
++end $$;
++
++revoke all on function public.homework_media(text,jsonb) from public,anon,authenticated;
++grant execute on function public.homework_media(text,jsonb) to authenticated;
++commit;
+--- /dev/null
++++ b/deploy/feat-006/schedule-cleanup.sql
+@@ -0,0 +1,22 @@
++-- Deployment-only template. NOT part of data migration; run after independent review.
++-- Prerequisites: pg_cron, pg_net, Vault enabled; homework-media-cleanup deployed.
++-- Create Vault secrets using the Dashboard (never commit values):
++-- feat006_project_url = https://<project-ref>.supabase.co
++-- feat006_cleanup_secret = same random >=32-character MEDIA_MAINTENANCE_SECRET as Edge
++begin;
++do $$ begin
++ if not exists(select 1 from vault.decrypted_secrets where name='feat006_project_url' and decrypted_secret ~ '^https://[^/]+[.]supabase[.]co$')
++ or not exists(select 1 from vault.decrypted_secrets where name='feat006_cleanup_secret' and length(decrypted_secret)>=32)
++ then raise exception 'Configure FEAT-006 Vault secrets first';end if;
++end $$;
++select cron.schedule('feat006-media-cleanup','* * * * *',$job$
++ select net.http_post(
++  url := (select decrypted_secret from vault.decrypted_secrets where name='feat006_project_url') || '/functions/v1/homework-media-cleanup',
++  headers := jsonb_build_object('Content-Type','application/json','Authorization','Bearer ' || (select decrypted_secret from vault.decrypted_secrets where name='feat006_cleanup_secret')),
++  body := '{}'::jsonb,
++  timeout_milliseconds := 120000
++ );
++$job$);
++commit;
++-- Stop future invocations if required: select cron.unschedule('feat006-media-cleanup');
++-- HTTP response success must be monitored separately from cron's dispatch success.
+--- /dev/null
++++ b/scripts/verify-feat006.mjs
+@@ -0,0 +1,45 @@
++// Local-only verification. No remote database, deployment or Git mutations.
++import {spawn} from 'node:child_process';
++import {mkdir,writeFile,copyFile,access,readFile} from 'node:fs/promises';
++import {fileURLToPath} from 'node:url';
++const root=fileURLToPath(new URL('../',import.meta.url));
++const evidence=new URL('../docs/feat-006/evidence/',import.meta.url);
++await mkdir(evidence,{recursive:true});
++const archive=new URL('previous-'+Date.now()+'/',evidence);
++await mkdir(archive,{recursive:true});
++for(const name of ['database.log','legacy-database.log','static.log','ui.log','typecheck.log','build.log','verification-results.json']){
++ try{await access(new URL(name,evidence));await copyFile(new URL(name,evidence),new URL(name,archive));}catch(e){if(e.code!=='ENOENT')throw e;}
++}
++const checks=[
++ ['media-database',['--test','tests/feat-006/*.test.mjs'],{}],
++ ['media-ui',['node_modules/vitest/vitest.mjs','run','--config','tests/feat-006/vitest.config.ts'],{}],
++ ['database',['--test','tests/feat-005/*.test.mjs'],{FEAT006_UPGRADE:'1'}],
++ ['legacy-database',['--test','tests/homework/*.test.mjs','tests/feat-002/*.test.mjs'],{FEAT002_UPGRADE:'1',FEAT004_UPGRADE:'1'}],
++ ['feat004-database',['--test','tests/feat-004/*.test.mjs'],{}],
++ ['static',['--test','tests/*.test.mjs'],{}],
++ ['ui',['node_modules/vitest/vitest.mjs','run','--config','tests/feat-005/regression.config.ts'],{}],
++ ['typecheck',['node_modules/vue-tsc/bin/vue-tsc.js','-b'],{}],
++ ['build',['node_modules/vite/bin/vite.js','build'],{}],
++];
++const results=[];
++const selected=process.argv.slice(2);
++for(const[name,args,env]of checks.filter(([name])=>!selected.length||selected.includes(name))){
++ const started=new Date().toISOString();let output='';
++ const exitCode=await new Promise((resolve,reject)=>{
++  const child=spawn(process.execPath,args,{cwd:root,env:{...process.env,...env,NO_COLOR:'1'},windowsHide:true});
++  child.stdout.on('data',x=>output+=x);child.stderr.on('data',x=>output+=x);child.on('error',reject);child.on('close',resolve);
++ });
++ await writeFile(new URL(name+'.log',evidence),`Started: ${started}\nCommand: node ${args.join(' ')}\nEnvironment overrides: ${JSON.stringify(env)}\n${output}\nExit code: ${exitCode}\n`);
++ results.push({name,started,ended:new Date().toISOString(),exitCode,status:exitCode===0?'PASS':'FAIL'});
++ console.log(`${name}: ${exitCode===0?'PASS':'FAIL'} (exit ${exitCode})`);
++ if(exitCode!==0)console.log(output.slice(-9000));
++}
++// Reconstruct the summary from retained command logs so a targeted re-test
++// preserves the original timestamps/evidence of unchanged checks.
++const summary=[];
++for(const[name]of checks){try{
++ const log=await readFile(new URL(name+'.log',evidence),'utf8');const code=Number(log.match(/Exit code: (\d+)\s*$/)?.[1]??NaN);
++ summary.push({name,started:log.match(/^Started: (.+)$/m)?.[1],exitCode:Number.isNaN(code)?null:code,status:code===0?'PASS':'FAIL'});
++}catch(e){if(e.code!=='ENOENT')throw e;summary.push({name,status:'NOT RUN'});}}
++await writeFile(new URL('verification-results.json',evidence),JSON.stringify(summary,null,2));
++if(results.some(x=>x.exitCode!==0))process.exitCode=1;
+--- /dev/null
++++ b/src/components/homework/HomeworkImage.vue
+@@ -0,0 +1,30 @@
++<script setup lang="ts">
++import {ref,watch,onUnmounted} from 'vue';
++import {homeworkMedia} from '../../features/homework/api';
++const props=defineProps<{classId:string;attachmentId:string;alt?:string}>();
++const url=ref(''),loading=ref(false),failed=ref(false),expanded=ref(false);
++let generation=0,timer:ReturnType<typeof setTimeout>|undefined;
++async function load(){
++ const request=++generation;clearTimeout(timer);url.value='';failed.value=false;loading.value=true;
++ try{const result=await homeworkMedia('read',{class_id:props.classId,attachment_id:props.attachmentId});
++  if(request!==generation)return;
++  if(!result.url)throw new Error('Missing image');url.value=result.url;
++  timer=setTimeout(()=>void load(),50000);
++ }catch{if(request===generation)failed.value=true;}finally{if(request===generation)loading.value=false;}
++}
++watch(()=>[props.classId,props.attachmentId],()=>{expanded.value=false;void load();},{immediate:true});
++onUnmounted(()=>{generation++;clearTimeout(timer);url.value='';});
++</script>
++<template>
++ <figure class="homework-image">
++  <p v-if="loading" role="status">Đang tải ảnh…</p>
++  <template v-else-if="url && !failed">
++   <img :src="url" :alt="alt||'Ảnh đính kèm Báo bài'" :class="{expanded}" referrerpolicy="no-referrer" @error="failed=true">
++   <button type="button" :aria-expanded="expanded" @click="expanded=!expanded">{{expanded?'Thu gọn ảnh':'Xem ảnh đầy đủ'}}</button>
++  </template>
++  <div v-if="failed" role="status"><p>Chưa tải được ảnh hoặc quyền xem đã thay đổi.</p><button type="button" @click="load">Tải lại ảnh</button></div>
++ </figure>
++</template>
++<style scoped>
++.homework-image{margin:8px 0;min-width:0;display:grid;gap:8px}.homework-image img{width:100%;max-height:300px;object-fit:contain;border-radius:12px;background:var(--surface-raised);display:block}.homework-image img.expanded{max-height:none}button{justify-self:start;min-height:44px;padding:8px 12px;border:1px solid var(--border);border-radius:10px;color:var(--text);background:var(--surface);cursor:pointer}button:focus-visible{outline:3px solid var(--color-primary);outline-offset:2px}p{margin:0;overflow-wrap:anywhere}
++</style>
+--- /dev/null
++++ b/src/features/homework/image.ts
+@@ -0,0 +1,43 @@
++export const MAX_IMAGE_BYTES = 500_000;
++export interface CompressedImage { blob: Blob; width: number; height: number; checksum: string }
++interface Decoded { width: number; height: number; source?: CanvasImageSource; close(): void }
++interface Codec { decode(file: File): Promise<Decoded>; encode(image: Decoded, width: number, height: number, quality: number): Promise<Blob> }
++async function decode(file: File): Promise<Decoded> {
++  // Browser decoders honor EXIF orientation. Canvas re-encoding strips EXIF/GPS.
++  if (typeof createImageBitmap === 'function') {
++    try { const bitmap=await createImageBitmap(file,{imageOrientation:'from-image'});return {width:bitmap.width,height:bitmap.height,source:bitmap,close:()=>bitmap.close()}; } catch { /* Safari may decode HEIC through an image element only. */ }
++  }
++  const url=URL.createObjectURL(file), image=new Image();
++  try { image.src=url;await image.decode();return {width:image.naturalWidth,height:image.naturalHeight,source:image,close:()=>{image.src='';URL.revokeObjectURL(url)}}; }
++  catch(e){URL.revokeObjectURL(url);throw e;}
++}
++async function encode(image:Decoded,width:number,height:number,quality:number):Promise<Blob>{
++  const canvas=document.createElement('canvas');canvas.width=width;canvas.height=height;
++  const context=canvas.getContext('2d');if(!context||!image.source)throw new Error('Không xử lý được ảnh trên thiết bị này.');
++  context.drawImage(image.source,0,0,width,height);
++  try {return await new Promise<Blob>((resolve,reject)=>canvas.toBlob(blob=>blob?resolve(blob):reject(new Error('Không nén được ảnh.')),'image/webp',quality));}
++  finally {canvas.width=canvas.height=0;}
++}
++export async function compressImage(file:File,codec:Codec={decode,encode}):Promise<CompressedImage>{
++  if(!/\.(jpe?g|png|webp|heic|heif)$/i.test(file.name) && !/^image\/(jpeg|png|webp|heic|heif)$/.test(file.type)) throw new Error('Chọn ảnh JPEG, PNG, WebP hoặc HEIC/HEIF.');
++  if(file.size>40_000_000)throw new Error('Ảnh quá lớn để xử lý an toàn trên thiết bị. Hãy giảm dung lượng trước.');
++  let image:Decoded;
++  try{image=await codec.decode(file);}catch{throw new Error('Trình duyệt chưa đọc được ảnh này (HEIC/HEIF có thể chưa hỗ trợ). Hãy chuyển sang JPEG/PNG/WebP rồi chọn lại.');}
++  try{
++    if(!image.width||!image.height||image.width*image.height>80_000_000)throw new Error('Kích thước ảnh quá lớn để xử lý an toàn.');
++    const longest=Math.max(image.width,image.height),initial=Math.min(1600,longest);
++    const sizes=[initial,...[1440,1280,1120,960,800].filter(x=>x<initial)];
++    let blob:Blob|null=null,width=0,height=0;
++    // Try smaller dimensions at .92 before lowering quality; never crop/upscale.
++    const attempts=[...sizes.map(side=>({side,quality:.92})),...[.90,.88,.85].map(quality=>({side:sizes.at(-1)!,quality}))];
++    for(const {side,quality} of attempts){
++      width=Math.max(1,Math.round(image.width*side/longest));height=Math.max(1,Math.round(image.height*side/longest));
++      blob=await codec.encode(image,width,height,quality);
++      if(blob.type!=='image/webp')throw new Error('Trình duyệt chưa hỗ trợ xuất WebP. Hãy dùng trình duyệt hỗ trợ để đính kèm ảnh.');
++      if(blob.size>0 && blob.size<=MAX_IMAGE_BYTES)break;
++    }
++    if(!blob || !blob.size || blob.size>MAX_IMAGE_BYTES)throw new Error('Ảnh vẫn vượt 500 KB sau khi nén. Hãy chọn ảnh khác hoặc gửi bài dạng chữ.');
++    const digest=await crypto.subtle.digest('SHA-256',await blob.arrayBuffer());
++    return {blob,width,height,checksum:Array.from(new Uint8Array(digest),v=>v.toString(16).padStart(2,'0')).join('')};
++  }finally{image.close();}
++}
+--- /dev/null
++++ b/src/features/homework/media-composer.ts
+@@ -0,0 +1,72 @@
++import {ref,watch,onUnmounted} from 'vue';
++import {homeworkMedia,type Notice,type Correction} from './api';
++import {compressImage} from './image';
++import {ensureUploaded,type UploadImage} from './media-upload';
++import {draftStore,type MediaDraft} from './media-draft';
++export function useMediaComposer(form:Record<string,unknown>,scope:()=>{ownerId:string;classId:string},isOpen:()=>boolean){
++ const image=ref<UploadImage|null>(null),attachmentId=ref<string|null>(null),changed=ref(false),preview=ref('');
++ const compressing=ref(false),note=ref(''),failure=ref(''),recoverable=ref<MediaDraft|null>(null);
++ let key='',baseVersion='',operationId:string=crypto.randomUUID(),generation=0,hydrating=false,stopped=false,timer:ReturnType<typeof setTimeout>|undefined;
++ const snapshot=():MediaDraft=>({form:JSON.parse(JSON.stringify(form)),image:image.value?{...image.value}:null,attachmentId:attachmentId.value,changed:changed.value,operationId,baseVersion,savedAt:Date.now()});
++ async function persist(){if(!key||stopped)return;try{await draftStore('put',key,snapshot());}catch{note.value='Không lưu được bản nháp trên thiết bị này. Giữ trang mở cho đến khi gửi xong.';}}
++ function setPreview(){if(preview.value)URL.revokeObjectURL(preview.value);preview.value=image.value?URL.createObjectURL(image.value.blob):'';}
++ function open(n:Notice|undefined,c:Correction|null){
++  generation++;compressing.value=false;hydrating=true;stopped=false;clearTimeout(timer);image.value=null;changed.value=false;failure.value='';note.value='';recoverable.value=null;operationId=crypto.randomUUID();
++  const round=c?.rounds.find(r=>r.round===c.round);
++  attachmentId.value=round?.media_set?round.attachment_id||null:n?.attachment_id||null;
++  baseVersion=c?`${c.id}:${c.round}:${c.version}`:String(n?.revision||0);
++  key=[scope().ownerId,scope().classId,n?.id||'new',c?`${c.id}:${c.round}`:'notice'].join(':');setPreview();
++  const request=generation,savedKey=key;
++  void draftStore('get',savedKey).then(saved=>{
++   if(request!==generation||!saved)return;
++   if(saved.baseVersion===baseVersion){recoverable.value=saved;note.value='Có bản nháp trên thiết bị. Bạn có thể khôi phục trước khi sửa tiếp.';}
++   else note.value='Bài đã có phiên bản mới; bản nháp cũ không được tự áp dụng.';
++  }).catch(()=>{if(request===generation)note.value='Thiết bị không hỗ trợ lưu bản nháp; hãy giữ trang mở khi gửi.';});
++  // Suppress the queued watcher from compose() initialization.
++  queueMicrotask(()=>{hydrating=false;});
++ }
++ function restore(){const saved=recoverable.value;if(!saved||saved.baseVersion!==baseVersion)return;
++  hydrating=true;Object.assign(form,saved.form);image.value=saved.image;attachmentId.value=saved.attachmentId;changed.value=saved.changed;operationId=saved.operationId;recoverable.value=null;setPreview();note.value='Đã khôi phục bản nháp.';queueMicrotask(()=>hydrating=false);
++ }
++ async function choose(file:File){
++  if(compressing.value)return;
++  const request=++generation;compressing.value=true;failure.value='';
++  try{const converted=await compressImage(file);if(request!==generation)return;
++   if(image.value?.pendingId)await cancelPending();
++   if(request!==generation)return;
++   image.value={...converted,pendingId:'',uploaded:false,verified:false};changed.value=true;operationId=crypto.randomUUID();recoverable.value=null;setPreview();await persist();
++  }catch(e){if(request===generation)failure.value=e instanceof Error?e.message:'Chưa xử lý được ảnh.';}finally{if(request===generation)compressing.value=false;}
++ }
++ async function cancelPending(){if(image.value?.pendingId)await homeworkMedia('cancel',{class_id:scope().classId,attachment_id:image.value.pendingId});}
++ async function remove(){
++  if(compressing.value)return;
++  const request=++generation;compressing.value=true;failure.value='';
++  try{
++   try{await cancelPending();}catch{if(request===generation)note.value='Chưa kết nối được để dọn ảnh chờ; ảnh sẽ hết hạn sau 24 giờ và hệ thống sẽ thử dọn lại. Bạn vẫn có thể gửi nội dung chữ.';}
++   if(request!==generation)return;
++   image.value=null;attachmentId.value=null;changed.value=true;operationId=crypto.randomUUID();recoverable.value=null;setPreview();await persist();
++  }finally{if(request===generation)compressing.value=false;}
++ }
++ async function payload(binding:Record<string,unknown>){
++  if(compressing.value)throw new Error('Ảnh đang được xử lý.');
++  failure.value='';
++  if(image.value){try{
++   const id=await ensureUploaded(image.value,binding,{call:homeworkMedia,persist,put:async(url,blob)=>{
++    const response=await fetch(url,{method:'PUT',headers:{'Content-Type':'image/webp'},body:blob,signal:AbortSignal.timeout(45000)});
++    if(!response.ok)throw new Error('Kho ảnh tạm thời không nhận được ảnh.');
++   }});return {attachment_id:id,media_operation_id:operationId};
++  }catch(e){failure.value='Chưa gửi được ảnh. Thử gửi lại để tiếp tục lượt tải, hoặc bỏ ảnh và gửi nội dung chữ.';throw e;}}
++  return changed.value?{attachment_id:attachmentId.value,media_operation_id:operationId}:{};
++ }
++ async function committed(c?:Correction){
++  clearTimeout(timer);stopped=true;
++  if(image.value?.pendingId)attachmentId.value=image.value.pendingId;
++  image.value=null;changed.value=false;recoverable.value=null;failure.value='';setPreview();
++  try{await draftStore('delete',key);}catch{}
++  if(c){baseVersion=`${c.id}:${c.round}:${c.version}`;operationId=crypto.randomUUID();stopped=false;}
++ }
++ watch(()=>JSON.stringify(form),()=>{if(hydrating||!isOpen()||stopped)return;operationId=crypto.randomUUID();clearTimeout(timer);timer=setTimeout(()=>void persist(),300);});
++ function close(){clearTimeout(timer);generation++;compressing.value=false;if(!stopped)void persist();}
++ onUnmounted(()=>{close();if(preview.value)URL.revokeObjectURL(preview.value);});
++ return {image,attachmentId,changed,preview,compressing,note,failure,recoverable,open,restore,choose,remove,payload,committed,persist,close};
++}
+--- /dev/null
++++ b/src/features/homework/media-draft.ts
+@@ -0,0 +1,14 @@
++import type { UploadImage } from './media-upload';
++export interface MediaDraft { form:Record<string,unknown>; image:UploadImage|null; attachmentId:string|null; changed:boolean; operationId:string; baseVersion:string; savedAt:number }
++async function open():Promise<IDBDatabase>{
++  if(typeof indexedDB==='undefined')throw new Error('Trình duyệt chưa hỗ trợ lưu bản nháp trên thiết bị.');
++  return new Promise((resolve,reject)=>{const r=indexedDB.open('homework-image-drafts',1);r.onupgradeneeded=()=>r.result.createObjectStore('drafts');r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error);});
++}
++export async function draftStore(action:'get'|'put'|'delete',key:string,value?:MediaDraft):Promise<MediaDraft|undefined>{
++  const db=await open();
++  try{return await new Promise((resolve,reject)=>{
++    const tx=db.transaction('drafts',action==='get'?'readonly':'readwrite');const store=tx.objectStore('drafts');
++    const r=action==='get'?store.get(key):action==='put'?store.put(value,key):store.delete(key);
++    tx.oncomplete=()=>resolve(action==='get'?r.result:undefined);tx.onerror=()=>reject(tx.error);tx.onabort=()=>reject(tx.error||new Error('Không lưu được bản nháp.'));
++  });}finally{db.close();}
++}
+--- /dev/null
++++ b/src/features/homework/media-upload.ts
+@@ -0,0 +1,21 @@
++import type { CompressedImage } from './image';
++export interface UploadImage extends CompressedImage { uploadRequestId?: string; pendingId: string; uploaded: boolean; verified: boolean }
++export interface MediaResponse { ok?: boolean; id?: string; upload_url?: string | null; verified?: boolean; url?: string; expires_at?: string }
++interface UploadDependencies { call(action:string,payload:Record<string,unknown>):Promise<MediaResponse>; put(url:string,blob:Blob):Promise<void>; persist():Promise<void> }
++export async function ensureUploaded(image:UploadImage,binding:Record<string,unknown>,deps:UploadDependencies):Promise<string>{
++  if(!image.pendingId || !image.uploaded){
++    image.uploadRequestId ||= crypto.randomUUID();
++    const ticket=await deps.call('prepare',{...binding,upload_id:image.uploadRequestId,size_bytes:image.blob.size,width:image.width,height:image.height,checksum:image.checksum});
++    if(!ticket.id)throw new Error('Chưa tạo được lượt tải ảnh.');
++    image.pendingId=ticket.id;
++    // A crash after this point still has a recoverable pending identifier locally.
++    await deps.persist();
++    if(ticket.verified){image.uploaded=true;image.verified=true;await deps.persist();}
++    else{
++      if(!ticket.upload_url)throw new Error('Chưa có đường dẫn tải ảnh.');
++      await deps.put(ticket.upload_url,image.blob);image.uploaded=true;await deps.persist();
++    }
++  }
++  if(!image.verified){await deps.call('seal',{class_id:binding.class_id,attachment_id:image.pendingId});image.verified=true;await deps.persist();}
++  return image.pendingId;
++}
+--- /dev/null
++++ b/supabase/functions/_shared/media-r2.ts
+@@ -0,0 +1,51 @@
++import { AwsClient } from 'npm:aws4fetch@1.0.20';
++import { MAX_IMAGE_BYTES } from './media-storage.js';
++export function createR2() {
++  const account = Deno.env.get('R2_ACCOUNT_ID') || '';
++  const bucket = Deno.env.get('R2_HOMEWORK_BUCKET') || '';
++  const accessKeyId = Deno.env.get('R2_ACCESS_KEY_ID') || '';
++  const secretAccessKey = Deno.env.get('R2_SECRET_ACCESS_KEY') || '';
++  if (!/^[a-f0-9]{32}$/.test(account) || !/^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$/.test(bucket) || !accessKeyId || !secretAccessKey)
++    throw Object.assign(new Error('Chưa cấu hình lưu ảnh. Bạn vẫn có thể gửi bài dạng chữ.'), { status: 503 });
++  const client = new AwsClient({ accessKeyId, secretAccessKey, region: 'auto', service: 's3', retries: 0 });
++  const url = (key: string) => `https://${account}.r2.cloudflarestorage.com/${bucket}/${key.split('/').map(encodeURIComponent).join('/')}`;
++  async function request(key: string, init: RequestInit) {
++    // Time bounded, no provider response body/secrets in logs or user errors.
++    const response = await client.fetch(url(key), { ...init, signal: AbortSignal.timeout(20000) });
++    return response;
++  }
++  return {
++    async sign(key: string, method: 'GET' | 'PUT', seconds: number, sizeBytes?: number) {
++      const address = new URL(url(key)); address.searchParams.set('X-Amz-Expires', String(seconds));
++      const signed = await client.sign(address.toString(), { method,
++        headers: method === 'PUT' ? { 'Content-Type': 'image/webp', 'Content-Length': String(sizeBytes) } : {},
++        aws: { signQuery: true, allHeaders: true } });
++      return signed.url;
++    },
++    async get(key: string): Promise<Uint8Array | null> {
++      const res = await request(key, { method: 'GET' });
++      if (res.status === 404) return null;
++      if (!res.ok || !res.body) throw new Error('Không đọc được ảnh từ kho lưu trữ.');
++      const reader = res.body.getReader(); const chunks: Uint8Array[] = []; let size = 0;
++      try {
++        while (true) {
++          const { value, done } = await reader.read(); if (done) break;
++          size += value.byteLength;
++          if (size > MAX_IMAGE_BYTES) { await reader.cancel(); throw new Error('Ảnh vượt 500 KB.'); }
++          chunks.push(value);
++        }
++      } finally { reader.releaseLock(); }
++      const bytes = new Uint8Array(size); let offset = 0;
++      for (const chunk of chunks) { bytes.set(chunk,offset); offset+=chunk.length; }
++      return bytes;
++    },
++    async putImmutable(key: string, bytes: Uint8Array) {
++      const res = await request(key, { method: 'PUT', headers: { 'Content-Type': 'image/webp', 'If-None-Match': '*', 'Cache-Control': 'private, no-store' }, body: bytes });
++      if (!res.ok && res.status !== 412) throw new Error('Chưa lưu được ảnh. Bạn có thể thử lại hoặc gửi bài dạng chữ.');
++    },
++    async delete(key: string) {
++      const res = await request(key, { method: 'DELETE' });
++      if (!res.ok && res.status !== 404) throw new Error('R2_DELETE_FAILED');
++    },
++  };
++}
+--- /dev/null
++++ b/supabase/functions/_shared/media-storage.js
+@@ -0,0 +1,57 @@
++// Platform-independent core: production R2 and deterministic failure tests share this code.
++export const MAX_IMAGE_BYTES = 500000;
++export async function validateWebP(bytes, meta) {
++  const invalid = () => { throw new Error('Ảnh không hợp lệ: cần WebP tối đa 500 KB, cạnh dài tối đa 1600 px.'); };
++  if (!(bytes instanceof Uint8Array) || bytes.length < 20 || bytes.length > MAX_IMAGE_BYTES || bytes.length !== meta.size_bytes) invalid();
++  const v = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
++  const tag = at => String.fromCharCode(...bytes.slice(at, at + 4));
++  if (tag(0) !== 'RIFF' || tag(8) !== 'WEBP' || v.getUint32(4, true) + 8 !== bytes.length) invalid();
++  let frame = null, canvas = null, offset = 12;
++  while (offset + 8 <= bytes.length) {
++    const kind = tag(offset), size = v.getUint32(offset + 4, true), p = offset + 8;
++    if (p + size > bytes.length) invalid();
++    if (kind === 'VP8X') {
++      if (size !== 10 || canvas || (bytes[p] & 2)) invalid(); // animation is not a still image
++      const uint24 = i => bytes[i] + (bytes[i+1] << 8) + (bytes[i+2] << 16);
++      canvas = [1 + uint24(p + 4), 1 + uint24(p + 7)];
++    } else if (kind === 'VP8 ') {
++      if (frame || size < 10 || bytes[p] & 1 || bytes[p+3] !== 0x9d || bytes[p+4] !== 1 || bytes[p+5] !== 0x2a) invalid();
++      frame = [v.getUint16(p + 6, true) & 0x3fff, v.getUint16(p + 8, true) & 0x3fff];
++    } else if (kind === 'VP8L') {
++      if (frame || size < 5 || bytes[p] !== 0x2f || (bytes[p+4] >> 5) !== 0) invalid();
++      const bits = v.getUint32(p+1,true);
++      frame = [1 + (bits & 0x3fff), 1 + ((bits >>> 14) & 0x3fff)];
++    } else if (!['ALPH', 'ICCP'].includes(kind)) invalid(); // no animation or EXIF/GPS metadata
++    offset = p + size + (size & 1);
++  }
++  if (offset !== bytes.length || !frame || frame.some(d=>d<1||d>1600) || (canvas && canvas.some((d,i)=>d!==frame[i])) || frame[0]!==meta.width || frame[1]!==meta.height) invalid();
++  const checksum = Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', bytes))).map(v=>v.toString(16).padStart(2,'0')).join('');
++  if (checksum !== meta.checksum) throw new Error('Ảnh tải lên không khớp bản đã chọn. Hãy chọn lại ảnh.');
++}
++export async function promoteMedia(store, meta) {
++  // A client PUT grant only targets staging. Never overwrite the immutable key.
++  const existing = await store.get(meta.object_key);
++  if (existing) { await validateWebP(existing, meta); return; }
++  const bytes = await store.get(meta.staging_key);
++  if (!bytes) throw new Error('Ảnh chưa tải lên xong. Hãy thử gửi lại.');
++  await validateWebP(bytes, meta);
++  await store.putImmutable(meta.object_key, bytes);
++  const saved = await store.get(meta.object_key);
++  if (!saved) throw new Error('Chưa xác nhận được ảnh đã lưu.');
++  await validateWebP(saved, meta);
++}
++export async function runCleanup(rpc, store) {
++  const jobs = await rpc('jobs', {});
++  let succeeded = 0, failed = 0;
++  // The SQL outbox survives failures and processes each key idempotently.
++  for (const job of jobs) {
++    let success = false;
++    try {
++      await store.delete(job.staging_key);
++      if (job.kind === 'purge') await store.delete(job.object_key);
++      success = true; succeeded++;
++    } catch { failed++; }
++    await rpc('ack', { attachment_id: job.id, token: job.token, success });
++  }
++  return { processed: jobs.length, succeeded, failed };
++}
+--- /dev/null
++++ b/supabase/functions/homework-media-cleanup/index.ts
+@@ -0,0 +1,18 @@
++import { createAdminClient } from '../_shared/config.ts';
++import { createR2 } from '../_shared/media-r2.ts';
++import { runCleanup } from '../_shared/media-storage.js';
++// Server scheduler only. A dedicated secret, never a user JWT or profile impersonation.
++Deno.serve(async(req:Request)=>{
++  const expected=Deno.env.get('MEDIA_MAINTENANCE_SECRET')||'';
++  const received=(req.headers.get('Authorization')||'').replace(/^Bearer\s+/i,'');
++  const hash=async(s:string)=>new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(s)));
++  const [a,b]=await Promise.all([hash(expected),hash(received)]);let diff=0;for(let i=0;i<a.length;i++)diff|=a[i]^b[i];
++  if(req.method!=='POST'||expected.length<32||diff!==0) return new Response('Unauthorized',{status:401});
++  try {
++    const admin=createAdminClient();
++    const result=await runCleanup(async(action:string,p:Record<string,unknown>)=>{
++      const {data,error}=await admin.rpc('homework_media_service',{p_action:action,p_data:p});if(error)throw error;return data;
++    },createR2());
++    return Response.json(result,{status:result.failed?503:200});
++  }catch{return Response.json({error:'MEDIA_CLEANUP_RETRY_REQUIRED'},{status:503});}
++});
+--- /dev/null
++++ b/supabase/functions/homework-media/index.ts
+@@ -0,0 +1,50 @@
++import { createClient } from 'npm:@supabase/supabase-js@2.95.0';
++import { createAdminClient, getServerConfig } from '../_shared/config.ts';
++import { requireActor } from '../_shared/auth.ts';
++import { json, preflight, errorResponse, readJson } from '../_shared/http.ts';
++import { createR2 } from '../_shared/media-r2.ts';
++import { promoteMedia, runCleanup } from '../_shared/media-storage.js';
++Deno.serve(async (req: Request) => {
++  if(req.method==='OPTIONS') return preflight(req);
++  if(req.method!=='POST') return json(req,405,{error:'Chỉ hỗ trợ POST'});
++  try {
++    const admin=createAdminClient(), actor=await requireActor(req,admin), {url,key}=getServerConfig();
++    const user=createClient(url,key,{global:{headers:{Authorization:req.headers.get('Authorization')!}},auth:{persistSession:false,autoRefreshToken:false}});
++    const body=await readJson(req);
++    const call=async(action:string,p:Record<string,unknown>)=>{
++      const {data,error}=await user.rpc('homework_media',{p_action:action,p_data:p});
++      if(error)throw Object.assign(new Error(error.message),{status:400});return data;
++    };
++    const service=async(action:string,p:Record<string,unknown>)=>{
++      const {data,error}=await admin.rpc('homework_media_service',{p_action:action,p_data:p});if(error)throw error;return data;
++    };
++    if(body.action==='cancel') {
++      const result=await call('cancel',body);
++      // Best effort immediate cleanup; durable jobs are retained if R2 is down.
++      try{await runCleanup((action:string,p:Record<string,unknown>)=>service(action,action==='jobs'?{...p,attachment_id:body.attachment_id}:p),createR2());}catch{ /* scheduled worker retries */ }
++      return json(req,200,{ok:true,...result});
++    }
++    const store=createR2();
++    if(body.action==='prepare') {
++      const pending=await call('prepare',body);
++      const ticket=await call('ticket',{class_id:body.class_id,attachment_id:pending.id});
++      const ttl=Math.min(120,Math.floor((new Date(ticket.expires_at).getTime()-Date.now())/1000));
++      if(ttl<1)throw new Error('Ảnh chờ đã hết hạn.');
++      return json(req,200,{ok:true,id:ticket.id,verified:!!ticket.verified_at,expires_at:ticket.expires_at,
++        upload_url:ticket.verified_at?null:await store.sign(ticket.staging_key,'PUT',ttl,ticket.size_bytes)});
++    }
++    if(body.action==='seal') {
++      const ticket=await call('ticket',body);
++      if(!ticket.verified_at) {
++        await promoteMedia(store,ticket);
++        await service('seal',{attachment_id:ticket.id,owner_id:actor.id});
++      }
++      return json(req,200,{ok:true,id:ticket.id,verified:true});
++    }
++    if(body.action==='read') {
++      const ticket=await call('read',body);
++      return json(req,200,{ok:true,url:await store.sign(ticket.object_key,'GET',60),expires_at:new Date(Date.now()+60000).toISOString()});
++    }
++    return json(req,400,{error:'Thao tác ảnh không hợp lệ'});
++  }catch(error){return errorResponse(req,error,'Chưa xử lý được ảnh. Hãy thử lại hoặc gửi bài dạng chữ.');}
++});
+--- /dev/null
++++ b/tests/feat-006/composer.test.ts
+@@ -0,0 +1,30 @@
++import {test,expect,vi,afterEach,beforeEach} from 'vitest';
++import {reactive,h} from 'vue';
++import {mount,settle} from '../bug-001/renderer';
++const mocks=vi.hoisted(()=>({store:vi.fn(),compress:vi.fn(),call:vi.fn()}));
++vi.mock('../../src/features/homework/api',()=>({homeworkMedia:mocks.call}));
++vi.mock('../../src/features/homework/image',()=>({compressImage:mocks.compress}));
++vi.mock('../../src/features/homework/media-draft',()=>({draftStore:mocks.store}));
++import {useMediaComposer} from '../../src/features/homework/media-composer';
++let app:any;
++beforeEach(()=>{mocks.store.mockResolvedValue(null);mocks.compress.mockResolvedValue({blob:new Blob(['webp'],{type:'image/webp'}),width:10,height:10,checksum:'a'.repeat(64)});});
++afterEach(()=>{app?.unmount();vi.resetAllMocks();});
++function setup(){let media:any;const form=reactive({title:'Draft',request_id:'post-request'});const scope=reactive({ownerId:'author',classId:'class'});
++ const view=mount({setup(){media=useMediaComposer(form,()=>scope,()=>true);return()=>h('div');}});app=view.app;return {media,form,scope};}
++test('selection persists compressed Blob and form locally without uploading; exact draft can be restored',async()=>{
++ const {media,form}=setup();media.open();await settle();await media.choose(new File(['original'],'a.png',{type:'image/png'}));
++ expect(mocks.call).not.toHaveBeenCalled();const saved=mocks.store.mock.calls.filter(c=>c[0]==='put').at(-1)!;
++ expect(saved[1]).toBe('author:class:new:notice');expect(saved[2].image.blob).toBeInstanceOf(Blob);expect(saved[2].form.title).toBe('Draft');
++ mocks.store.mockResolvedValueOnce(saved[2]);media.open();await settle();form.title='Blank';media.restore();await settle();expect(form.title).toBe('Draft');expect(media.image.value.blob).toBeInstanceOf(Blob);
++});
++test('draft from stale notice revision is not restored',async()=>{
++ mocks.store.mockResolvedValue({baseVersion:'1',form:{title:'stale'}});const {media,form}=setup();media.open({id:'n',revision:2});await settle();media.restore();expect(form.title).toBe('Draft');expect(media.recoverable.value).toBeNull();
++});
++test('closing while image decoding is pending does not put image in the next class composer',async()=>{
++ let resolve:any;mocks.compress.mockImplementationOnce(()=>new Promise(r=>resolve=r));const {media,scope}=setup();media.open();await settle();const work=media.choose(new File(['a'],'a.png'));media.close();scope.classId='other';media.open();resolve({blob:new Blob(['a']),width:1,height:1,checksum:'a'});await work;expect(media.image.value).toBeNull();expect(media.compressing.value).toBe(false);
++});
++test('pending removal blocks submit until cancellation settles, then supports text-only even if storage is offline',async()=>{
++ const {media}=setup();media.open();await settle();await media.choose(new File(['a'],'a.png'));media.image.value.pendingId='pending';let reject:any;mocks.call.mockImplementation(()=>new Promise((_r,j)=>reject=j));
++ const removal=media.remove();await expect(media.payload({})).rejects.toThrow('Ảnh đang được xử lý.');reject(Error('offline'));await removal;
++ expect(media.image.value).toBeNull();expect(await media.payload({})).toMatchObject({attachment_id:null});expect(media.note.value).toContain('nội dung chữ');
++});
+--- /dev/null
++++ b/tests/feat-006/database.test.mjs
+@@ -0,0 +1,153 @@
++import { test } from 'node:test';
++import assert from 'node:assert/strict';
++import { readFile } from 'node:fs/promises';
++import { setup as baseline,seed,rpc,ids,classId } from '../feat-005/fixture.mjs';
++async function setup(){const db=await baseline();try{await db.exec(await readFile(new URL('../../database/upgrade/10-FEAT-006-HOMEWORK-MEDIA.sql',import.meta.url),'utf8'));}catch(e){if(e.code!=='ENOENT')throw e;}return db;}
++async function media(db,user,action,p={}){await db.exec(`set role authenticated; set request.jwt.claim.sub='${user}'`);try{return (await db.query('select homework_media($1,$2::jsonb) r',[action,JSON.stringify({class_id:classId,...p})])).rows[0].r;}finally{await db.exec('reset role');}}
++async function service(db,action,p={}){await db.exec('set role service_role');try{return (await db.query('select homework_media_service($1,$2::jsonb) r',[action,JSON.stringify(p)])).rows[0].r;}finally{await db.exec('reset role');}}
++const meta={size_bytes:300000,width:1600,height:900,checksum:'a'.repeat(64)};
++const rev=n=>Object.fromEntries(['subject_id','english_group_id','title','content','due_at'].map(k=>[k,n[k]]));
++async function prepare(db,n,extra={}){return media(db,ids.s,'prepare',{notice_id:n.id,revision:n.revision,request_id:crypto.randomUUID(),...meta,...extra});}
++async function seal(db,a){await media(db,ids.s,'ticket',{attachment_id:a.id});return service(db,'seal',{attachment_id:a.id,owner_id:ids.s});}
++test('author pending upload is private, unsealed attachment cannot be committed, failure is retryable',async()=>{
++ const db=await setup();try{const n=await seed(db),a=await prepare(db,n);
++ assert.equal(a.status,'pending');assert.ok(a.object_key);assert.equal(a.owner_id,ids.s);
++ for(const user of [ids.other,ids.m,ids.t,ids.a])await assert.rejects(media(db,user,'ticket',{attachment_id:a.id}));
++ await assert.rejects(prepare(db,n,{width:1601}));await assert.rejects(prepare(db,n,{size_bytes:500001}));
++ await assert.rejects(rpc(db,ids.s,'submit',{...n,attachment_id:a.id}));
++ await seal(db,a);
++ await assert.rejects(rpc(db,ids.s,'submit',{...n,title:'',attachment_id:a.id}));
++ assert.equal((await media(db,ids.s,'ticket',{attachment_id:a.id})).status,'pending');
++ const result=await rpc(db,ids.s,'submit',{...n,attachment_id:a.id});assert.equal(result.attachment_id,a.id);
++ assert.equal((await media(db,ids.other,'read',{attachment_id:a.id})).object_key,a.object_key);
++ await assert.rejects(media(db,ids.a,'prepare',{notice_id:n.id,...meta,request_id:crypto.randomUUID()}));
++ }finally{await db.close();}
++});
++test('correction images stay private until approval; published and historical images survive soft deletion',async()=>{
++ const db=await setup();try{let n=await seed(db);const first=await prepare(db,n);await seal(db,first);n=await rpc(db,ids.s,'submit',{...n,attachment_id:first.id});
++ let c=await rpc(db,ids.t,'correction_request',{id:n.id,reason:'Sửa ảnh',issue_types:['content']});
++ const second=await prepare(db,n,{correction_id:c.id,round:c.round,version:c.version});await seal(db,second);
++ c=await rpc(db,ids.s,'correction_submit',{id:n.id,correction_id:c.id,round:c.round,version:c.version,revision_data:rev(n),attachment_id:second.id});
++ for(const user of [ids.other,ids.m,ids.a])await assert.rejects(media(db,user,'read',{attachment_id:second.id}));
++ assert.ok((await media(db,ids.t,'read',{attachment_id:second.id})).object_key);
++ assert.equal((await rpc(db,ids.other,'load')).notices[0].attachment_id,first.id);
++ n=await rpc(db,ids.t,'correction_decide',{id:n.id,correction_id:c.id,round:c.round,version:c.version,decision:'approved'});assert.equal(n.attachment_id,second.id);
++ await rpc(db,ids.s,'delete',{id:n.id,reason:'test'});
++ await assert.rejects(media(db,ids.other,'read',{attachment_id:second.id}));
++ assert.ok((await media(db,ids.s,'read',{attachment_id:second.id})).object_key);
++ assert.ok((await media(db,ids.s,'read',{attachment_id:first.id})).object_key);
++ const removed=await rpc(db,ids.a,'hard_delete',{id:n.id,confirm_irreversible:true,hard_delete_reason:'test'});
++ assert.equal(removed.media_cleanup,'queued');
++ for(const user of [ids.s,ids.t,ids.a])await assert.rejects(media(db,user,'read',{attachment_id:second.id}));
++ const jobs=await service(db,'jobs');assert.equal(jobs.length,2);
++ assert.equal((await db.query('select count(*) n from homework_tombstones')).rows[0].n,1);
++ }finally{await db.close();}
++});
++test('cancel and expiry enqueue durable cleanup; failures do not lose jobs; metadata removed only after final sweep',async()=>{
++ const db=await setup();try{const n=await seed(db),a=await prepare(db,n);await media(db,ids.s,'ticket',{attachment_id:a.id});
++ await media(db,ids.s,'cancel',{attachment_id:a.id});await assert.rejects(media(db,ids.s,'ticket',{attachment_id:a.id}));
++ let jobs=await service(db,'jobs');assert.equal(jobs.length,1);
++ await service(db,'ack',{attachment_id:a.id,token:jobs[0].token,success:false});assert.equal((await db.query('select count(*) n from homework_media_outbox')).rows[0].n,1);
++ await db.exec("update homework_media_outbox set next_attempt_at=now()-interval '1 second',safe_after=now()-interval '1 second'");
++ await service(db,'ack',{attachment_id:a.id,token:jobs[0].token,success:true});assert.equal((await db.query('select count(*) n from homework_attachments')).rows[0].n,0);
++ const b=await prepare(db,n);await db.query("update homework_attachments set expires_at=now()-interval '1 second' where id=$1",[b.id]);
++ jobs=await service(db,'jobs');assert.equal(jobs[0].id,b.id);
++ await db.exec('set role authenticated');await assert.rejects(db.exec("select homework_media_service('jobs','{}')"),{code:'42501'});await db.exec('reset role');
++ }finally{await db.close();}
++});
++test('new post retry keeps image and commits only once; image request cannot cross drafts or owners',async()=>{
++ const db=await setup();try{const n=await seed(db),request_id=crypto.randomUUID();
++ const a=await media(db,ids.s,'prepare',{...meta,request_id});await seal(db,a);
++ const payload={...rev(n),title:'Bài mới',request_id,attachment_id:a.id,media_operation_id:crypto.randomUUID()};
++ const first=await rpc(db,ids.s,'submit',payload);const second=await rpc(db,ids.s,'submit',payload);assert.equal(first.id,second.id);assert.equal(second.attachment_id,a.id);
++ assert.equal((await rpc(db,ids.s,'submit',{...rev(n),request_id})).attachment_id,a.id);
++ await assert.rejects(rpc(db,ids.other,'submit',{...rev(n),request_id:crypto.randomUUID(),attachment_id:a.id}));
++ const b=await media(db,ids.s,'prepare',{...meta,request_id:crypto.randomUUID()});await seal(db,b);
++ await assert.rejects(rpc(db,ids.s,'submit',{...rev(n),request_id:crypto.randomUUID(),attachment_id:b.id}));
++ }finally{await db.close();}
++});
++test('RLS denies direct reads/mutations and service sealing; class revocation and English membership checked at read time',async()=>{
++ const db=await setup();try{let n=await seed(db);const a=await prepare(db,n);await seal(db,a);n=await rpc(db,ids.s,'submit',{...n,attachment_id:a.id});
++ for(const role of ['anon','authenticated']){
++  await db.exec(`set role ${role}`);
++  for(const table of ['homework_attachments','homework_notice_media','homework_media_history','homework_media_outbox','homework_media_receipts']){
++   await assert.rejects(db.exec(`select * from ${table}`),{code:'42501'});await assert.rejects(db.exec(`delete from ${table}`),{code:'42501'});
++  }
++  await assert.rejects(db.exec("select homework_media_service('seal','{}')"),{code:'42501'});await db.exec('reset role');
++ }
++ const group=await rpc(db,ids.t,'group_save',{name:'E1'});
++ await db.query('update homework_notices set english_group_id=$1 where id=$2',[group.id,n.id]);
++ await assert.rejects(media(db,ids.other,'read',{attachment_id:a.id}),{code:'42501'});
++ await rpc(db,ids.t,'group_assign',{student_id:ids.other,english_group_id:group.id});assert.ok(await media(db,ids.other,'read',{attachment_id:a.id}));
++ await db.query('update class_teachers set active=false where teacher_id=$1',[ids.t]);await assert.rejects(media(db,ids.t,'read',{attachment_id:a.id}),{code:'42501'});
++ await db.query('update profiles set class_id=null where id=$1',[ids.other]);await assert.rejects(media(db,ids.other,'read',{attachment_id:a.id}),{code:'42501'});
++ }finally{await db.close();}
++});
++test('stale cleanup acknowledgement cannot delete a newly escalated hard-delete job',async()=>{
++ const db=await setup();try{let n=await seed(db);const a=await prepare(db,n);await seal(db,a);n=await rpc(db,ids.s,'submit',{...n,attachment_id:a.id});
++ await db.exec("update homework_media_outbox set next_attempt_at=now()-interval '1 second',safe_after=now()-interval '1 second'");
++ const old=(await service(db,'jobs'))[0];assert.equal(old.kind,'staging');
++ await rpc(db,ids.s,'delete',{id:n.id,reason:'test'});await rpc(db,ids.a,'hard_delete',{id:n.id,confirm_irreversible:true,hard_delete_reason:'test'});
++ await service(db,'ack',{attachment_id:a.id,token:old.token,success:true});
++ assert.equal((await db.query('select kind from homework_media_outbox where attachment_id=$1',[a.id])).rows[0].kind,'purge');
++ }finally{await db.close();}
++});
++test('restore reuses image; pending duplicate stays private; forged class and removal of image preserve history',async()=>{
++ const db=await setup();try{let n=await seed(db);const a=await prepare(db,n);await seal(db,a);n=await rpc(db,ids.s,'submit',{...n,attachment_id:a.id});
++ await rpc(db,ids.s,'delete',{id:n.id,reason:'test'});await rpc(db,ids.t,'restore',{id:n.id});assert.equal((await rpc(db,ids.s,'load')).notices[0].attachment_id,a.id);
++ await assert.rejects(media(db,ids.s,'read',{attachment_id:a.id,class_id:crypto.randomUUID()}));
++ await db.query("update homework_notices set status='pending_duplicate_review' where id=$1",[n.id]);await assert.rejects(media(db,ids.other,'read',{attachment_id:a.id}));
++ await db.query("update homework_notices set status='published' where id=$1",[n.id]);
++ n=(await rpc(db,ids.s,'load')).notices.find(x=>x.id===n.id);n=await rpc(db,ids.s,'submit',{...n,attachment_id:null});assert.equal(n.attachment_id,null);
++ assert.ok((await db.query('select 1 from homework_media_history where attachment_id=$1',[a.id])).rows.length);
++ assert.ok((await media(db,ids.s,'read',{attachment_id:a.id})).object_key);
++ }finally{await db.close();}
++});
++test('round two inherits private image and terminal System soft deletion preserves it until Admin hard delete',async()=>{
++ const db=await setup();try{let n=await seed(db);let c=await rpc(db,ids.t,'correction_request',{id:n.id,reason:'Ảnh cần chỉnh',issue_types:['content']});
++ const a=await prepare(db,n,{correction_id:c.id,round:c.round,version:c.version});await seal(db,a);
++ const token=()=>({id:n.id,correction_id:c.id,round:c.round,version:c.version});
++ const payload={...token(),revision_data:rev(n),attachment_id:a.id,media_operation_id:crypto.randomUUID()};
++ c=await rpc(db,ids.s,'correction_submit',payload);const again=await rpc(db,ids.s,'correction_submit',payload);assert.equal(again.version,c.version);
++ c=await rpc(db,ids.t,'correction_decide',{...token(),decision:'rejected',reason:'Chỉnh tiếp'});
++ assert.equal((await db.query('select attachment_id from homework_correction_rounds where correction_id=$1 and round=2',[c.id])).rows[0].attachment_id,a.id);
++ c=await rpc(db,ids.s,'correction_submit',{...token(),revision_data:rev(n)});await rpc(db,ids.t,'correction_decide',{...token(),decision:'rejected',reason:'Chưa đạt'});
++ await assert.rejects(media(db,ids.a,'read',{attachment_id:a.id}));assert.ok(await media(db,ids.t,'read',{attachment_id:a.id}));
++ const result=await rpc(db,ids.a,'hard_delete',{id:n.id,confirm_irreversible:true,hard_delete_reason:'test'});assert.equal(result.media_cleanup,'queued');
++ assert.equal((await db.query('select soft_delete_actor_type from homework_tombstones where notice_id=$1',[n.id])).rows[0].soft_delete_actor_type,'system');
++ }finally{await db.close();}
++});
++test('P1 Monitor published-image reads require active English membership; Teacher and Admin oversight unchanged',async()=>{
++ const db=await setup();try{let n=await seed(db);const a=await prepare(db,n);await seal(db,a);n=await rpc(db,ids.s,'submit',{...n,attachment_id:a.id});
++ // No English-group restriction for ordinary class notices.
++ assert.ok(await media(db,ids.m,'read',{attachment_id:a.id}));
++ const e1=await rpc(db,ids.t,'group_save',{name:'E1'}),e2=await rpc(db,ids.t,'group_save',{name:'E2'});
++ await db.query('update homework_notices set english_group_id=$1 where id=$2',[e1.id,n.id]);
++ await assert.rejects(media(db,ids.m,'read',{attachment_id:a.id}),{code:'42501'});
++ await rpc(db,ids.t,'group_assign',{student_id:ids.m,english_group_id:e2.id});
++ await assert.rejects(media(db,ids.m,'read',{attachment_id:a.id}),{code:'42501'});
++ await rpc(db,ids.t,'group_assign',{student_id:ids.m,english_group_id:e1.id});
++ assert.equal((await media(db,ids.m,'read',{attachment_id:a.id})).object_key,a.object_key);
++ // Existing assignment API closes E1 membership when moving to E2.
++ await rpc(db,ids.t,'group_assign',{student_id:ids.m,english_group_id:e2.id});
++ await assert.rejects(media(db,ids.m,'read',{attachment_id:a.id}),{code:'42501'});
++ for(const user of [ids.t,ids.a])assert.ok(await media(db,user,'read',{attachment_id:a.id}));
++ assert.ok((await db.query('select 1 from english_group_members where student_id=$1 and english_group_id=$2 and left_at is not null',[ids.m,e1.id])).rows.length);
++ }finally{await db.close();}
++});
++test('RC1 function-only upgrade preserves media data, denies Monitor bypass, and is repeatable',async()=>{
++ const db=await setup();try{let n=await seed(db);const a=await prepare(db,n);await seal(db,a);n=await rpc(db,ids.s,'submit',{...n,attachment_id:a.id});
++ const e1=await rpc(db,ids.t,'group_save',{name:'E1'});await db.query('update homework_notices set english_group_id=$1 where id=$2',[e1.id,n.id]);
++ await db.exec(await readFile(new URL('./fixtures/rc1-media-function.sql',import.meta.url),'utf8'));
++ assert.ok(await media(db,ids.m,'read',{attachment_id:a.id})); // reproduce exact RC1 behavior
++ const before=(await db.query('select to_jsonb(x) data from homework_attachments x order by id')).rows;
++ const visible=(await db.query("select pg_get_functiondef('homework_private.visible(public.homework_notices,public.profiles)'::regprocedure) definition")).rows;
++ const patch=await readFile(new URL('../../deploy/feat-006/rc1-monitor-read-fix.sql',import.meta.url),'utf8');
++ await db.exec(patch);await db.exec(patch);
++ assert.deepEqual((await db.query('select to_jsonb(x) data from homework_attachments x order by id')).rows,before);
++ assert.deepEqual((await db.query("select pg_get_functiondef('homework_private.visible(public.homework_notices,public.profiles)'::regprocedure) definition")).rows,visible);
++ await assert.rejects(media(db,ids.m,'read',{attachment_id:a.id}),{code:'42501'});
++ await db.exec('set role anon');await assert.rejects(db.query("select homework_media('read',$1::jsonb)",[JSON.stringify({class_id:classId,attachment_id:a.id})]),{code:'42501'});await db.exec('reset role');
++ for(const user of [ids.t,ids.a])assert.ok(await media(db,user,'read',{attachment_id:a.id}));
++ }finally{await db.close();}
++});
+--- /dev/null
++++ b/tests/feat-006/fixtures/rc1-media-function.sql
+@@ -0,0 +1,69 @@
++-- TEST ONLY: exact RC1 function body, reproduced for upgrade regression.
++create or replace function public.homework_media(p_action text,p_data jsonb default '{}'::jsonb) returns jsonb
++language plpgsql security definer set search_path=pg_catalog,public as $$
++declare c uuid:=(p_data->>'class_id')::uuid; a public.profiles; m public.homework_attachments;
++ n public.homework_notices;cor public.homework_corrections; target uuid:=nullif(p_data->>'notice_id','')::uuid;
++ rid uuid:=nullif(p_data->>'request_id','')::uuid; mid uuid; until_time timestamptz;
++begin
++ a:=homework_private.actor(c);
++ perform pg_advisory_xact_lock(hashtextextended('homework:'||c::text,0));
++ if p_action='prepare' then
++  if a.role::text not in('student','monitor','teacher') then raise exception 'Chỉ tác giả được tải ảnh' using errcode='42501';end if;
++  if rid is null then raise exception 'Thiếu mã yêu cầu';end if;
++  if target is not null then
++   select * into n from public.homework_notices where id=target and class_id=c for update;
++   if n.id is null or n.author_id<>a.id or n.status in('deleted','replaced') then raise exception 'Không có quyền thay ảnh' using errcode='42501';end if;
++   select * into cor from public.homework_corrections where notice_id=target and status in('awaiting_author','awaiting_teacher');
++   if cor.id is not null then
++    if cor.status<>'awaiting_author' or cor.id is distinct from nullif(p_data->>'correction_id','')::uuid or cor.round is distinct from (p_data->>'round')::smallint or cor.version is distinct from (p_data->>'version')::int
++     or exists(select 1 from public.homework_correction_rounds where correction_id=cor.id and round=cor.round and due_at<=clock_timestamp()) then raise exception 'Yêu cầu chỉnh sửa đã thay đổi';end if;
++   elsif nullif(p_data->>'correction_id','') is not null or n.revision is distinct from (p_data->>'revision')::int then raise exception 'Bài đã thay đổi';end if;
++  elsif nullif(p_data->>'correction_id','') is not null then raise exception 'Không có bản chỉnh sửa';end if;
++  select * into m from public.homework_attachments where owner_id=a.id and upload_id=coalesce(nullif(p_data->>'upload_id','')::uuid,rid);
++  if m.id is not null then
++   if m.class_id<>c or m.notice_id is distinct from target or m.checksum is distinct from p_data->>'checksum' or m.size_bytes is distinct from (p_data->>'size_bytes')::int or m.width is distinct from (p_data->>'width')::int or m.height is distinct from (p_data->>'height')::int
++    or m.correction_id is distinct from cor.id or m.status<>'pending' or m.expires_at<=clock_timestamp() then raise exception 'Yêu cầu tải ảnh đã thay đổi hoặc hết hạn';end if;
++   return to_jsonb(m);
++  end if;
++  mid:=gen_random_uuid();
++  insert into public.homework_attachments(id,owner_id,class_id,school_year_id,notice_id,request_id,upload_id,base_revision,correction_id,correction_round,object_key,staging_key,size_bytes,width,height,checksum)
++  values(mid,a.id,c,(select school_year_id from public.classes where id=c),target,rid,coalesce(nullif(p_data->>'upload_id','')::uuid,rid),n.revision,cor.id,cor.round,
++   'homework/'||c::text||'/'||mid::text||'/image.webp','pending/'||c::text||'/'||mid::text||'/upload.webp',
++   (p_data->>'size_bytes')::int,(p_data->>'width')::int,(p_data->>'height')::int,p_data->>'checksum')returning * into m;
++  return to_jsonb(m);
++ end if;
++ select * into m from public.homework_attachments where id=(p_data->>'attachment_id')::uuid and class_id=c for update;
++ if m.id is null or m.status='deleting' then raise exception 'Không có ảnh khả dụng' using errcode='42501';end if;
++ if p_action in('ticket','cancel') then
++  if m.owner_id<>a.id or a.role::text='admin' or m.status<>'pending' then raise exception 'Chỉ tác giả dùng ảnh chờ' using errcode='42501';end if;
++  if p_action='cancel' then perform homework_private.media_enqueue(m.id,'pending_canceled');return '{"ok":true,"cleanup":"queued"}';end if;
++  if m.expires_at<=clock_timestamp() then raise exception 'Ảnh chờ đã hết hạn 24 giờ';end if;
++  if m.notice_id is not null then
++   select * into n from public.homework_notices where id=m.notice_id and author_id=a.id and class_id=c;
++   if n.id is null or n.status in('deleted','replaced') then raise exception 'Bài không còn nhận ảnh';end if;
++   if m.correction_id is not null then
++    if not exists(select 1 from public.homework_corrections x join public.homework_correction_rounds r on r.correction_id=x.id and r.round=x.round where x.id=m.correction_id and x.notice_id=n.id and x.round=m.correction_round and x.status='awaiting_author' and r.due_at>clock_timestamp()) then raise exception 'Correction không còn nhận ảnh';end if;
++   elsif n.revision<>m.base_revision or exists(select 1 from public.homework_corrections where notice_id=n.id and status in('awaiting_author','awaiting_teacher')) then raise exception 'Bài đã thay đổi';end if;
++  end if;
++  -- Covers short PUT/signing + bounded promotion work; cleanup sweeps again after this grant.
++  until_time:=least(m.expires_at,clock_timestamp()+interval '5 minutes');
++  update public.homework_attachments set grant_until=until_time where id=m.id returning * into m;
++  return to_jsonb(m);
++ elsif p_action='read' then
++  if m.status='pending' then
++   if a.id<>m.owner_id or m.verified_at is null or m.expires_at<=clock_timestamp() then raise exception 'Ảnh chờ riêng tư' using errcode='42501';end if;
++  else
++   select * into n from public.homework_notices where id=m.notice_id and class_id=c;
++   if n.id is null then raise exception 'Ảnh đã gỡ' using errcode='42501';end if;
++   if exists(select 1 from public.homework_notice_media where notice_id=n.id and attachment_id=m.id) then
++    if not (n.author_id=a.id or a.role::text in('teacher','admin') or (n.status='published' and homework_private.visible(n,a))) then raise exception 'Ngoài phạm vi bài' using errcode='42501';end if;
++   elsif exists(select 1 from public.homework_media_history where notice_id=n.id and attachment_id=m.id) then
++    if not(n.author_id=a.id or a.role::text in('teacher','admin')) then raise exception 'Lịch sử ảnh riêng tư' using errcode='42501';end if;
++   elsif exists(select 1 from public.homework_correction_rounds r join public.homework_corrections x on x.id=r.correction_id where x.notice_id=n.id and r.attachment_id=m.id) then
++    if not(n.author_id=a.id or a.role::text='teacher') then raise exception 'Ảnh chỉnh sửa riêng tư' using errcode='42501';end if;
++   else raise exception 'Ảnh không còn tham chiếu' using errcode='42501';end if;
++  end if;
++  return jsonb_build_object('id',m.id,'object_key',m.object_key,'width',m.width,'height',m.height);
++ end if;
++ raise exception 'Thao tác ảnh không hợp lệ';
++end $$;
+--- /dev/null
++++ b/tests/feat-006/image-view.test.ts
+@@ -0,0 +1,20 @@
++import {test,expect,vi,afterEach} from 'vitest';
++import {h,reactive} from 'vue';
++import {mount,findAll,settle,textOf} from '../bug-001/renderer';
++const call=vi.hoisted(()=>vi.fn());vi.mock('../../src/features/homework/api',()=>({homeworkMedia:call}));
++const module=await import('../../src/components/homework/HomeworkImage.vue').catch(()=>({default:null}));
++let app:any;afterEach(()=>{app?.unmount();vi.clearAllMocks();});
++test('signed image response for old class is ignored after context changes',async()=>{
++ expect(module.default).toBeTruthy();let oldResolve:any;
++ call.mockImplementationOnce(()=>new Promise(resolve=>oldResolve=resolve)).mockResolvedValue({url:'https://example.invalid/new'});
++ const props=reactive({classId:'old-class',attachmentId:'old-image'});
++ const view=mount({render:()=>h(module.default!,props)});app=view.app;
++ props.classId='new-class';props.attachmentId='new-image';await settle();await settle();
++ oldResolve({url:'https://example.invalid/old'});await settle();
++ expect(findAll(view.root,n=>n.type==='img')[0].props.src).toBe('https://example.invalid/new');
++});
++test('image access failure displays retry without hiding notice content or exposing provider errors',async()=>{
++ expect(module.default).toBeTruthy();call.mockRejectedValue(Error('provider-secret'));
++ const view=mount({render:()=>h(module.default!,{classId:'c',attachmentId:'a'})});app=view.app;await settle();
++ expect(textOf(view.root)).toContain('Tải lại ảnh');expect(textOf(view.root)).not.toContain('provider-secret');
++});
+--- /dev/null
++++ b/tests/feat-006/image.test.ts
+@@ -0,0 +1,17 @@
++import {test,expect} from 'vitest';
++const mod=await import('../../src/features/homework/image').catch(()=>({} as any));
++test('image compression preserves oriented dimensions and reduces size before quality',async()=>{
++ expect(typeof mod.compressImage).toBe('function');const calls:number[][]=[];
++ const result=await mod.compressImage(new File(['source'],'photo.heic',{type:'image/heic'}),{
++  decode:async()=>({width:3000,height:4000,close(){}}),
++  encode:async(_:unknown,w:number,h:number,q:number)=>{calls.push([w,h,q]);return new Blob([new Uint8Array(calls.length<3?510000:350000)],{type:'image/webp'});}
++ });
++ expect(calls[0]).toEqual([1200,1600,.92]);expect(calls[1][2]).toBe(.92);expect(calls[1][1]).toBeLessThan(1600);
++ expect(result.width/result.height).toBeCloseTo(.75,2);expect(result.blob.size).toBe(350000);
++});
++test('unsupported HEIC never reaches upload or passes through the original; encoder MIME and hard limit enforced',async()=>{
++ expect(typeof mod.compressImage).toBe('function');
++ await expect(mod.compressImage(new File(['heic'],'a.heic'),{decode:async()=>{throw Error('unsupported')}})).rejects.toThrow(/HEIC|định dạng/);
++ for(const blob of [new Blob(['png'],{type:'image/png'}),new Blob([new Uint8Array(500001)],{type:'image/webp'})])
++  await expect(mod.compressImage(new File(['x'],'a.png',{type:'image/png'}),{decode:async()=>({width:2000,height:1000,close(){}}),encode:async()=>blob})).rejects.toThrow();
++});
+--- /dev/null
++++ b/tests/feat-006/preview-server.mjs
+@@ -0,0 +1,41 @@
++// Isolated fixture only: PGlite and in-memory object store, no live credentials.
++import {createServer} from 'vite';
++import {readFile} from 'node:fs/promises';
++import {setup,seed,rpc,server,ids,classId} from '../feat-005/fixture.mjs';
++import {reviewSnapshot} from '../../supabase/functions/homework-review/logic.js';
++import {promoteMedia,runCleanup} from '../../supabase/functions/_shared/media-storage.js';
++export async function startPreview(){
++ const db=await setup();await db.exec(await readFile(new URL('../../database/upgrade/10-FEAT-006-HOMEWORK-MEDIA.sql',import.meta.url),'utf8'));await seed(db);
++ const objects=new Map(),tokens=new Map();let chain=Promise.resolve();
++ const store={get:async k=>objects.get(k)||null,putImmutable:async(k,b)=>{if(!objects.has(k))objects.set(k,b);},delete:async k=>objects.delete(k)};
++ async function media(actor,action,data){await db.exec(`set role authenticated;set request.jwt.claim.sub='${actor}'`);try{return(await db.query('select homework_media($1,$2::jsonb) r',[action,JSON.stringify(data)])).rows[0].r;}finally{await db.exec('reset role');}}
++ async function service(action,data){await db.exec('set role service_role');try{return(await db.query('select homework_media_service($1,$2::jsonb) r',[action,JSON.stringify(data)])).rows[0].r;}finally{await db.exec('reset role');}}
++ const sign=(key,method,size)=>{const token=crypto.randomUUID();tokens.set(token,{key,method,size,expires:Date.now()+120000});return '/__feat006/object/'+token;};
++ const vite=await createServer({server:{host:'127.0.0.1',port:4176,strictPort:true},plugins:[{name:'feat006-fixture',configureServer(vite){vite.middlewares.use('/__feat006',(req,res)=>{
++  if(req.url.startsWith('/object/')){
++   const t=tokens.get(req.url.slice(8));if(!t||t.method!==req.method||t.expires<Date.now()){res.writeHead(403);res.end();return;}
++   if(req.method==='GET'){const bytes=objects.get(t.key);res.writeHead(bytes?200:404,{'Content-Type':'image/webp','Cache-Control':'no-store'});res.end(bytes?Buffer.from(bytes):'');return;}
++   const chunks=[];let size=0;req.on('data',b=>{size+=b.length;if(size>500000){req.destroy();return;}chunks.push(b);});req.on('end',()=>{if(size!==t.size){res.writeHead(400);res.end();return;}objects.set(t.key,new Uint8Array(Buffer.concat(chunks)));res.end();});return;
++  }
++  let body='';req.on('data',x=>body+=x);req.on('end',()=>{chain=chain.then(async()=>{res.setHeader('Content-Type','application/json');try{
++   const p=JSON.parse(body);if(!Object.values(ids).includes(p.actor))throw Error('Fixture actor only');let value;
++   if(p.review==='media'){
++    const data=p.data;
++    if(p.action==='prepare'){const m=await media(p.actor,'prepare',data),t=await media(p.actor,'ticket',{class_id:data.class_id,attachment_id:m.id});value={ok:true,id:t.id,verified:!!t.verified_at,upload_url:t.verified_at?null:sign(t.staging_key,'PUT',t.size_bytes)};}
++    else if(p.action==='seal'){const t=await media(p.actor,'ticket',data);await promoteMedia(store,t);await service('seal',{attachment_id:t.id,owner_id:p.actor});value={ok:true,id:t.id,verified:true};}
++    else if(p.action==='read'){const t=await media(p.actor,'read',data);value={ok:true,url:sign(t.object_key,'GET')};}
++    else if(p.action==='cancel'){value=await media(p.actor,'cancel',data);await runCleanup(service,store);}
++    else throw Error('Unknown media action');
++   }else{
++    value=await rpc(db,p.actor,p.action,p.data,p.data?.class_id??classId);
++    if(p.review&&value.status==='pending_duplicate_review'){
++     const snap=await server(db,'snapshot',{id:value.id});
++     if(!snap.done){const result=await reviewSnapshot(snap,async payload=>payload.mode==='edit'?{material_change:true}:{score:0,candidate_id:null,reason:'Local provider'});
++      const final=await server(db,'finish',{id:value.id,revision:snap.notice.revision,fingerprint:snap.fingerprint,...result});value={...value,status:final.status};}
++    }
++   }
++   res.end(JSON.stringify({data:value,error:null}));
++  }catch(e){res.end(JSON.stringify({data:null,error:{message:e.message}}));}});});
++ });}}]});await vite.listen();return{db,close:async()=>{await vite.close();await db.close();}};
++}
++if(process.argv[1]?.endsWith('preview-server.mjs')){await startPreview();console.log('FEAT-006 fixture http://127.0.0.1:4176/tests/feat-006/preview.html');}
+--- /dev/null
++++ b/tests/feat-006/preview.html
+@@ -0,0 +1 @@
++<!doctype html><html lang="vi"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1"><link rel="icon" href="data:,"><title>FEAT-006 Local verification</title></head><body><div id="app"></div><script type="module" src="./preview.js"></script></body></html>
+--- /dev/null
++++ b/tests/feat-006/preview.js
+@@ -0,0 +1,11 @@
++import '../../src/styles/tokens.css';import '../../src/styles/themes.css';import '../../src/styles/base.css';
++import {createApp,h} from 'vue';import {createPinia} from 'pinia';
++import {useAuthStore} from '../../src/stores/auth';import {useContextStore} from '../../src/stores/context';
++import HomeworkPage from '../../src/pages/HomeworkPage.vue';
++const role=new URLSearchParams(location.search).get('role')||'student';
++const actor='00000000-0000-0000-0000-00000000000'+({student:3,monitor:4,teacher:5,admin:6}[role]);
++const classId='4e0b25e4-ec47-4745-8b2b-ba91c1504254';
++async function call(action,data,review=false){return fetch('/__feat006/api',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({actor,action,data,review})}).then(r=>r.json());}
++window.SupabaseService={init:async()=>({rpc:async(_,p)=>call(p.p_action,p.p_data),functions:{invoke:async(name,p)=>{const result=await call(p.body.action||'submit',p.body,name==='homework-review'?true:'media');return result.error?result:{data:name==='homework-media'?result.data:{ok:true,notice:result.data},error:null};}}})};
++const app=createApp({render:()=>h('main',{style:'max-width:1180px;margin:auto;padding:20px'},[h('p','LOCAL FIXTURE — '+role),h(HomeworkPage)])});app.use(createPinia());
++useAuthStore().currentUser={id:actor,role,classId,name:role,fullName:role};useContextStore().selectedClassId=classId;app.mount('#app');
+--- /dev/null
++++ b/tests/feat-006/storage.test.mjs
+@@ -0,0 +1,28 @@
++import { test } from 'node:test';
++import assert from 'node:assert/strict';
++import { createHash } from 'node:crypto';
++const module = await import('../../supabase/functions/_shared/media-storage.js').catch(()=>({}));
++const image=()=>{const b=new Uint8Array(30);const v=new DataView(b.buffer);b.set(new TextEncoder().encode('RIFF'));v.setUint32(4,22,true);b.set(new TextEncoder().encode('WEBPVP8 '),8);v.setUint32(16,10,true);b.set([0,0,0,0x9d,0x01,0x2a,0x40,0x06,0x84,0x03],20);return b;};
++const metadata=b=>({size_bytes:b.length,width:1600,height:900,checksum:createHash('sha256').update(b).digest('hex'),object_key:'private/final',staging_key:'pending/upload'});
++test('bounded WebP validation checks actual bytes, dimensions and checksum, rejects original/oversize/animation',async()=>{
++ assert.equal(typeof module.validateWebP,'function');const b=image(),m=metadata(b);
++ await module.validateWebP(b,m);
++ for(const invalid of [{...m,width:1599},{...m,checksum:'a'.repeat(64)},{...m,size_bytes:1}])await assert.rejects(module.validateWebP(b,invalid));
++ await assert.rejects(module.validateWebP(new Uint8Array(500001),m));
++ const fake=image();fake.set(new TextEncoder().encode('ANIM'),12);await assert.rejects(module.validateWebP(fake,metadata(fake)));
++ await assert.rejects(module.validateWebP(new TextEncoder().encode('not an image'),m));
++});
++test('promotion validates once and preserves immutable bytes across staging URL reuse and network retry',async()=>{
++ assert.equal(typeof module.promoteMedia,'function');const b=image(),m=metadata(b),objects=new Map([[m.staging_key,b]]);let puts=0;
++ const store={get:async key=>objects.get(key)||null,putImmutable:async(key,bytes)=>{puts++;if(!objects.has(key))objects.set(key,bytes);}};
++ await module.promoteMedia(store,m);assert.deepEqual(objects.get(m.object_key),b);
++ objects.set(m.staging_key,new Uint8Array([1,2,3]));await module.promoteMedia(store,m);assert.equal(puts,1);
++ const bad={...m,object_key:'bad-final'};await assert.rejects(module.promoteMedia(store,bad));assert.equal(objects.has('bad-final'),false);
++});
++test('cleanup acknowledges only actual successful deletes, staging-only jobs cannot delete active images',async()=>{
++ assert.equal(typeof module.runCleanup,'function');const removed=[],acks=[];
++ const jobs=[{id:'one',kind:'purge',object_key:'final1',staging_key:'stage1',token:'a'},{id:'two',kind:'staging',object_key:'final2',staging_key:'stage2',token:'b'}];
++ const rpc=async(action,p)=>action==='jobs'?jobs:acks.push(p);
++ await module.runCleanup(rpc,{delete:async k=>{removed.push(k);if(k==='final1')throw Error('quota');}});
++ assert.deepEqual(removed,['stage1','final1','stage2']);assert.equal(acks[0].success,false);assert.equal(acks[1].success,true);assert.equal(acks[1].token,'b');
++});
+--- /dev/null
++++ b/tests/feat-006/upload.test.ts
+@@ -0,0 +1,15 @@
++import {test,expect} from 'vitest';
++const mod=await import('../../src/features/homework/media-upload').catch(()=>({} as any));
++test('upload success / seal failure recovers without uploading a second time',async()=>{
++ expect(typeof mod.ensureUploaded).toBe('function');let uploads=0,seals=0;
++ const state={blob:new Blob(['webp'],{type:'image/webp'}),width:1,height:1,checksum:'a'.repeat(64),pendingId:'',uploaded:false,verified:false};
++ const deps={call:async(action:string)=>{if(action==='prepare')return {id:'pending',upload_url:'https://example.invalid/put'};if(++seals===1)throw Error('offline');return {verified:true};},put:async()=>{uploads++},persist:async()=>{}};
++ await expect(mod.ensureUploaded(state,{},deps)).rejects.toThrow('offline');expect(state.uploaded).toBe(true);
++ expect(await mod.ensureUploaded(state,{},deps)).toBe('pending');expect(uploads).toBe(1);
++});
++test('pending identity is persisted before PUT and a verified retry never uploads again',async()=>{
++ expect(typeof mod.ensureUploaded).toBe('function');const events:string[]=[];
++ const state={blob:new Blob(['webp'],{type:'image/webp'}),width:1,height:1,checksum:'a'.repeat(64),pendingId:'',uploaded:false,verified:false};
++ await mod.ensureUploaded(state,{}, {call:async()=>({id:'pending',verified:true}),put:async()=>events.push('PUT'),persist:async()=>events.push(state.pendingId)});
++ expect(events[0]).toBe('pending');expect(events).not.toContain('PUT');
++});
+--- /dev/null
++++ b/tests/feat-006/vitest.config.ts
+@@ -0,0 +1,2 @@
++import config from '../feat-005/vitest.config';
++export default {...config,test:{...config.test,include:['tests/feat-006/*.test.ts']}};
+--- a/scripts/package-edge-functions.mjs
++++ b/scripts/package-edge-functions.mjs
+@@ -19,6 +19,9 @@
+   'emergency-register',
+   'audit-log',
+   'quote-feed',
++  'homework-review',
++  'homework-media',
++  'homework-media-cleanup',
+ ]
+ 
+ function copyDir(source, target) {
+--- a/src/components/homework/HomeworkAdminOversight.vue
++++ b/src/components/homework/HomeworkAdminOversight.vue
+@@ -1,4 +1,5 @@
+ <script setup lang="ts">
++import HomeworkImage from "./HomeworkImage.vue";
+ import {computed,onMounted,onUnmounted,reactive,ref,watch} from 'vue';
+ import PageArtwork from '../ui/PageArtwork.vue';
+ import PageBannerArt from '../ui/PageBannerArt.vue';
+@@ -40,7 +41,7 @@
+ watch(()=>({...filters}),()=>{offset.value=0;void load();});
+ watch(offset,()=>void load());
+ async function mutation(action:string,payload:Record<string,unknown>,scope=classId.value){if(busy.value)return;busy.value=true;error.value='';message.value='';const seq=generation;
+- try{await homeworkRpc(action,scope,payload);if(seq!==generation)return;target.value=null;message.value='Đã lưu thay đổi.';view.refreshVersion++;await load();}catch(e){if(seq===generation)error.value=fail(e);}finally{busy.value=false;}}
++ try{const outcome=await homeworkRpc<{media_cleanup?:string}>(action,scope,payload);if(seq!==generation)return;target.value=null;message.value=outcome?.media_cleanup==='queued'?'Đã xóa nội dung bài; ảnh đang được dọn và sẽ tự thử lại nếu kho ảnh gặp lỗi.':'Đã lưu thay đổi.';view.refreshVersion++;await load();}catch(e){if(seq===generation)error.value=fail(e);}finally{busy.value=false;}}
+ async function saveCatalog(){await mutation('catalog_save',{...form,id:form.id||null},'');if(!error.value)Object.assign(form,defaults());}
+ function editCatalog(s:CatalogSubject){Object.assign(form,{id:s.id,grade:s.grade,name:s.name,short_name:s.short_name,icon:s.icon,sort_order:s.sort_order,is_active:s.is_active,is_english:s.is_english});}
+ function selectDelete(n:Notice){target.value=n;reason.value='';confirmed.value=false;}
+@@ -59,7 +60,7 @@
+  <AppCard v-if="tab==='catalog'"><h2>Danh mục môn theo khối</h2><p>Giáo viên kích hoạt các môn này cho lớp được phân công.</p><div class="catalog-list"><button v-for="s in catalog" :key="s.id" @click="editCatalog(s)" :disabled="busy">{{ s.icon }} {{ s.name }} · Khối {{ s.grade }} · {{ s.is_active?'Hoạt động':'Tạm ngưng' }}</button></div>
+  <form class="form-grid" @submit.prevent="saveCatalog"><label>Khối<select v-model.number="form.grade" :disabled="!!form.id||busy" required><option v-for="g in context.grades" :key="g" :value="g">{{g}}</option></select></label><label>Tên môn<input v-model="form.name" required maxlength="100" :disabled="busy"></label><label>Tên ngắn<input v-model="form.short_name" maxlength="40" :disabled="busy"></label><label>Biểu tượng<input v-model="form.icon" required maxlength="40" :disabled="busy"></label><label>Thứ tự mặc định<input v-model.number="form.sort_order" type="number" step="1" :disabled="busy"></label><label class="check"><input v-model="form.is_english" type="checkbox" :disabled="busy">Môn Tiếng Anh</label><label class="check"><input v-model="form.is_active" type="checkbox" :disabled="busy">Hoạt động</label><div class="toolbar"><AppButton type="submit" :disabled="busy">{{form.id?'Lưu môn':'Thêm môn'}}</AppButton><AppButton type="button" variant="secondary" :disabled="busy" @click="Object.assign(form,defaults())">Nhập mới</AppButton></div></form></AppCard>
+  <AppCard v-if="tab==='history'||tab==='audit'"><h2>{{tab==='history'?'Lịch sử hoạt động':'Nhật ký quản trị'}}</h2><div class="toolbar"><label>{{tab==='history'?'Người đăng':'Người thực hiện'}}<select v-model="filters.actor_id"><option value="">Tất cả</option><option v-for="p in result.people" :key="p.id" :value="p.id">{{p.name}}</option></select></label><label>Từ ngày<input v-model="filters.from" type="date"></label><label>Đến trước ngày<input v-model="filters.to" type="date"></label><label v-if="tab==='history'">Trạng thái<select v-model="filters.status"><option value="">Tất cả</option><option v-for="(label,key) in {...stateLabels,hard_deleted:'Đã xóa vĩnh viễn'}" :key="key" :value="key">{{label}}</option></select></label><label v-else>Hành động<select v-model="filters.event_type"><option value="">Tất cả</option><option v-for="(label,key) in events" :key="key" :value="key">{{label}}</option></select></label></div>
+- <template v-if="tab==='history'"><article v-for="n in result.history" :key="n.id"><h3>{{ n.marker||n.title }}</h3><p>{{classLabel(n.class_id)}} · {{n.author_name||n.author_id}} · {{stateLabels[n.status]||n.status}}</p><template v-if="!n.marker"><p>{{n.content}}</p><small>{{dateLabel(n.created_at)}}</small></template><p v-else>Đã xóa vĩnh viễn · {{dateLabel(n.hard_deleted_at!)}}</p></article><p v-if="!result.history.length">Không có hoạt động khớp bộ lọc.</p></template>
++ <template v-if="tab==='history'"><article v-for="n in result.history" :key="n.id"><h3>{{ n.marker||n.title }}</h3><p>{{classLabel(n.class_id)}} · {{n.author_name||n.author_id}} · {{stateLabels[n.status]||n.status}}</p><template v-if="!n.marker"><p>{{n.content}}</p><HomeworkImage v-if="n.attachment_id" :class-id="n.class_id" :attachment-id="n.attachment_id" /><small>{{dateLabel(n.created_at)}}</small></template><p v-else>Đã xóa vĩnh viễn · {{dateLabel(n.hard_deleted_at!)}}</p></article><p v-if="!result.history.length">Không có hoạt động khớp bộ lọc.</p></template>
+  <template v-else><article v-for="e in [...result.audit,...result.catalog_audit]" :key="e.id"><strong>{{e.event_type==='submit'?(e.before_data?'Sửa Báo bài':'Đăng Báo bài'):(events[e.event_type]||e.event_type)}}</strong><p>{{e.class_id?classLabel(e.class_id):'Danh mục khối'}} · {{result.people.find(p=>p.id===e.actor_id)?.name||e.actor_id}} · {{dateLabel(e.created_at)}}</p><details><summary>Chi tiết nhật ký</summary><pre>{{JSON.stringify({before:e.before_data,after:e.after_data},null,2)}}</pre></details></article><p v-if="!result.audit.length&&!result.catalog_audit.length">Không có nhật ký khớp bộ lọc.</p></template>
+  </AppCard>
+  <AppCard v-if="tab==='awards'"><h2>Tuyên dương theo lớp</h2><p v-if="!classId">Chọn một lớp để xem tuyên dương.</p><template v-else-if="classData"><label>Thời gian<select v-model="week"><option value="">Năm học của lớp</option><option v-for="w in weeks" :key="w.id" :value="w.id">Tuần {{w.week_number}}</option></select></label><div class="form-grid"><section><h3>🐦 Chim sẻ đưa tin</h3><p v-for="p in classData.leaderboard.filter(p=>p.notices>0).sort((a,b)=>a.notice_rank-b.notice_rank)" :key="p.id">#{{p.notice_rank}} · {{p.full_name}} · {{p.notices}} bài</p></section><section><h3>⭐ Ngôi sao dẫn đường</h3><p v-for="p in classData.leaderboard.filter(p=>p.hearts>0).sort((a,b)=>a.heart_rank-b.heart_rank)" :key="p.id">#{{p.heart_rank}} · {{p.full_name}} · {{p.hearts}} tim</p></section><section><h3>🌱 Mầm xanh đóng góp</h3><p v-for="p in classData.leaderboard.filter(p=>p.seed_at)" :key="p.id">{{p.full_name}} · {{p.year_notices}} bài</p></section></div><p v-if="!classData.leaderboard.some(p=>p.notices||p.hearts)">Chưa có đóng góp hợp lệ trong thời gian này.</p></template></AppCard>
+--- a/src/components/homework/HomeworkCard.vue
++++ b/src/components/homework/HomeworkCard.vue
+@@ -1,4 +1,5 @@
+ <script setup lang="ts">
++import HomeworkImage from "./HomeworkImage.vue";
+ import { computed } from "vue";
+ import {
+   dateLabel,
+@@ -58,6 +59,7 @@
+     </div>
+     <h3>{{ notice.title }}</h3>
+     <p class="notice-content">{{ notice.content }}</p>
++    <HomeworkImage v-if="notice.attachment_id" :class-id="notice.class_id" :attachment-id="notice.attachment_id" />
+     <p class="deadline">
+       Hạn: <strong>{{ dateLabel(notice.due_at) }}</strong>
+     </p>
+--- a/src/components/homework/HomeworkCorrectionPanel.vue
++++ b/src/components/homework/HomeworkCorrectionPanel.vue
+@@ -1,4 +1,5 @@
+ <script setup lang="ts">
++import HomeworkImage from "./HomeworkImage.vue";
+ import { computed, ref } from 'vue';
+ import { dateLabel,type Correction,type Notice,type Subject,type EnglishGroup } from '../../features/homework/api';
+ import { correctionLabels,correctionPayload,issueLabels,moderationEventLabels } from '../../features/homework/moderation';
+@@ -24,11 +25,11 @@
+     <div class="revision-comparison">
+      <section v-if="notice" aria-label="Bản hiện tại"><h4>{{open?'Bản đang công khai':'Bản hiện tại'}}</h4>
+       <dl><dt>Môn học</dt><dd>{{subjectName(notice.subject_id)}}</dd><dt>Nhóm Tiếng Anh</dt><dd>{{groupName(notice.english_group_id)}}</dd><dt>Hạn bài tập</dt><dd>{{dateLabel(notice.due_at)}}</dd></dl>
+-      <h4>{{notice.title}}</h4><p class="text">{{notice.content}}</p>
++      <h4>{{notice.title}}</h4><p class="text">{{notice.content}}</p><HomeworkImage v-if="notice.attachment_id" :class-id="notice.class_id" :attachment-id="notice.attachment_id" />
+      </section>
+      <section :aria-label="r.submitted_at?'Bản gửi lại':'Bản nháp'"><h4>{{r.submitted_at?'Bản gửi lại':'Bản nháp'}}</h4>
+       <dl><dt>Môn học</dt><dd>{{subjectName(r.draft.subject_id)}}</dd><dt>Nhóm Tiếng Anh</dt><dd>{{groupName(r.draft.english_group_id)}}</dd><dt>Hạn bài tập</dt><dd>{{dateLabel(r.draft.due_at)}}</dd></dl>
+-      <h4>{{r.draft.title}}</h4><p class="text">{{r.draft.content}}</p>
++      <h4>{{r.draft.title}}</h4><p class="text">{{r.draft.content}}</p><HomeworkImage v-if="r.attachment_id" :class-id="correction.class_id" :attachment-id="r.attachment_id" />
+      </section>
+     </div>
+    </details>
+--- a/src/features/homework/api.ts
++++ b/src/features/homework/api.ts
+@@ -1,5 +1,6 @@
+ import { legacyApi } from "../../services/legacy-supabase";
+ export interface Notice {
++  attachment_id?: string | null;
+   id: string;
+   class_id: string;
+   subject_id: string;
+@@ -39,7 +40,7 @@
+ export interface ModerationEvent { id: string; event_type: string; actor_id: string | null; actor_name?: string | null; actor_type: 'user' | 'system'; round: number | null; reason: string | null; created_at: string }
+ export interface Correction extends CorrectionToken {
+   notice_id: string; class_id: string; closed_at: string | null;
+-  rounds: Array<{ round: number; requested_by: string; requested_at: string; due_at: string; reason: string; issue_types: string[]; draft: RevisionData | null; submitted_at: string | null; decision: string | null; decision_reason: string | null; decided_by: string | null; decided_at: string | null }>;
++  rounds: Array<{ attachment_id?: string | null; media_set?: boolean; round: number; requested_by: string; requested_at: string; due_at: string; reason: string; issue_types: string[]; draft: RevisionData | null; submitted_at: string | null; decision: string | null; decision_reason: string | null; decided_by: string | null; decided_at: string | null }>;
+   events: ModerationEvent[];
+ }
+ export interface NoticeReport { id: string; notice_id: string; class_id: string; class_name?: string; reporter_id: string; reporter_name: string; reporter_code: string | null; category: string; note: string | null; status: string; created_at: string; teacher_note: string | null; events: ModerationEvent[] }
+@@ -193,3 +194,10 @@
+   replaced: "🔄 Được thay thế",
+   deleted: "🗑️ Đã xóa",
+ };
++
++export async function homeworkMedia(action:string,payload:Record<string,unknown>):Promise<import('./media-upload').MediaResponse>{
++ const {data,error}=await (await client()).functions.invoke('homework-media',{body:{...payload,action}});
++ if(error){let message=error.message||'Chưa xử lý được ảnh.';try{const body=await error.context?.json();message=body?.error||message;}catch{}throw new Error(message);}
++ const result=data as import('./media-upload').MediaResponse & {error?:string};
++ if(!result.ok)throw new Error(result.error||'Chưa xử lý được ảnh.');return result;
++}
+--- a/src/pages/HomeworkPage.vue
++++ b/src/pages/HomeworkPage.vue
+@@ -7,6 +7,8 @@
+ import HomeworkAdminOversight from "../components/homework/HomeworkAdminOversight.vue";
+ import HomeworkAiSettings from "../components/homework/HomeworkAiSettings.vue";
+ import HomeworkGroupManager from "../components/homework/HomeworkGroupManager.vue";
++import HomeworkImage from "../components/homework/HomeworkImage.vue";
++import { useMediaComposer } from "../features/homework/media-composer";
+ import HomeworkCard from "../components/homework/HomeworkCard.vue";
+ import HomeworkModerationDialog from "../components/homework/HomeworkModerationDialog.vue";
+ import HomeworkCorrectionPanel from "../components/homework/HomeworkCorrectionPanel.vue";
+@@ -118,6 +120,9 @@
+   content: "",
+   deadline: "",
+ });
++const media = useMediaComposer(form,()=>({ownerId:auth.currentUser?.id||'',classId:classId.value}),()=>editing.value);
++function chooseImage(event:Event){const input=event.target as HTMLInputElement;const file=input.files?.[0];if(file)void media.choose(file);input.value='';}
++watch(editing,open=>{if(!open)media.close();});
+ const subjectForm = reactive({
+   id: "",
+   catalog_subject_id: "",
+@@ -220,6 +225,7 @@
+     content: draft?.content || n?.content || "",
+     deadline: draft ? localDeadline(draft.due_at) : n ? localDeadline(n.due_at) : "",
+   });
++  media.open(n,activeCorrection.value);
+   editing.value = true;
+ }
+ async function send() {
+@@ -229,7 +235,9 @@
+   error.value = "";
+   message.value = "";
+   try {
++    const attachment = await media.payload({class_id:classId.value,notice_id:form.id||null,revision:form.revision,request_id:form.request_id});
+     const result = await submitHomework(classId.value, {
++      ...attachment,
+       ...form,
+       id: form.id || null,
+       english_group_id: selectedSubject.value?.is_english
+@@ -237,6 +245,7 @@
+         : null,
+       due_at: utcDeadline(form.deadline),
+     });
++    await media.committed();
+     editing.value = false;
+     message.value =
+       result.message ||
+@@ -258,10 +267,12 @@
+   if(!activeCorrection.value||busy.value)return;
+   const c=activeCorrection.value;busy.value=true;error.value='';
+   try{
++    const attachment=await media.payload({class_id:classId.value,notice_id:form.id,request_id:form.request_id,revision:form.revision,correction_id:c.id,round:c.round,version:c.version});
+     const result=await homeworkRpc<Correction & {expired?:boolean;message?:string}>(resubmit?'correction_submit':'correction_save',classId.value,{
+-      ...correctionPayload(form.id,c),revision_data:{subject_id:form.subject_id,english_group_id:selectedSubject.value?.is_english?form.english_group_id:null,title:form.title,content:form.content,due_at:utcDeadline(form.deadline)}
++      ...attachment,...correctionPayload(form.id,c),revision_data:{subject_id:form.subject_id,english_group_id:selectedSubject.value?.is_english?form.english_group_id:null,title:form.title,content:form.content,due_at:utcDeadline(form.deadline)}
+     });
+     if(result.expired){editing.value=false;await load();throw new Error(result.message||'Đã hết hạn chỉnh sửa.');}
++    await media.committed(resubmit?undefined:{...c,...result});
+     if(resubmit){editing.value=false;message.value='Đã gửi lại GV. Đồng hồ 72 giờ đã dừng.';tab.value='corrections';}
+     else{activeCorrection.value={...c,...result};message.value='Đã lưu bản nháp riêng tư; bạn vẫn cần bấm Gửi lại GV trước hạn.';}
+     view.refreshVersion++;await load();
+@@ -740,6 +751,7 @@
+         </h2>
+         <p v-if="activeCorrection"><strong v-if="activeCorrection.round===2">Lần chỉnh sửa cuối. </strong>{{activeCorrection.rounds.find(r=>r.round===activeCorrection?.round)?.reason}} — Hạn gửi lại: {{dateLabel(activeCorrection.rounds.find(r=>r.round===activeCorrection?.round)!.due_at)}}</p>
+         <form @submit.prevent="send">
++          <fieldset :disabled="busy || media.compressing.value" class="composer-fields">
+           <div class="form-grid">
+             <label
+               >Môn học<select
+@@ -790,6 +802,20 @@
+               type="datetime-local"
+               required
+           /></label>
++          <section class="composer-image" aria-label="Ảnh đính kèm">
++            <label>Ảnh đính kèm (tối đa một ảnh)
++              <input type="file" accept="image/jpeg,image/png,image/webp,image/heic,image/heif,.heic,.heif" @change="chooseImage">
++            </label>
++            <p class="hint">Ảnh được nén trên thiết bị, giữ nguyên nội dung. Chỉ tải lên khi bạn gửi bài hoặc lưu bản sửa.</p>
++            <p v-if="media.compressing.value" role="status">Đang xử lý ảnh…</p>
++            <img v-if="media.preview.value" :src="media.preview.value" alt="Ảnh đã chọn — chưa công bố" class="image-preview">
++            <HomeworkImage v-else-if="media.attachmentId.value" :class-id="classId" :attachment-id="media.attachmentId.value" />
++            <p v-if="media.image.value">{{Math.round(media.image.value.blob.size/1000)}} KB · {{media.image.value.width}} × {{media.image.value.height}} px</p>
++            <button v-if="media.image.value || media.attachmentId.value" type="button" @click="media.remove">Bỏ ảnh, dùng nội dung chữ</button>
++            <p v-if="media.note.value" role="status">{{media.note.value}}</p>
++            <button v-if="media.recoverable.value" type="button" @click="media.restore">Khôi phục bản nháp</button>
++            <p v-if="media.failure.value" role="alert" class="error">{{media.failure.value}}</p>
++          </section>
+           <p v-if="error" role="alert" class="error">{{ error }}</p>
+           <p>{{activeCorrection?'Bản nháp chỉ bạn và giáo viên thấy. Bấm Gửi lại GV để dừng đồng hồ 72 giờ; bài công khai hiện tại vẫn được giữ đến khi GV duyệt.':'Nội dung được kiểm tra trùng trước khi công bố.'}}</p>
+           <div class="actions">
+@@ -799,6 +825,7 @@
+               {{ busy ? "Đang lưu và kiểm tra…" : activeCorrection ? "Gửi lại GV" : "Đăng Báo bài" }}
+             </button>
+           </div>
++          </fieldset>
+         </form>
+     </dialog>
+     <div v-if="deleteTarget" class="modal-backdrop">
+@@ -826,6 +853,8 @@
+   </section>
+ </template>
+ <style scoped>
++.composer-fields{border:0;margin:0;padding:0;min-width:0;display:grid;gap:16px}.composer-image{display:grid;gap:10px;min-width:0;border:1px solid var(--border);border-radius:12px;padding:12px}.image-preview{width:100%;max-height:300px;object-fit:contain;border-radius:10px}.composer-image input{max-width:100%}
++
+ .homework-page {
+   display: grid;
+   gap: 22px;
+--- a/tests/feat-005/fixture.mjs
++++ b/tests/feat-005/fixture.mjs
+@@ -14,7 +14,7 @@
+   if (upgrade && !process.env.FEAT005_BASELINE) await migrate(db);
+   return db;
+ }
+-export async function migrate(db) { await db.exec(await readFile(new URL('../../database/upgrade/09-FEAT-005-OWNERSHIP-CORRECTION.sql', import.meta.url), 'utf8')); }
++export async function migrate(db) { await db.exec(await readFile(new URL('../../database/upgrade/09-FEAT-005-OWNERSHIP-CORRECTION.sql', import.meta.url), 'utf8')); if(process.env.FEAT006_UPGRADE) await db.exec(await readFile(new URL('../../database/upgrade/10-FEAT-006-HOMEWORK-MEDIA.sql', import.meta.url), 'utf8')); }
+ export async function rpc(db, user, action, payload = {}, scope = classId) {
+   await db.exec(`set role authenticated; set request.jwt.claim.sub='${user}';`);
+   try { return (await db.query('select public.homework_api($1,$2::jsonb) r',[action, JSON.stringify({class_id:scope,...payload})])).rows[0].r; }
+--- a/tests/feat-005/workflow.test.mjs
++++ b/tests/feat-005/workflow.test.mjs
+@@ -5,7 +5,7 @@
+ const token = (n,c) => ({id:n.id,correction_id:c.id,round:c.round,version:c.version});
+ const request = (db,n) => rpc(db,ids.t,'correction_request',{id:n.id,issue_types:['deadline','content'],reason:'Sửa nội dung và hạn'});
+ async function maintenance(db) {await db.exec('set role service_role');try{await db.exec('select public.homework_maintenance()');}finally{await db.exec('reset role');}}
+-async function overdue(db,c) { await db.query("update homework_correction_rounds set requested_at=clock_timestamp()-interval '73 hours',due_at=clock_timestamp()-interval '1 hour' where correction_id=$1 and round=$2",[c.id,c.round]); }
++async function overdue(db,c) { await db.query("update homework_correction_rounds set requested_at=statement_timestamp()-interval '73 hours',due_at=statement_timestamp()-interval '1 hour' where correction_id=$1 and round=$2",[c.id,c.round]); }
+ test('reports: role matrix, confidentiality in every reader, Teacher outcomes/statistics without role changes',async()=>{
+  const db=await setup();try{const n=await seed(db);
+  for(const u of [ids.s,ids.other,ids.t,ids.a]) await assert.rejects(rpc(db,u,'report',{id:n.id,category:'content'}),{code:'42501'});

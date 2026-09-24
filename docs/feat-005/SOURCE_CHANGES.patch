@@ -1,0 +1,1591 @@
+--- /dev/null
++++ b/database/upgrade/09-FEAT-005-OWNERSHIP-CORRECTION.sql
+@@ -0,0 +1,379 @@
++-- FEAT-005 SYSTEM_ACTOR_RESOLVED. Apply once AFTER 08, in one transaction.
++-- Never run this file against production as part of implementation/testing.
++begin;
++lock table public.homework_notices, public.homework_tombstones in access exclusive mode;
++do $$ begin
++ if exists(select 1 from public.homework_notices where status='deleted' and (deleted_at is null or deleted_by is null)) then
++   raise exception 'FEAT-005 preflight: legacy deletion attribution requires investigation';
++ end if;
++end $$;
++alter table public.homework_notices add column deleted_actor_type text;
++update public.homework_notices set deleted_actor_type='user' where status='deleted';
++alter table public.homework_notices add constraint homework_deletion_actor check (
++ (status='deleted' and deleted_at is not null and deleted_actor_type is not null and
++  ((deleted_actor_type='user' and deleted_by is not null) or (deleted_actor_type='system' and deleted_by is null)))
++ or (status<>'deleted' and deleted_at is null and deleted_by is null and deleted_actor_type is null));
++-- Constant default adds attribution without updating immutable historical records.
++alter table public.homework_tombstones add column soft_delete_actor_type text not null default 'user';
++alter table public.homework_tombstones alter column soft_deleted_by drop not null;
++alter table public.homework_tombstones add constraint homework_tombstone_actor check (
++ (soft_delete_actor_type='user' and soft_deleted_by is not null) or (soft_delete_actor_type='system' and soft_deleted_by is null));
++
++create function homework_private.deletion_attribution() returns trigger language plpgsql set search_path=pg_catalog,public as $$
++begin
++ if new.status<>'deleted' then new.deleted_actor_type:=null;
++ elsif new.deleted_by is not null then new.deleted_actor_type:='user'; end if;
++ return new;
++end $$;
++create trigger homework_deletion_attribution before insert or update on public.homework_notices for each row execute function homework_private.deletion_attribution();
++
++-- Restricted operational records. No direct client grants, including SELECT.
++create table public.homework_reports (
++ id uuid primary key default gen_random_uuid(), class_id uuid not null references public.classes,
++ notice_id uuid not null references public.homework_notices on delete cascade,
++ reporter_id uuid not null references public.profiles, created_at timestamptz not null default clock_timestamp(),
++ category text not null check(category in('deadline','subject','content','duplicate','other')),
++ note text check(length(note)<=2000), status text not null default 'open' check(status in('open','valid','invalid','suspected_abuse')),
++ processed_by uuid references public.profiles, processed_at timestamptz, teacher_note text check(length(teacher_note)<=2000)
++);
++create unique index homework_report_one_open on public.homework_reports(notice_id,reporter_id) where status='open';
++create index homework_reports_scope on public.homework_reports(class_id,created_at desc);
++create table public.homework_corrections (
++ id uuid primary key default gen_random_uuid(),class_id uuid not null references public.classes,
++ notice_id uuid not null references public.homework_notices on delete cascade,
++ round smallint not null default 1 check(round between 1 and 2), version integer not null default 1 check(version>0),
++ status text not null default 'awaiting_author' check(status in('awaiting_author','awaiting_teacher','approved','timeout','rejected_final','withdrawn_by_author','emergency_removed')),
++ created_at timestamptz not null default clock_timestamp(),closed_at timestamptz,
++ check((status in('awaiting_author','awaiting_teacher'))=(closed_at is null))
++);
++create unique index homework_correction_one_open on public.homework_corrections(notice_id) where status in('awaiting_author','awaiting_teacher');
++create table public.homework_correction_rounds (
++ correction_id uuid not null references public.homework_corrections on delete cascade,
++ round smallint not null check(round between 1 and 2),primary key(correction_id,round),
++ requested_by uuid not null references public.profiles,requested_at timestamptz not null,
++ due_at timestamptz not null,issue_types text[] not null,
++ reason text not null check(length(trim(reason)) between 1 and 2000),
++ draft jsonb,submitted_at timestamptz,decided_by uuid references public.profiles,decided_at timestamptz,
++ decision text check(decision in('approved','rejected')),decision_reason text,
++ check(due_at=requested_at+interval '72 hours'),
++ check(cardinality(issue_types)>0 and issue_types <@ array['deadline','subject','content','other']::text[] and array_position(issue_types,null) is null)
++);
++-- Reporter identity and private revisions never enter the public contribution log.
++create table public.homework_moderation_events (
++ id uuid primary key default gen_random_uuid(),class_id uuid not null references public.classes,
++ notice_id uuid not null references public.homework_notices on delete cascade,
++ report_id uuid references public.homework_reports on delete cascade,
++ correction_id uuid references public.homework_corrections on delete cascade,
++ actor_id uuid references public.profiles,actor_type text not null check(actor_type in('user','system')),
++ event_type text not null,round smallint check(round between 1 and 2),reason text,
++ created_at timestamptz not null default clock_timestamp(),
++ check((actor_type='user' and actor_id is not null) or (actor_type='system' and actor_id is null))
++);
++create index homework_moderation_scope on public.homework_moderation_events(class_id,notice_id,created_at);
++do $$ declare t text; begin
++ foreach t in array array['homework_reports','homework_corrections','homework_correction_rounds','homework_moderation_events'] loop
++  execute format('alter table public.%I enable row level security',t);
++  execute format('revoke all on public.%I from public,anon,authenticated',t);
++ end loop;
++end $$;
++
++create function homework_private.moderation_event(c uuid,n uuid,a uuid,e text,reason_text text default null,cor uuid default null,rnd smallint default null,rep uuid default null)
++returns void language sql set search_path=pg_catalog,public as $$
++ insert into public.homework_moderation_events(class_id,notice_id,actor_id,actor_type,event_type,reason,correction_id,round,report_id)
++ values(c,n,a,case when a is null then 'system' else 'user' end,e,reason_text,cor,rnd,rep)
++$$;
++create function homework_private.notify_author(n public.homework_notices,k text,msg text) returns void language sql set search_path=pg_catalog,public as $$
++ insert into public.homework_notifications(class_id,recipient_id,notice_id,kind,title,message)
++ values(n.class_id,n.author_id,n.id,'correction_'||k,'Báo bài — cập nhật từ giáo viên/hệ thống',msg)
++$$;
++alter function homework_private.notification_visible(public.homework_notifications,public.profiles) rename to notification_visible_v4;
++create function homework_private.notification_visible(hn public.homework_notifications,a public.profiles) returns boolean language sql stable set search_path=pg_catalog,public as $$
++ select case when hn.kind like 'correction_%' then hn.recipient_id=a.id and exists(select 1 from public.homework_notices n where n.id=hn.notice_id and n.class_id=hn.class_id and n.author_id=a.id)
++ else homework_private.notification_visible_v4(hn,a) end
++$$;
++
++create function homework_private.correction_delete(n public.homework_notices,actor uuid,why text,outcome text,cor public.homework_corrections)
++returns void language plpgsql set search_path=pg_catalog,public as $$
++begin
++ if n.status in('deleted','replaced') then raise exception 'Bài đã thay đổi'; end if;
++ update public.homework_notices set previous_status=status,status='deleted',deleted_at=clock_timestamp(),deleted_by=actor,
++  deleted_actor_type=case when actor is null then 'system' else 'user' end,delete_reason=why,revision=revision+1,updated_at=clock_timestamp() where id=n.id;
++ if cor.id is not null then
++  update public.homework_corrections set status=outcome,closed_at=clock_timestamp(),version=version+1 where id=cor.id;
++ end if;
++ perform homework_private.moderation_event(n.class_id,n.id,actor,outcome,why,cor.id,cor.round);
++ perform homework_private.moderation_event(n.class_id,n.id,actor,case when actor is null then 'system_soft_delete' else 'user_soft_delete' end,why,cor.id,cor.round);
++ perform homework_private.notify_author(n,outcome,why);
++ perform homework_private.backlog(n.class_id);
++end $$;
++
++create function homework_private.expire_corrections(c uuid) returns integer language plpgsql set search_path=pg_catalog,public as $$
++declare cor public.homework_corrections;n public.homework_notices;total integer:=0;begin
++ perform pg_advisory_xact_lock(hashtextextended('homework:'||c::text,0));
++ for cor in select x.* from public.homework_corrections x join public.homework_correction_rounds r on r.correction_id=x.id and r.round=x.round
++ where x.class_id=c and x.status='awaiting_author' and r.due_at<=clock_timestamp() order by x.id for update of x loop
++  select * into n from public.homework_notices where id=cor.notice_id for update;
++  if n.status not in('deleted','replaced') then
++   perform homework_private.correction_delete(n,null,'Không chỉnh sửa Báo bài trong 72 giờ sau yêu cầu của giáo viên.','timeout',cor);
++   total:=total+1;
++  end if;
++ end loop;return total;
++end $$;
++
++-- Keep all existing material-change and AI/duplicate behavior. This helper
++-- applies only a Teacher-approved revision; it never changes auth.uid().
++create function homework_private.apply_correction(n public.homework_notices,p jsonb,a uuid) returns jsonb language plpgsql set search_path=pg_catalog,public as $$
++declare pending boolean;fresh public.homework_notices;begin
++ pending:=n.status<>'published' or (p->>'subject_id')::uuid<>n.subject_id or nullif(p->>'english_group_id','')::uuid is distinct from n.english_group_id
++  or abs(extract(epoch from ((p->>'due_at')::timestamptz-n.due_at)))>=86400
++  or regexp_replace(trim(p->>'title'),'\s+',' ','g')<>regexp_replace(n.title,'\s+',' ','g')
++  or regexp_replace(trim(p->>'content'),'\s+',' ','g')<>regexp_replace(n.content,'\s+',' ','g');
++ update public.homework_notices set subject_id=(p->>'subject_id')::uuid,english_group_id=nullif(p->>'english_group_id','')::uuid,
++ title=trim(p->>'title'),content=trim(p->>'content'),due_at=(p->>'due_at')::timestamptz,
++ revision=revision+1,updated_at=clock_timestamp(),pending_since=case when pending then clock_timestamp() else pending_since end,
++ status=case when pending then 'pending_duplicate_review' else status end,
++ duplicate_of=case when pending then null else duplicate_of end,duplicate_tombstone_id=case when pending then null else duplicate_tombstone_id end
++ where id=n.id returning * into fresh;
++ -- The AI edit classifier uses submit events to recover the previous revision.
++ perform homework_private.audit(n.class_id,n.id,a,'submit',to_jsonb(n),to_jsonb(fresh));
++ return homework_private.card(fresh,a);
++end $$;
++
++create function homework_private.validate_revision(n public.homework_notices,p jsonb) returns jsonb language plpgsql set search_path=pg_catalog,public as $$
++declare s public.class_subjects;g uuid:=nullif(p->>'english_group_id','')::uuid;author public.profiles;begin
++ if jsonb_typeof(p) is distinct from 'object' or exists(select 1 from jsonb_object_keys(p) k where k not in('subject_id','english_group_id','title','content','due_at')) then raise exception 'Revision không hợp lệ';end if;
++ if p->>'title' is null or p->>'content' is null or length(trim(p->>'title')) not between 1 and 200 or length(trim(p->>'content')) not between 1 and 6000
++  or p->>'due_at' is null or not isfinite((p->>'due_at')::timestamptz) then raise exception 'Nội dung/hạn không hợp lệ';end if;
++ select * into s from public.class_subjects where id=(p->>'subject_id')::uuid and class_id=n.class_id and is_active;
++ if s.id is null then raise exception 'Môn không hoạt động';end if;
++ select * into author from public.profiles where id=n.author_id;
++ if s.is_english then
++  if not exists(select 1 from public.english_groups where id=g and class_id=n.class_id and school_year_id=n.school_year_id and is_active) then raise exception 'Nhóm Tiếng Anh không hợp lệ';end if;
++  if author.role::text='student' and not exists(select 1 from public.english_group_members where student_id=author.id and english_group_id=g and left_at is null) then raise exception 'Ngoài nhóm Tiếng Anh' using errcode='42501';end if;
++ elsif g is not null then raise exception 'Môn này không dùng nhóm Tiếng Anh';end if;
++ return jsonb_build_object('subject_id',s.id,'english_group_id',g,'title',trim(p->>'title'),'content',trim(p->>'content'),'due_at',(p->>'due_at')::timestamptz);
++end $$;
++
++alter function homework_private.card(public.homework_notices,uuid) rename to card_v4;
++create function homework_private.card(n public.homework_notices,p_user uuid) returns jsonb language sql stable set search_path=pg_catalog,public as $$
++ select homework_private.card_v4(n,p_user)||jsonb_build_object(
++ 'deleted_actor_type',n.deleted_actor_type,'deleted_by',n.deleted_by,'deleted_at',n.deleted_at,'deleted_actor_name',case when n.deleted_actor_type='system' then 'System' else (select full_name from public.profiles where id=n.deleted_by) end,
++ 'correction', (select jsonb_build_object('id',c.id,'round',c.round,'status',c.status,'version',c.version,'due_at',r.due_at)
++ from public.homework_corrections c join public.homework_correction_rounds r on r.correction_id=c.id and r.round=c.round
++ where c.notice_id=n.id and c.status in('awaiting_author','awaiting_teacher')))
++$$;
++
++-- Old dispatchers remain private and inaccessible; all public calls use this gate.
++alter function public.homework_api(text,jsonb) set schema homework_private;
++alter function homework_private.homework_api(text,jsonb) rename to api_v4;
++create function public.homework_api(p_action text,p_data jsonb default '{}'::jsonb) returns jsonb
++language plpgsql security definer set search_path=pg_catalog,public as $$
++declare c uuid:=nullif(p_data->>'class_id','')::uuid;a public.profiles;n public.homework_notices;
++ cor public.homework_corrections;rr public.homework_correction_rounds;rep public.homework_reports;
++ rid uuid:=nullif(p_data->>'id','')::uuid;why text:=trim(coalesce(p_data->>'reason',''));issues text[];
++ out_data jsonb;payload jsonb;stamp timestamptz;
++begin
++ if p_action in('context','catalog_list','catalog_save','oversight') then return homework_private.api_v4(p_action,p_data);end if;
++ perform 1 from public.profiles where id=auth.uid() for share;
++ perform 1 from public.classes where id=c for share;
++ perform 1 from public.class_teachers where class_id=c and teacher_id=auth.uid() for share;
++ a:=homework_private.actor(c);
++ perform pg_advisory_xact_lock(hashtextextended('homework:'||c::text,0));
++ if a.role::text='admin' and p_action not in('load','inbox','read_notification','settings','alert_settings','hard_delete') then raise exception 'Admin chỉ giám sát Báo bài' using errcode='42501';end if;
++
++ if p_action='load' then
++  out_data:=homework_private.api_v4(p_action,p_data);
++  if a.role::text in('student','monitor','teacher') then
++   out_data:=out_data||jsonb_build_object('corrections',coalesce((select jsonb_agg(to_jsonb(x)||jsonb_build_object('rounds',(select jsonb_agg(to_jsonb(r) order by r.round)from public.homework_correction_rounds r where r.correction_id=x.id),
++    'events',(select coalesce(jsonb_agg(to_jsonb(e)||jsonb_build_object('actor_name',(select full_name from public.profiles where id=e.actor_id)) order by e.created_at),'[]') from public.homework_moderation_events e where e.correction_id=x.id and e.report_id is null)))
++    from public.homework_corrections x join public.homework_notices hn on hn.id=x.notice_id where x.class_id=c and (hn.author_id=a.id or a.role::text='teacher')),'[]'));
++  end if;
++  if a.role::text='teacher' then
++   out_data:=jsonb_set(out_data,'{audit}',coalesce(out_data->'audit','[]')||coalesce((select jsonb_agg(jsonb_build_object('id',e.id,'event_type',e.event_type,'actor_id',e.actor_id,'notice_id',e.notice_id,'created_at',e.created_at,'before_data',null,'after_data',jsonb_build_object('actor_type',e.actor_type,'round',e.round,'reason',e.reason,'report_id',e.report_id,'correction_id',e.correction_id)) order by e.created_at desc) from public.homework_moderation_events e where e.class_id=c),'[]'));
++   out_data:=out_data||jsonb_build_object('reports',coalesce((select jsonb_agg(to_jsonb(r)||jsonb_build_object('reporter_name',p.full_name,'reporter_code',coalesce(to_jsonb(p)->>'student_code',to_jsonb(p)->>'username',to_jsonb(p)->>'login_code'),
++    'class_name',(select code from public.classes where id=r.class_id),'events',(select coalesce(jsonb_agg(to_jsonb(e)||jsonb_build_object('actor_name',(select full_name from public.profiles where id=e.actor_id)) order by e.created_at),'[]')from public.homework_moderation_events e where e.report_id=r.id)) order by r.created_at desc)
++    from public.homework_reports r join public.profiles p on p.id=r.reporter_id where r.class_id=c),'[]'),
++    'report_statistics',coalesce((select jsonb_agg(to_jsonb(x)) from(select r.reporter_id,p.full_name,count(*) total,count(*)filter(where status='valid') valid,count(*)filter(where status='invalid') invalid,count(*)filter(where status='suspected_abuse') suspected_abuse
++    from public.homework_reports r join public.profiles p on p.id=r.reporter_id where r.class_id=c group by r.reporter_id,p.full_name)x),'[]'));
++  end if;
++  return out_data;
++ end if;
++
++ if rid is not null and p_action not in('read_notification','group_save','group_assign','subject_save') then
++  select * into n from public.homework_notices where id=rid and class_id=c for update;
++ end if;
++ if p_action in('submit','delete') and rid is not null then
++  if n.id is null or n.author_id<>a.id then raise exception 'Chỉ tác giả được sửa/xóa bài' using errcode='42501';end if;
++  if exists(select 1 from public.homework_corrections where notice_id=n.id and status in('awaiting_author','awaiting_teacher')) then raise exception 'Bài đang chỉnh sửa: dùng Gửi lại GV hoặc Xin rút bài';end if;
++ end if;
++ if p_action='remind' and a.role::text='monitor' and n.author_id is distinct from a.id then raise exception 'Cán sự không nhắc bài người khác' using errcode='42501';end if;
++ -- Product decision, 2026-09-15: resolve the target's correction before replacing
++ -- it through duplicate review. The shared class lock makes this race-safe with
++ -- correction creation/closure and the existing replacement transaction.
++ if p_action='review' and a.role::text='teacher' and p_data->>'decision'='replace_existing'
++  and exists(select 1 from public.homework_corrections where notice_id=n.duplicate_of and status in('awaiting_author','awaiting_teacher')) then
++  raise exception 'Bài cũ đang có yêu cầu chỉnh sửa. GV cần xử lý correction trước khi Thay bài cũ.';
++ end if;
++
++ if p_action not in('report','report_process','correction_request','correction_save','correction_submit','correction_decide','withdraw','emergency_remove') then
++  return homework_private.api_v4(p_action,p_data);
++ end if;
++ if n.id is null then raise exception 'Không tìm thấy bài' using errcode='42501';end if;
++ if not homework_private.visible(n,a) and n.author_id<>a.id then raise exception 'Ngoài nhóm Tiếng Anh' using errcode='42501';end if;
++ if p_action in('report_process','correction_request','correction_decide','emergency_remove') and a.role::text<>'teacher' then raise exception 'Chỉ Teacher lớp được xử lý' using errcode='42501';end if;
++
++ if p_action='report' then
++  if a.role::text<>'monitor' or n.author_id=a.id then raise exception 'Chỉ Cán sự báo bài người khác' using errcode='42501';end if;
++  if n.status<>'published' then raise exception 'Bài không còn công khai';end if;
++  if exists(select 1 from jsonb_object_keys(p_data) k where k not in('class_id','id','category','note','action')) then raise exception 'Report payload không hợp lệ';end if;
++  insert into public.homework_reports(class_id,notice_id,reporter_id,category,note)values(c,n.id,a.id,p_data->>'category',nullif(trim(p_data->>'note'),''))returning * into rep;
++  perform homework_private.moderation_event(c,n.id,a.id,'report_created',null,null,null,rep.id);
++  return '{"ok":true}';
++ elsif p_action='report_process' then
++  select * into rep from public.homework_reports where id=(p_data->>'report_id')::uuid and notice_id=n.id and class_id=c for update;
++  if rep.id is null or rep.status<>'open' then raise exception 'Report đã xử lý hoặc không tồn tại';end if;
++  if p_data->>'outcome' is null or p_data->>'outcome' not in('valid','invalid','suspected_abuse') then raise exception 'Kết quả report không hợp lệ';end if;
++  update public.homework_reports set status=p_data->>'outcome',teacher_note=nullif(trim(p_data->>'note'),''),processed_at=clock_timestamp(),processed_by=a.id where id=rep.id;
++  perform homework_private.moderation_event(c,n.id,a.id,'report_'||(p_data->>'outcome'),p_data->>'note',null,null,rep.id);
++  return '{"ok":true}';
++ end if;
++
++ if n.status in('deleted','replaced') then raise exception 'Bài đã thay đổi hoặc đã gỡ';end if;
++ select * into cor from public.homework_corrections where notice_id=n.id and status in('awaiting_author','awaiting_teacher') for update;
++ if p_action='correction_request' then
++  if cor.id is not null then raise exception 'Đã có yêu cầu chỉnh sửa đang mở';end if;
++  if n.status<>'published' then raise exception 'Chỉ yêu cầu chỉnh sửa bài đã công bố';end if;
++  if not exists(select 1 from public.profiles where id=n.author_id and role::text in('student','monitor')) then raise exception 'Chỉ yêu cầu tác giả học sinh/cán sự chỉnh sửa';end if;
++  if length(why) not between 1 and 2000 then raise exception 'Cần hướng dẫn chỉnh sửa';end if;
++  select array_agg(v) into issues from jsonb_array_elements_text(p_data->'issue_types')v;
++  stamp:=clock_timestamp();
++  insert into public.homework_corrections(class_id,notice_id)values(c,n.id)returning * into cor;
++  insert into public.homework_correction_rounds(correction_id,round,requested_by,requested_at,due_at,issue_types,reason)values(cor.id,1,a.id,stamp,stamp+interval '72 hours',issues,why);
++  perform homework_private.moderation_event(c,n.id,a.id,'correction_created',why,cor.id,cor.round);
++  perform homework_private.notify_author(n,'requested','GV yêu cầu chỉnh sửa Báo bài. Hạn phản hồi: '||to_char((stamp+interval '72 hours') at time zone 'Asia/Ho_Chi_Minh','HH24:MI DD/MM/YYYY')||'. '||why);
++  return to_jsonb(cor);
++ elsif p_action='emergency_remove' then
++  if not exists(select 1 from public.profiles where id=n.author_id and role::text in('student','monitor')) then raise exception 'Chỉ gỡ bài của học sinh/cán sự';end if;
++  if p_data->>'category' is null or p_data->>'category' not in('inappropriate_content','posted_by_mistake','seriously_incorrect_information','other') or length(why) not between 1 and 2000 then raise exception 'Cần loại và lý do gỡ khẩn cấp';end if;
++  perform homework_private.correction_delete(n,a.id,'GV gỡ bài ('||(p_data->>'category')||'): '||why,'emergency_removed',cor);
++  return '{"ok":true}';
++ end if;
++
++ if cor.id is null or (p_data->>'correction_id')::uuid is distinct from cor.id or (p_data->>'round')::int is distinct from cor.round or (p_data->>'version')::int is distinct from cor.version then raise exception 'Yêu cầu đã thay đổi; hãy tải lại';end if;
++ select * into rr from public.homework_correction_rounds where correction_id=cor.id and round=cor.round for update;
++ if p_action in('correction_save','correction_submit','withdraw') and n.author_id<>a.id then raise exception 'Chỉ tác giả phản hồi' using errcode='42501';end if;
++ stamp:=clock_timestamp();
++ if cor.status='awaiting_author' and rr.due_at<=stamp then
++  perform homework_private.expire_corrections(c);
++  return jsonb_build_object('ok',false,'expired',true,'message','Đã hết hạn chỉnh sửa 72 giờ; bài đã được System gỡ.');
++ end if;
++ if p_action='withdraw' then
++  if length(why) not between 1 and 2000 then raise exception 'Xin rút bài cần lý do';end if;
++  perform homework_private.correction_delete(n,a.id,'Tác giả xin rút bài: '||why,'withdrawn_by_author',cor);
++  return '{"ok":true}';
++ elsif p_action in('correction_save','correction_submit') then
++  if cor.status<>'awaiting_author' then raise exception 'Revision đã gửi; chờ GV xác nhận';end if;
++  payload:=homework_private.validate_revision(n,p_data->'revision_data');
++  update public.homework_correction_rounds set draft=payload,submitted_at=case when p_action='correction_submit' then stamp else null end where correction_id=cor.id and round=cor.round;
++  update public.homework_corrections set status=case when p_action='correction_submit' then 'awaiting_teacher' else status end,version=version+1 where id=cor.id returning * into cor;
++  perform homework_private.moderation_event(c,n.id,a.id,case when p_action='correction_submit' then 'revision_submitted' else 'revision_saved' end,null,cor.id,cor.round);
++  return to_jsonb(cor)||jsonb_build_object('ok',true);
++ elsif p_action='correction_decide' then
++  if cor.status<>'awaiting_teacher' or rr.submitted_at is null then raise exception 'Chưa có revision gửi lại';end if;
++  if p_data->>'decision' is null or p_data->>'decision' not in('approved','rejected') then raise exception 'Quyết định không hợp lệ';end if;
++  if p_data->>'decision'='rejected' and length(why) not between 1 and 2000 then raise exception 'Chưa đạt cần lý do';end if;
++  update public.homework_correction_rounds set decided_by=a.id,decided_at=clock_timestamp(),decision=p_data->>'decision',decision_reason=nullif(why,'')where correction_id=cor.id and round=cor.round;
++  perform homework_private.moderation_event(c,n.id,a.id,'correction_'||(p_data->>'decision'),why,cor.id,cor.round);
++  if p_data->>'decision'='approved' then
++   payload:=homework_private.validate_revision(n,rr.draft);
++   out_data:=homework_private.apply_correction(n,payload,a.id);
++   update public.homework_corrections set status='approved',closed_at=clock_timestamp(),version=version+1 where id=cor.id;
++   perform homework_private.notify_author(n,'approved','GV xác nhận chỉnh sửa đạt. Bài vẫn phải qua kiểm tra nội dung trùng theo quy định.');
++   return out_data;
++  elsif cor.round=1 then
++   stamp:=clock_timestamp();
++   insert into public.homework_correction_rounds(correction_id,round,requested_by,requested_at,due_at,issue_types,reason,draft)values(cor.id,2,a.id,stamp,stamp+interval '72 hours',rr.issue_types,why,rr.draft);
++   update public.homework_corrections set round=2,status='awaiting_author',version=version+1 where id=cor.id returning * into cor;
++   perform homework_private.moderation_event(c,n.id,a.id,'round_2_opened',why,cor.id,cor.round);
++   perform homework_private.notify_author(n,'round_2','Lần chỉnh sửa cuối. Bạn có 72 giờ mới để gửi lại GV. '||why);
++   return to_jsonb(cor);
++  else
++   perform homework_private.correction_delete(n,null,'Không đạt sau lần chỉnh sửa cuối. '||why,'rejected_final',cor);
++   return '{"ok":true}';
++  end if;
++ end if;
++ raise exception 'Thao tác không hợp lệ';
++end $$;
++
++create or replace function homework_private.hard_delete(c uuid, a profiles, p jsonb)
++ RETURNS jsonb
++ LANGUAGE plpgsql
++ SET search_path TO 'pg_catalog', 'public'
++AS $function$
++declare n public.homework_notices; last_review public.homework_duplicate_reviews; target uuid:=(p->>'id')::uuid;
++ reason_text text:=regexp_replace(coalesce(p->>'hard_delete_reason',''),'^[[:space:]]+|[[:space:]]+$','','g');
++begin
++ if a.role::text<>'admin' then raise exception 'Chỉ Admin được xóa vĩnh viễn' using errcode='42501';end if;
++ if p->'confirm_irreversible' is distinct from 'true'::jsonb or jsonb_typeof(p->'hard_delete_reason') is distinct from 'string' or length(reason_text) not between 1 and 500 then raise exception 'Cần xác nhận không thể hoàn tác và lý do từ 1 đến 500 ký tự';end if;
++ if exists(select 1 from jsonb_object_keys(p) k where k not in('class_id','id','confirm_irreversible','hard_delete_reason')) then raise exception 'Payload hard delete không hợp lệ';end if;
++ -- Caller holds the common class transaction lock; re-read locked row after any restore.
++ select * into n from public.homework_notices where id=target and class_id=c for update;
++ if n.id is null then
++ if exists(select 1 from public.homework_tombstones where notice_id=target and class_id=c)then return '{"ok":true,"already_deleted":true}';end if;
++ raise exception 'Không tìm thấy bài';end if;
++ if n.status<>'deleted' or n.deleted_at is null or not ((n.deleted_actor_type='user' and n.deleted_by is not null) or (n.deleted_actor_type='system' and n.deleted_by is null)) then raise exception 'Chỉ xóa vĩnh viễn bài đã soft-delete';end if;
++ select * into last_review from (
++ select rv.* from public.homework_duplicate_reviews rv where (rv.notice_id=n.id or rv.candidate_id=n.id) and rv.decision is not null
++ union all
++ select (jsonb_populate_record(null::public.homework_duplicate_reviews,ev.after_data)).* from public.homework_contribution_events ev
++ where ev.notice_id=n.id and ev.event_type='duplicate_reference_redacted' and ev.after_data->>'decision' is not null
++ ) decisions order by decided_at desc nulls last,id desc nulls last limit 1;
++ -- This insert is a mandatory gate; any later error also rolls the entire transaction back.
++ insert into public.homework_tombstones(notice_id,class_id,author_id,subject_id,english_group_id,original_created_at,original_published_at,final_status,soft_deleted_at,soft_deleted_by,soft_delete_actor_type,soft_delete_reason,hard_deleted_by,hard_delete_reason,was_duplicate,last_decision,decided_at,decided_by)
++ values(n.id,c,n.author_id,n.subject_id,n.english_group_id,n.created_at,n.published_at,n.previous_status,n.deleted_at,n.deleted_by,n.deleted_actor_type,n.delete_reason,a.id,reason_text,
++ n.duplicate_of is not null or n.duplicate_tombstone_id is not null or n.previous_status in('pending_duplicate_review','duplicate_rejected','replaced') or exists(select 1 from public.homework_duplicate_reviews where (notice_id=n.id and (candidate_id is not null or candidate_tombstone_id is not null or decision is not null)) or candidate_id=n.id) or exists(select 1 from public.homework_contribution_events where notice_id=n.id and event_type='duplicate_reference_redacted'),last_review.decision,last_review.decided_at,last_review.decided_by);
++ -- Preserve other notice identities/decisions while irreversibly redacting comparison details.
++ update public.homework_notices set duplicate_of=null,duplicate_tombstone_id=n.id where duplicate_of=n.id;
++ update public.homework_duplicate_reviews set candidate_id=null,candidate_tombstone_id=n.id,score=null,reason=null,decision_reason=null where candidate_id=n.id and notice_id<>n.id;
++ update public.homework_contribution_events set before_data=null,after_data=jsonb_build_object('redacted_notice_id',n.id)
++ where notice_id is distinct from n.id and (position(n.id::text in coalesce(before_data::text,''))>0 or position(n.id::text in coalesce(after_data::text,''))>0);
++ -- If the deleted notice owns a comparison, its surviving target still needs a
++ -- minimal decision trace. No score, reason, content, deadline or prompt survives.
++ insert into public.homework_contribution_events(class_id,notice_id,actor_id,event_type,after_data)
++ select o.class_id,o.id,a.id,'duplicate_reference_redacted',jsonb_build_object('redacted_notice_id',n.id,'decision',rv.decision,'decided_at',rv.decided_at,'decided_by',rv.decided_by)
++ from public.homework_duplicate_reviews rv join public.homework_notices o on o.id=rv.candidate_id where rv.notice_id=n.id and o.id<>n.id;
++ delete from public.homework_notice_reactions where notice_id=n.id;
++ delete from public.homework_notice_reminders where notice_id=n.id;
++ delete from public.homework_notifications where notice_id=n.id;
++ delete from public.homework_duplicate_reviews where notice_id=n.id;
++ delete from public.homework_contribution_events where notice_id=n.id;
++ delete from public.homework_notices where id=n.id;
++ perform homework_private.backlog(c);
++ return '{"ok":true}';
++end$function$;
++
++-- Maintenance remains server-only; no human UUID is supplied or impersonated.
++alter function public.homework_maintenance() rename to homework_maintenance_v4;
++alter function public.homework_maintenance_v4() set schema homework_private;
++create function public.homework_maintenance() returns void language plpgsql security definer set search_path=pg_catalog,public as $$
++declare c uuid;begin
++ for c in select distinct class_id from public.homework_corrections where status='awaiting_author' order by class_id loop
++  perform homework_private.expire_corrections(c);
++ end loop;
++ perform homework_private.homework_maintenance_v4();
++end $$;
++
++revoke all on all functions in schema homework_private from public,anon,authenticated;
++revoke all on function public.homework_api(text,jsonb) from public,anon;
++grant execute on function public.homework_api(text,jsonb) to authenticated;
++revoke all on function public.homework_maintenance() from public,anon,authenticated;
++grant execute on function public.homework_maintenance() to service_role;
++-- Existing server job is replaced by name, avoiding duplicate schedulers.
++-- Eligibility is exactly requested_at + 72 hours; cron processes eligible rows
++-- on its next minute tick. Resubmission enforces the boundary synchronously.
++do $$ begin
++ if to_regnamespace('cron') is not null then
++  execute $q$select cron.schedule('homework-backlog-feat001','* * * * *','select public.homework_maintenance()')$q$;
++ end if;
++end $$;
++commit;
+--- /dev/null
++++ b/scripts/feat005_manifest.py
+@@ -0,0 +1,41 @@
++"""Compare working source with supplied archive; write review evidence only."""
++from pathlib import Path
++from zipfile import ZipFile
++import hashlib, difflib, json, re
++root=Path(__file__).resolve().parents[1]
++archive=root.parent/'BUG-002-BANNER-REVIEW-V2.zip'
++out=root/'docs/feat-005'
++excluded={'node_modules','dist','.git'}
++def include(name):
++    p=Path(name)
++    return not excluded.intersection(p.parts) and not name.startswith('docs/feat-005/') and not name.endswith(('.tsbuildinfo','.log'))
++with ZipFile(archive) as z:
++    baseline={n.removeprefix('tu-hoc-bug-002/'):z.read(n) for n in z.namelist() if n.startswith('tu-hoc-bug-002/') and not n.endswith('/') and include(n.removeprefix('tu-hoc-bug-002/'))}
++current={}
++def walk(folder):
++    for p in folder.iterdir():
++        name=p.relative_to(root).as_posix()
++        if not include(name): continue
++        if p.is_dir(): walk(p)
++        else: current[name]=p.read_bytes()
++walk(root)
++changes=[];patch=[]
++for name in sorted(baseline.keys()|current.keys()):
++    old,new=baseline.get(name),current.get(name)
++    if old==new: continue
++    changes.append({'path':name,'change':'created' if old is None else 'deleted' if new is None else 'modified','before_sha256':hashlib.sha256(old).hexdigest() if old is not None else None,'after_sha256':hashlib.sha256(new).hexdigest() if new is not None else None})
++    try:
++        a=(old or b'').decode('utf-8-sig').splitlines(keepends=True);b=(new or b'').decode('utf-8-sig').splitlines(keepends=True)
++        patch.extend(difflib.unified_diff(a,b,fromfile='a/'+name if old is not None else '/dev/null',tofile='b/'+name if new is not None else '/dev/null'))
++    except UnicodeDecodeError: patch.append('Binary files differ: '+name+'\n')
++(out/'FILES_CHANGED.json').write_text(json.dumps(changes,ensure_ascii=False,indent=2),encoding='utf-8')
++(out/'SOURCE_CHANGES.patch').write_text(''.join(patch),encoding='utf-8')
++specs={name:hashlib.sha256((out/name).read_bytes()).hexdigest() for name in ['FINAL_SPEC_SYSTEM_ACTOR_RESOLVED.md','DECISIONS_UPDATE_SYSTEM_ACTOR_RESOLVED.md']}
++(out/'evidence/source-integrity.json').write_text(json.dumps({'baseline_archive_sha256':hashlib.sha256(archive.read_bytes()).hexdigest(),'specification_sha256':specs,'changes':len(changes),'notes':['No baseline Git commits exist; diff is against supplied archive.','Build output dist, node_modules, caches and FEAT-005 documentation are excluded from source diff.','Original documents and archive are retained untouched.']},indent=2),encoding='utf-8')
++results=[]
++for name in ['database','legacy-database','feat004-database','static','ui','typecheck','build']:
++    log=(out/'evidence'/f'{name}.log').read_text(encoding='utf-8')
++    code=int(re.search(r'Exit code: (\d+)\s*$',log).group(1))
++    results.append({'name':name,'started':re.search(r'^Started: (.+)$',log,re.M).group(1),'exitCode':code,'status':'PASS' if code==0 else 'FAIL'})
++(out/'evidence/verification-results.json').write_text(json.dumps(results,indent=2),encoding='utf-8')
++print(json.dumps({'changes':len(changes),'created':sum(c['change']=='created' for c in changes),'modified':sum(c['change']=='modified' for c in changes),'deleted':sum(c['change']=='deleted' for c in changes)},indent=2))
+--- /dev/null
++++ b/scripts/inspect-feat005-baseline.mjs
+@@ -0,0 +1,11 @@
++import {readFile,writeFile} from 'node:fs/promises';
++import {createHash} from 'node:crypto';import {setup} from '../tests/feat-005/fixture.mjs';
++const live=JSON.parse(await readFile(new URL('../docs/feat-005/evidence/live-functions-before.json',import.meta.url),'utf8'));
++const db=await setup(false);
++try{
++ const local=(await db.query("select n.nspname,p.proname,pg_get_functiondef(p.oid) definition from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='homework_private' or (n.nspname='public' and p.proname like 'homework%')")).rows;
++ const normalize=x=>x.replace(/\r\n/g,'\n').trim();const hash=x=>createHash('sha256').update(normalize(x)).digest('hex');
++ const comparisons=live.map(r=>{const match=local.find(x=>x.nspname===r.nspname&&x.proname===r.proname);return {name:r.nspname+'.'+r.proname,liveSha256:hash(r.definition),localSha256:match?hash(match.definition):null,exactMatch:!!match&&normalize(r.definition)===normalize(match.definition)};});
++ await writeFile(new URL('../docs/feat-005/evidence/baseline-function-comparison.json',import.meta.url),JSON.stringify(comparisons,null,2));
++ console.log(JSON.stringify(comparisons.map(x=>({name:x.name,exactMatch:x.exactMatch})),null,2));
++}finally{await db.close();}
+--- /dev/null
++++ b/scripts/reproduce-feat005-replacement.mjs
+@@ -0,0 +1,16 @@
++import {setup,seed,rpc,server,ids} from '../tests/feat-005/fixture.mjs';
++import {writeFile} from 'node:fs/promises';
++import assert from 'node:assert/strict';
++const db=await setup();
++try{
++ const a=await seed(db);const c=await rpc(db,ids.t,'correction_request',{id:a.id,issue_types:['content'],reason:'A needs correction'});
++ const b=await rpc(db,ids.other,'submit',{subject_id:a.subject_id,title:'Replacement B',content:'Replacement work',due_at:a.due_at,request_id:crypto.randomUUID()});
++ const snap=await server(db,'snapshot',{id:b.id});await server(db,'finish',{id:b.id,revision:snap.notice.revision,fingerprint:snap.fingerprint,score:80,candidate_id:a.id});
++ await assert.rejects(rpc(db,ids.t,'review',{id:b.id,decision:'replace_existing'}),/GV cần xử lý correction trước/);
++ await db.query("update homework_correction_rounds set requested_at=now()-interval '73 hours',due_at=now()-interval '1 hour' where correction_id=$1",[c.id]);
++ await db.exec('set role service_role');await db.exec('select homework_maintenance()');await db.exec('reset role');
++ const state=(await db.query('select n.status notice_status,c.status correction_status,c.closed_at from homework_notices n join homework_corrections c on c.notice_id=n.id where n.id=$1',[a.id])).rows[0];
++ assert.equal(state.notice_status,'deleted');assert.equal(state.correction_status,'timeout');assert.ok(state.closed_at);
++ const report={status:'RESOLVED_PASS',scenario:'Replacement is rejected while A has open correction. After the original deadline, maintenance still times out A normally.',observed:state,decision:'DEC-FEAT005-REPLACEMENT-GUARD; approved by Product Owner 2026-09-15',note:'Original failure evidence is retained separately. No correction terminal outcome was invented.'};
++ await writeFile(new URL('../docs/feat-005/evidence/replacement-correction-resolution.json',import.meta.url),JSON.stringify(report,null,2));console.log(JSON.stringify(report,null,2));
++}finally{await db.close();}
+--- /dev/null
++++ b/scripts/verify-feat005.mjs
+@@ -0,0 +1,43 @@
++// Local-only verification. No remote database, deployment or Git mutations.
++import {spawn} from 'node:child_process';
++import {mkdir,writeFile,copyFile,access,readFile} from 'node:fs/promises';
++import {fileURLToPath} from 'node:url';
++const root=fileURLToPath(new URL('../',import.meta.url));
++const evidence=new URL('../docs/feat-005/evidence/',import.meta.url);
++await mkdir(evidence,{recursive:true});
++const archive=new URL('previous-'+Date.now()+'/',evidence);
++await mkdir(archive,{recursive:true});
++for(const name of ['database.log','legacy-database.log','static.log','ui.log','typecheck.log','build.log','verification-results.json']){
++ try{await access(new URL(name,evidence));await copyFile(new URL(name,evidence),new URL(name,archive));}catch(e){if(e.code!=='ENOENT')throw e;}
++}
++const checks=[
++ ['database',['--test','tests/feat-005/*.test.mjs'],{}],
++ ['legacy-database',['--test','tests/homework/*.test.mjs','tests/feat-002/*.test.mjs'],{FEAT002_UPGRADE:'1',FEAT004_UPGRADE:'1'}],
++ ['feat004-database',['--test','tests/feat-004/*.test.mjs'],{}],
++ ['static',['--test','tests/*.test.mjs'],{}],
++ ['ui',['node_modules/vitest/vitest.mjs','run','--config','tests/feat-005/regression.config.ts'],{}],
++ ['typecheck',['node_modules/vue-tsc/bin/vue-tsc.js','-b'],{}],
++ ['build',['node_modules/vite/bin/vite.js','build'],{}],
++];
++const results=[];
++const selected=process.argv.slice(2);
++for(const[name,args,env]of checks.filter(([name])=>!selected.length||selected.includes(name))){
++ const started=new Date().toISOString();let output='';
++ const exitCode=await new Promise((resolve,reject)=>{
++  const child=spawn(process.execPath,args,{cwd:root,env:{...process.env,...env,NO_COLOR:'1'},windowsHide:true});
++  child.stdout.on('data',x=>output+=x);child.stderr.on('data',x=>output+=x);child.on('error',reject);child.on('close',resolve);
++ });
++ await writeFile(new URL(name+'.log',evidence),`Started: ${started}\nCommand: node ${args.join(' ')}\nEnvironment overrides: ${JSON.stringify(env)}\n${output}\nExit code: ${exitCode}\n`);
++ results.push({name,started,ended:new Date().toISOString(),exitCode,status:exitCode===0?'PASS':'FAIL'});
++ console.log(`${name}: ${exitCode===0?'PASS':'FAIL'} (exit ${exitCode})`);
++ if(exitCode!==0)console.log(output.slice(-9000));
++}
++// Reconstruct the summary from retained command logs so a targeted re-test
++// preserves the original timestamps/evidence of unchanged checks.
++const summary=[];
++for(const[name]of checks){try{
++ const log=await readFile(new URL(name+'.log',evidence),'utf8');const code=Number(log.match(/Exit code: (\d+)\s*$/)?.[1]??NaN);
++ summary.push({name,started:log.match(/^Started: (.+)$/m)?.[1],exitCode:Number.isNaN(code)?null:code,status:code===0?'PASS':'FAIL'});
++}catch(e){if(e.code!=='ENOENT')throw e;summary.push({name,status:'NOT RUN'});}}
++await writeFile(new URL('verification-results.json',evidence),JSON.stringify(summary,null,2));
++if(results.some(x=>x.exitCode!==0))process.exitCode=1;
+--- a/src/components/homework/HomeworkAdminOversight.vue
++++ b/src/components/homework/HomeworkAdminOversight.vue
+@@ -63,7 +63,7 @@
+  <template v-else><article v-for="e in [...result.audit,...result.catalog_audit]" :key="e.id"><strong>{{e.event_type==='submit'?(e.before_data?'Sửa Báo bài':'Đăng Báo bài'):(events[e.event_type]||e.event_type)}}</strong><p>{{e.class_id?classLabel(e.class_id):'Danh mục khối'}} · {{result.people.find(p=>p.id===e.actor_id)?.name||e.actor_id}} · {{dateLabel(e.created_at)}}</p><details><summary>Chi tiết nhật ký</summary><pre>{{JSON.stringify({before:e.before_data,after:e.after_data},null,2)}}</pre></details></article><p v-if="!result.audit.length&&!result.catalog_audit.length">Không có nhật ký khớp bộ lọc.</p></template>
+  </AppCard>
+  <AppCard v-if="tab==='awards'"><h2>Tuyên dương theo lớp</h2><p v-if="!classId">Chọn một lớp để xem tuyên dương.</p><template v-else-if="classData"><label>Thời gian<select v-model="week"><option value="">Năm học của lớp</option><option v-for="w in weeks" :key="w.id" :value="w.id">Tuần {{w.week_number}}</option></select></label><div class="form-grid"><section><h3>🐦 Chim sẻ đưa tin</h3><p v-for="p in classData.leaderboard.filter(p=>p.notices>0).sort((a,b)=>a.notice_rank-b.notice_rank)" :key="p.id">#{{p.notice_rank}} · {{p.full_name}} · {{p.notices}} bài</p></section><section><h3>⭐ Ngôi sao dẫn đường</h3><p v-for="p in classData.leaderboard.filter(p=>p.hearts>0).sort((a,b)=>a.heart_rank-b.heart_rank)" :key="p.id">#{{p.heart_rank}} · {{p.full_name}} · {{p.hearts}} tim</p></section><section><h3>🌱 Mầm xanh đóng góp</h3><p v-for="p in classData.leaderboard.filter(p=>p.seed_at)" :key="p.id">{{p.full_name}} · {{p.year_notices}} bài</p></section></div><p v-if="!classData.leaderboard.some(p=>p.notices||p.hearts)">Chưa có đóng góp hợp lệ trong thời gian này.</p></template></AppCard>
+- <AppCard v-if="tab==='trash'"><h2>Thùng rác theo lớp</h2><p>Xóa vĩnh viễn từng bài đã xóa. Không thể hoàn tác.</p><article v-for="n in result.trash" :key="n.id"><h3>{{n.title}}</h3><p>{{classLabel(n.class_id)}} · {{n.delete_reason}}</p><AppButton variant="danger" :disabled="busy" @click="selectDelete(n)">Xóa vĩnh viễn</AppButton></article><p v-if="!result.trash.length">Thùng rác trống trong phạm vi này.</p></AppCard>
++<AppCard v-if="tab==='trash'"><h2>Thùng rác theo lớp</h2><p>Xóa vĩnh viễn từng bài đã xóa. Không thể hoàn tác.</p><article v-for="n in result.trash" :key="n.id"><h3>{{n.title}}</h3><p>{{classLabel(n.class_id)}} · {{n.delete_reason}}</p><p>Người gỡ: {{n.deleted_actor_type==='system'?'System':n.deleted_by}}</p><AppButton variant="danger" :disabled="busy" @click="selectDelete(n)">Xóa vĩnh viễn</AppButton></article><p v-if="!result.trash.length">Thùng rác trống trong phạm vi này.</p></AppCard>
+  <AppCard v-if="target" role="dialog" aria-label="Xóa vĩnh viễn"><h2>Xóa vĩnh viễn: {{target.title}}</h2><form @submit.prevent="hardDelete"><label>Lý do<textarea v-model="reason" required maxlength="500" :disabled="busy" /></label><label class="check"><input v-model="confirmed" type="checkbox" :disabled="busy">Tôi xác nhận thao tác không thể hoàn tác</label><div class="toolbar"><AppButton type="submit" variant="danger" :disabled="busy||!confirmed||!reason.trim()">Xác nhận xóa vĩnh viễn</AppButton><AppButton variant="secondary" type="button" :disabled="busy" @click="target=null">Hủy</AppButton></div></form></AppCard>
+  <AppCard v-if="tab==='settings'"><h2>Cấu hình quản trị</h2><p v-if="!classData">Chọn một lớp để cấu hình tuyên dương.</p><template v-else><form @submit.prevent="mutation('settings',{seed_threshold:seed})"><label>Số bài để nhận Mầm xanh<input v-model.number="seed" type="number" min="1" max="100" required></label><AppButton type="submit" :disabled="busy">Lưu cấu hình</AppButton></form><form @submit.prevent="mutation('alert_settings',{alert_level:alert})"><label>Cảnh báo Admin<select v-model="alert"><option value="system">Chỉ lỗi hệ thống</option><option value="backlog">Lỗi hệ thống + tồn đọng</option><option value="all">Tất cả cảnh báo</option></select></label><AppButton type="submit" :disabled="busy">Lưu cảnh báo</AppButton></form></template></AppCard>
+  <div v-if="['history','audit','trash'].includes(tab)" class="toolbar"><AppButton variant="secondary" :disabled="offset===0||loading" @click="offset=Math.max(0,offset-100)">Trang trước</AppButton><span>Trang {{offset/100+1}}</span><AppButton variant="secondary" :disabled="loading||(tab==='history'?result.history.length:tab==='trash'?result.trash.length:Math.max(result.audit.length,result.catalog_audit.length))<100" @click="offset+=100">Trang sau</AppButton></div>
+--- a/src/components/homework/HomeworkCard.vue
++++ b/src/components/homework/HomeworkCard.vue
+@@ -23,14 +23,15 @@
+   remove: [notice: Notice];
+   heart: [notice: Notice];
+   remind: [notice: Notice];
++  report: [notice: Notice];
++  correction: [notice: Notice];
++  emergency: [notice: Notice];
++  withdraw: [notice: Notice];
+ }>();
+ const own = computed(() => props.notice.author_id === props.userId);
+ const manage = computed(
+   () =>
+-    props.role !== "admin" && (own.value ||
+-    (["teacher", "monitor"].includes(props.role) &&
+-      ["student", "monitor"].includes(props.notice.author_role) &&
+-      (props.role !== "monitor" || props.notice.status === "published"))),
++    props.role !== "admin" && own.value,
+ );
+ const deadlineText = computed(() => {
+   const due = new Date(props.notice.due_at).getTime();
+@@ -65,6 +66,12 @@
+       {{ dateLabel(notice.created_at) }}
+     </p>
+     <span class="notice-state">{{ stateLabels[notice.status] }}</span>
++    <p v-if="notice.correction" class="correction-badge" role="status">
++      {{ notice.correction.status === 'awaiting_teacher' ? 'Đang chờ GV xác nhận chỉnh sửa' : 'GV yêu cầu chỉnh sửa' }}
++      <strong v-if="notice.correction.round === 2"> · Lần chỉnh sửa cuối</strong>
++      <span v-if="own && notice.correction.status === 'awaiting_author' && notice.correction.due_at"> · Hạn gửi lại: {{ dateLabel(notice.correction.due_at) }}</span>
++    </p>
++    <p v-if="notice.status === 'deleted' && notice.deleted_actor_type" class="hint">Người gỡ: {{ notice.deleted_actor_name || (notice.deleted_actor_type === 'system' ? 'System' : notice.deleted_by) }}</p>
+     <p v-if="notice.status === 'duplicate_rejected'" class="hint">
+       Bài được lưu trong lịch sử; không xuất hiện trên bảng chung và không tính
+       đóng góp.
+@@ -88,7 +95,7 @@
+       <button
+         v-if="
+           notice.status === 'published' &&
+-          ['teacher', 'monitor'].includes(role)
++          (role === 'teacher' || (role === 'monitor' && own))
+         "
+         :disabled="busy"
+         @click="emit('remind', notice)"
+@@ -96,19 +103,25 @@
+         🔔 Nhắc
+       </button>
+       <button
+-        v-if="manage && !['deleted', 'replaced'].includes(notice.status)"
++        v-if="manage && !['deleted', 'replaced'].includes(notice.status) && notice.correction?.status !== 'awaiting_teacher'"
+         :disabled="busy"
+         @click="emit('edit', notice)"
+       >
+         Sửa
+       </button>
+       <button
+-        v-if="manage && notice.status !== 'deleted'"
++        v-if="manage && notice.status !== 'deleted' && !notice.correction"
+         :disabled="busy"
+         @click="emit('remove', notice)"
+       >
+         Xóa
+       </button>
++      <button v-if="manage && notice.correction" :disabled="busy" @click="emit('withdraw', notice)">Xin rút bài</button>
++      <button v-if="role === 'monitor' && !own && notice.status === 'published'" :disabled="busy" @click="emit('report', notice)">Báo sai thông tin</button>
++      <template v-if="role === 'teacher' && ['student', 'monitor'].includes(notice.author_role) && !['deleted', 'replaced'].includes(notice.status)">
++        <button v-if="notice.status === 'published' && !notice.correction" :disabled="busy" @click="emit('correction', notice)">Yêu cầu chỉnh sửa Báo bài</button>
++        <button :disabled="busy" @click="emit('emergency', notice)">Gỡ bài</button>
++      </template>
+     </footer>
+   </article>
+ </template>
+@@ -160,6 +173,7 @@
+ .notice-state {
+   font-size: 0.82rem;
+ }
++.correction-badge { margin: 0; padding: 10px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface-raised, #fff8e8); font-size: .85rem; }
+ footer {
+   margin-top: auto;
+   display: flex;
+--- /dev/null
++++ b/src/components/homework/HomeworkCorrectionPanel.vue
+@@ -0,0 +1,50 @@
++<script setup lang="ts">
++import { computed, ref } from 'vue';
++import { dateLabel,type Correction,type Notice,type Subject,type EnglishGroup } from '../../features/homework/api';
++import { correctionLabels,correctionPayload,issueLabels,moderationEventLabels } from '../../features/homework/moderation';
++const props=withDefaults(defineProps<{ correction:Correction; notice?:Notice; role:string; userId:string; busy:boolean; now:number; subjects?:Subject[]; groups?:EnglishGroup[] }>(),{subjects:()=>[],groups:()=>[]});
++const emit=defineEmits<{ edit:[n:Notice]; decide:[payload:Record<string,unknown>]; withdraw:[n:Notice] }>();
++const reason=ref('');const current=computed(()=>props.correction.rounds.find(r=>r.round===props.correction.round));
++const open=computed(()=>['awaiting_author','awaiting_teacher'].includes(props.correction.status));
++const expired=computed(()=>props.correction.status==='awaiting_author'&&!!current.value&&new Date(current.value.due_at).getTime()<=props.now);
++function decide(decision:string){if(props.busy||!props.notice)return;emit('decide',{...correctionPayload(props.notice.id,props.correction),decision,reason:reason.value});}
++// Lookups come only from the current class payload; keep inactive entries for history.
++function subjectName(id:string){return props.subjects.find(s=>s.id===id)?.name||(props.notice?.subject_id===id?props.notice.subject:null)||'Môn không còn trong danh mục lớp';}
++function groupName(id:string|null){return id ? props.groups.find(g=>g.id===id)?.name||(props.notice?.english_group_id===id?props.notice.english_group:null)||'Nhóm không còn trong danh mục lớp' : 'Không áp dụng';}
++</script>
++<template>
++ <article class="correction-panel">
++  <h3>{{notice?.title||'Báo bài'}}</h3><p><strong>{{correctionLabels[correction.status]}}</strong> · Vòng {{correction.round}} / 2 <strong v-if="correction.round===2">— Lần chỉnh sửa cuối</strong></p>
++  <p v-if="current && correction.status==='awaiting_author'">Hạn gửi lại: <time :datetime="current.due_at">{{dateLabel(current.due_at)}}</time> (72 giờ từ yêu cầu).</p>
++  <p v-if="correction.status==='awaiting_teacher'">Đã gửi lại đúng hạn. Đồng hồ đã dừng trong khi chờ giáo viên.</p>
++  <p v-if="expired" role="status">Đã hết hạn phản hồi. Hệ thống xử lý gỡ bài; hãy làm mới để xem trạng thái.</p>
++  <div v-for="r in correction.rounds" :key="r.round" class="round">
++   <h4>Vòng {{r.round}} · {{r.issue_types.map(x=>issueLabels[x]).join(', ')}}</h4><p class="text">{{r.reason}}</p>
++   <details v-if="r.draft"><summary>{{r.submitted_at?'Revision đã gửi lại':'Bản nháp riêng tư'}}</summary>
++    <div class="revision-comparison">
++     <section v-if="notice" aria-label="Bản hiện tại"><h4>{{open?'Bản đang công khai':'Bản hiện tại'}}</h4>
++      <dl><dt>Môn học</dt><dd>{{subjectName(notice.subject_id)}}</dd><dt>Nhóm Tiếng Anh</dt><dd>{{groupName(notice.english_group_id)}}</dd><dt>Hạn bài tập</dt><dd>{{dateLabel(notice.due_at)}}</dd></dl>
++      <h4>{{notice.title}}</h4><p class="text">{{notice.content}}</p>
++     </section>
++     <section :aria-label="r.submitted_at?'Bản gửi lại':'Bản nháp'"><h4>{{r.submitted_at?'Bản gửi lại':'Bản nháp'}}</h4>
++      <dl><dt>Môn học</dt><dd>{{subjectName(r.draft.subject_id)}}</dd><dt>Nhóm Tiếng Anh</dt><dd>{{groupName(r.draft.english_group_id)}}</dd><dt>Hạn bài tập</dt><dd>{{dateLabel(r.draft.due_at)}}</dd></dl>
++      <h4>{{r.draft.title}}</h4><p class="text">{{r.draft.content}}</p>
++     </section>
++    </div>
++   </details>
++   <p v-if="r.decision">{{r.decision==='approved'?'Đạt':'Chưa đạt'}}: {{r.decision_reason}}</p>
++  </div>
++  <div v-if="notice && open && notice.author_id===userId && role!=='admin'" class="actions">
++   <button v-if="correction.status==='awaiting_author'" :disabled="busy||expired" @click="emit('edit',notice)">Sửa và gửi lại GV</button>
++   <button :disabled="busy||expired" @click="emit('withdraw',notice)">Xin rút bài</button>
++  </div>
++  <form v-if="role==='teacher' && correction.status==='awaiting_teacher' && notice" @submit.prevent="decide('rejected')">
++   <label>Lý do nếu chưa đạt<textarea v-model="reason" maxlength="2000" :disabled="busy" /></label><div class="actions"><button type="button" :disabled="busy" @click="decide('approved')">Đạt</button><button :disabled="busy||!reason.trim()">{{correction.round===2?'Chưa đạt — System gỡ bài':'Chưa đạt — mở vòng 2'}}</button></div>
++  </form>
++  <details><summary>Lịch sử xử lý</summary><ul><li v-for="e in correction.events" :key="e.id">{{dateLabel(e.created_at)}} · {{moderationEventLabels[e.event_type]||e.event_type}} · {{e.actor_type==='system'?'System':e.actor_name||'Người dùng'}}<p v-if="e.reason" class="text">{{e.reason}}</p></li></ul></details>
++ </article>
++</template>
++<style scoped>
++.revision-comparison{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;margin-top:12px}.revision-comparison section{display:grid;align-content:start;gap:10px;min-width:0;padding:16px;border:1px solid var(--border);border-radius:12px;background:var(--surface)}.revision-comparison dl{display:grid;gap:4px;margin:0}.revision-comparison dt{font-size:.82rem;color:var(--text-secondary)}.revision-comparison dd{margin:0 0 8px;overflow-wrap:anywhere;font-weight:600}@media(max-width:600px){.revision-comparison{grid-template-columns:1fr}}
++.correction-panel{display:grid;gap:16px;border:1px solid var(--border);border-radius:var(--radius-lg,18px);background:var(--surface);padding:20px;min-width:0}.correction-panel p,.correction-panel h3,.correction-panel h4{margin:0}.round{display:grid;gap:10px;padding:16px;background:var(--surface-raised);border-radius:12px}.text{white-space:pre-wrap;overflow-wrap:anywhere}.actions{display:flex;gap:12px;flex-wrap:wrap}form,label{display:grid;gap:12px}textarea{font:inherit;max-width:100%;padding:10px;border:1px solid var(--border);background:var(--surface);color:var(--text)}button{min-height:44px;padding:10px 16px;border:1px solid var(--border);border-radius:10px;background:var(--surface);color:var(--text);cursor:pointer}button:disabled{opacity:.5}summary{cursor:pointer;padding:8px 0}li{overflow-wrap:anywhere}button:focus-visible,summary:focus-visible,textarea:focus-visible{outline:3px solid var(--color-primary);outline-offset:2px}
++</style>
+--- /dev/null
++++ b/src/components/homework/HomeworkModerationDialog.vue
+@@ -0,0 +1,39 @@
++<script setup lang="ts">
++import { computed, onMounted, onUnmounted, ref } from 'vue';
++import type { Notice } from '../../features/homework/api';
++import { correctionPayload, issueLabels } from '../../features/homework/moderation';
++const props=defineProps<{ notice:Notice; mode:'report'|'correction_request'|'emergency_remove'|'withdraw'; busy:boolean; error:string }>();
++const emit=defineEmits<{ close:[]; submit:[action:string,payload:Record<string,unknown>] }>();
++const dialog=ref<HTMLDialogElement>();const reason=ref('');const category=ref('content');const issues=ref<string[]>(['content']);
++const emergencyLabels:Record<string,string>={inappropriate_content:'Nội dung không phù hợp',posted_by_mistake:'Đăng nhầm',seriously_incorrect_information:'Thông tin sai nghiêm trọng',other:'Khác'};
++const titles={report:'Báo sai thông tin',correction_request:'Yêu cầu chỉnh sửa Báo bài',emergency_remove:'Gỡ bài khẩn cấp',withdraw:'Xin rút bài'};
++const categories=computed(()=>props.mode==='emergency_remove'?emergencyLabels:issueLabels);
++const valid=computed(()=>props.mode==='report'||(reason.value.trim().length>0&&(props.mode!=='correction_request'||issues.value.length>0)));
++let previous:HTMLElement|null=null;
++onMounted(()=>{previous=document.activeElement as HTMLElement; if(props.mode==='emergency_remove')category.value='inappropriate_content';dialog.value?.showModal();});
++onUnmounted(()=>previous?.focus());
++function submit(){if(props.busy||!valid.value)return;const p:Record<string,unknown>={id:props.notice.id};
++ if(props.mode==='report'){p.category=category.value;p.note=reason.value;}
++ else {p.reason=reason.value;if(props.mode==='correction_request')p.issue_types=issues.value;if(props.mode==='emergency_remove')p.category=category.value;
++  if(props.mode==='withdraw'&&props.notice.correction)Object.assign(p,correctionPayload(props.notice.id,props.notice.correction));}
++ emit('submit',props.mode,p);
++}
++</script>
++<template>
++ <dialog ref="dialog" class="moderation-dialog" aria-labelledby="moderation-title" @cancel.prevent="!busy && emit('close')">
++  <form @submit.prevent="submit">
++   <h2 id="moderation-title">{{titles[mode]}}</h2><p>{{notice.title}}</p>
++   <p v-if="mode==='report'">Chỉ giáo viên phụ trách lớp được xem danh tính người báo.</p>
++   <p v-if="mode==='emergency_remove'">Chỉ dùng khi cần can thiệp ngay. Với lỗi thông thường, hãy gửi yêu cầu chỉnh sửa.</p>
++   <p v-if="mode==='withdraw'">Bài sẽ được chuyển vào thùng rác; yêu cầu chỉnh sửa được đóng và giáo viên thấy lý do rút bài.</p>
++   <fieldset v-if="mode==='correction_request'" :disabled="busy"><legend>Nội dung cần chỉnh sửa</legend><label v-for="key in ['deadline','subject','content','other']" :key="key"><input v-model="issues" type="checkbox" :value="key"> {{issueLabels[key]}}</label></fieldset>
++   <label v-else-if="mode!=='withdraw'">Phân loại<select v-model="category" :disabled="busy"><option v-for="(label,key) in categories" :key="key" :value="key">{{label}}</option></select></label>
++   <label>{{mode==='report'?'Ghi chú (không bắt buộc)':'Lý do / hướng dẫn bắt buộc'}}<textarea v-model="reason" :required="mode!=='report'" :disabled="busy" maxlength="2000" rows="4" /></label>
++   <p v-if="error" role="alert">{{error}}</p>
++   <footer><button type="button" :disabled="busy" @click="emit('close')">Hủy</button><button :disabled="busy||!valid">{{busy?'Đang lưu…':titles[mode]}}</button></footer>
++  </form>
++ </dialog>
++</template>
++<style scoped>
++.moderation-dialog{width:min(560px,calc(100vw - 32px));max-height:90vh;overflow:auto;box-sizing:border-box;border:1px solid var(--border);border-radius:var(--radius-lg,18px);padding:24px;color:var(--text);background:var(--surface)}.moderation-dialog::backdrop{background:#15213180}form{display:grid;gap:16px}h2,p{margin:0}label{display:grid;gap:8px}fieldset label{display:flex;align-items:center;margin:8px 0}textarea,select{font:inherit;box-sizing:border-box;max-width:100%;width:100%;background:var(--surface);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:10px}footer{display:flex;justify-content:flex-end;gap:12px}button{min-height:44px;padding:8px 16px;cursor:pointer;border:1px solid var(--border);border-radius:10px;color:var(--text);background:var(--surface-raised)}button:disabled{opacity:.5;cursor:default}[role=alert]{color:var(--color-danger)}button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-visible{outline:3px solid var(--color-primary);outline-offset:2px}
++</style>
+--- /dev/null
++++ b/src/components/homework/HomeworkReports.vue
+@@ -0,0 +1,23 @@
++<script setup lang="ts">
++import { reactive } from 'vue';
++import { dateLabel,type NoticeReport,type ReportStatistic } from '../../features/homework/api';
++import { reportLabels,issueLabels,moderationEventLabels } from '../../features/homework/moderation';
++defineProps<{ reports:NoticeReport[]; statistics:ReportStatistic[]; busy:boolean }>();
++const emit=defineEmits<{ process:[payload:Record<string,unknown>]; view:[id:string] }>();
++const notes=reactive<Record<string,string>>({});
++</script>
++<template>
++ <section class="reports"><h2>Báo sai thông tin — nội bộ giáo viên</h2><p>Thống kê chỉ hỗ trợ giáo viên xem xét. Hệ thống không tự khóa quyền Cán sự.</p>
++  <div class="stats"><article v-for="s in statistics" :key="s.reporter_id"><h3>{{s.full_name}}</h3><p>Tổng: {{s.total}} · Hợp lệ: {{s.valid}} · Không hợp lệ: {{s.invalid}} · Dấu hiệu lạm dụng: {{s.suspected_abuse}}</p><p v-if="s.suspected_abuse>1">Có nhiều report bị đánh dấu lạm dụng; giáo viên cần xem xét.</p></article></div>
++  <p v-if="!reports.length">Chưa có báo sai thông tin trong lớp này.</p>
++  <article v-for="r in reports" :key="r.id" class="report"><h3>{{r.reporter_name}} <span v-if="r.reporter_code">· {{r.reporter_code}}</span></h3>
++   <p>{{r.class_name}} · {{dateLabel(r.created_at)}} · {{issueLabels[r.category]}} · {{reportLabels[r.status]}}</p><p class="text">{{r.note}}</p>
++   <button :disabled="busy" @click="emit('view',r.notice_id)">Xem bài và yêu cầu chỉnh sửa</button>
++   <template v-if="r.status==='open'"><label>Ghi chú xử lý (không bắt buộc)<textarea v-model="notes[r.id]" :disabled="busy" maxlength="2000" /></label><div class="actions"><button v-for="outcome in ['valid','invalid','suspected_abuse']" :key="outcome" :disabled="busy" @click="emit('process',{id:r.notice_id,report_id:r.id,outcome,note:notes[r.id]||''})">{{reportLabels[outcome]}}</button></div></template>
++   <p v-else class="text">{{r.teacher_note}}</p><details><summary>Lịch sử report</summary><p v-for="e in r.events" :key="e.id">{{dateLabel(e.created_at)}} · {{moderationEventLabels[e.event_type]||e.event_type}} · {{e.actor_name||'Người dùng'}}</p></details>
++  </article>
++ </section>
++</template>
++<style scoped>
++.reports{display:grid;gap:18px}.report,.stats article{padding:20px;border:1px solid var(--border);border-radius:var(--radius-lg,18px);background:var(--surface);display:grid;gap:12px}.reports h3,.reports p{margin:0}.stats{display:grid;gap:12px}.text{white-space:pre-wrap;overflow-wrap:anywhere}label{display:grid;gap:8px}textarea{font:inherit;padding:10px;max-width:100%;background:var(--surface);color:var(--text);border:1px solid var(--border)}.actions{display:flex;flex-wrap:wrap;gap:10px}button{min-height:44px;padding:8px 14px;background:var(--surface-raised);color:var(--text);border:1px solid var(--border);border-radius:10px;cursor:pointer}button:disabled{opacity:.5}summary{cursor:pointer;padding:8px 0}button:focus-visible,textarea:focus-visible,summary:focus-visible{outline:3px solid var(--color-primary);outline-offset:2px}
++</style>
+--- a/src/features/homework/api.ts
++++ b/src/features/homework/api.ts
+@@ -28,7 +28,22 @@
+   score?: number | null;
+   reason?: string | null;
+   delete_reason?: string;
++  deleted_actor_type?: 'user' | 'system' | null;
++  deleted_by?: string | null;
++  deleted_at?: string | null;
++  deleted_actor_name?: string | null;
++  correction?: CorrectionToken | null;
+ }
++export interface RevisionData { subject_id: string; english_group_id: string | null; title: string; content: string; due_at: string }
++export interface CorrectionToken { id: string; round: number; version: number; status: string; due_at?: string }
++export interface ModerationEvent { id: string; event_type: string; actor_id: string | null; actor_name?: string | null; actor_type: 'user' | 'system'; round: number | null; reason: string | null; created_at: string }
++export interface Correction extends CorrectionToken {
++  notice_id: string; class_id: string; closed_at: string | null;
++  rounds: Array<{ round: number; requested_by: string; requested_at: string; due_at: string; reason: string; issue_types: string[]; draft: RevisionData | null; submitted_at: string | null; decision: string | null; decision_reason: string | null; decided_by: string | null; decided_at: string | null }>;
++  events: ModerationEvent[];
++}
++export interface NoticeReport { id: string; notice_id: string; class_id: string; class_name?: string; reporter_id: string; reporter_name: string; reporter_code: string | null; category: string; note: string | null; status: string; created_at: string; teacher_note: string | null; events: ModerationEvent[] }
++export interface ReportStatistic { reporter_id: string; full_name: string; total: number; valid: number; invalid: number; suspected_abuse: number }
+ export interface HomeworkClass { id: string; code: string; name: string; grade: number; active: boolean; school_year_id: string }
+ export interface HomeworkContext { weeks?: Array<{id:string;school_year_id:string;week_number:number}>; grades: number[]; classes: HomeworkClass[] }
+ export interface CatalogSubject extends Subject { grade: number }
+@@ -57,6 +72,9 @@
+   created_at: string;
+ }
+ export interface HomeworkData {
++  corrections?: Correction[];
++  reports?: NoticeReport[];
++  report_statistics?: ReportStatistic[];
+   catalog?: CatalogSubject[];
+   ai_settings?: { semantic_duplicate_enabled: boolean; duplicate_review_threshold: number; duplicate_auto_threshold: number };
+   review_history?: Notice[];
+--- /dev/null
++++ b/src/features/homework/moderation.ts
+@@ -0,0 +1,6 @@
++import type { CorrectionToken } from './api';
++export const issueLabels: Record<string,string> = { deadline:'Hạn hoàn thành', subject:'Môn học', content:'Nội dung', duplicate:'Nội dung trùng', other:'Khác' };
++export const correctionLabels: Record<string,string> = { awaiting_author:'GV yêu cầu chỉnh sửa', awaiting_teacher:'Chờ GV xác nhận', approved:'GV xác nhận đạt', timeout:'System gỡ do quá hạn', rejected_final:'System gỡ sau lần cuối chưa đạt', withdrawn_by_author:'Tác giả đã rút bài', emergency_removed:'GV đã gỡ khẩn cấp' };
++export const reportLabels: Record<string,string> = { open:'Chờ xử lý', valid:'Hợp lệ', invalid:'Không hợp lệ', suspected_abuse:'Có dấu hiệu lạm dụng' };
++export const moderationEventLabels: Record<string,string> = { correction_created:'GV yêu cầu chỉnh sửa',revision_saved:'Lưu bản nháp',revision_submitted:'Gửi lại GV',correction_approved:'GV xác nhận đạt',correction_rejected:'GV xác nhận chưa đạt',round_2_opened:'Mở lần chỉnh sửa cuối',timeout:'Hết hạn 72 giờ',rejected_final:'Chưa đạt sau lần cuối',withdrawn_by_author:'Tác giả xin rút bài',emergency_removed:'GV gỡ bài khẩn cấp',system_soft_delete:'System chuyển bài vào thùng rác',user_soft_delete:'Người dùng chuyển bài vào thùng rác',report_created:'Gửi báo sai thông tin',report_valid:'Report hợp lệ',report_invalid:'Report không hợp lệ',report_suspected_abuse:'Report có dấu hiệu lạm dụng' };
++export function correctionPayload(noticeId:string,c:CorrectionToken) { return { id:noticeId,correction_id:c.id,round:c.round,version:c.version }; }
+--- a/src/features/homework/view-context.ts
++++ b/src/features/homework/view-context.ts
+@@ -7,6 +7,8 @@
+     ...(role === 'admin' ? [{ id: 'overview', label: 'Tổng quan' }] : []),
+     ...(role !== 'admin' ? [{ id: 'board', label: 'Bảng Báo bài' }] : [{ id: 'catalog', label: 'Danh mục môn' }]),
+     { id: 'history', label: 'Lịch sử đăng' },
++    ...(role !== 'admin' ? [{ id: 'corrections', label: 'Yêu cầu chỉnh sửa' }] : []),
++    ...(role === 'teacher' ? [{ id: 'reports', label: 'Báo sai thông tin' }] : []),
+     { id: 'awards', label: '🌟 Góc tuyên dương' },
+     ...(['teacher', 'monitor'].includes(role) ? [{ id: 'queue', label: 'AI trùng' }] : []),
+     ...(role === 'teacher' ? [
+--- a/src/features/owl/owl-model.ts
++++ b/src/features/owl/owl-model.ts
+@@ -166,6 +166,8 @@
+       overview: 'Theo dõi tình trạng hệ thống và cảnh báo Báo bài theo cấu hình đã chọn.',
+       board: user.role === 'admin' ? 'Xem Báo bài của lớp theo môn và deadline ở chế độ giám sát.' : 'Xem bài cần hoàn thành theo môn và deadline. Dùng Đăng Báo bài để chia sẻ bài mới.',
+       history: 'Xem các Báo bài bạn đã đăng và trạng thái xử lý của từng bài.',
++      corrections: 'Xem yêu cầu chỉnh sửa và hạn gửi lại giáo viên. Mỗi vòng có 72 giờ; vòng 2 là lần cuối.',
++      reports: 'Báo sai thông tin chỉ dành cho giáo viên phụ trách xem xét và xử lý.',
+       awards: 'Ghi nhận riêng số Báo bài hợp lệ và số tim nhận được.',
+       queue: user.role === 'monitor' ? 'Bạn được xem thông tin cơ bản; giáo viên quyết định các trường hợp nghi trùng.' : 'Xem các Báo bài nghi trùng trước khi chọn phương án xử lý phù hợp.',
+       ai_settings: 'Bật hoặc tắt kiểm tra trùng semantic và lưu các ngưỡng cho lớp.',
+--- a/src/pages/HomeworkPage.vue
++++ b/src/pages/HomeworkPage.vue
+@@ -1,5 +1,5 @@
+ <script setup lang="ts">
+-import { computed, onMounted, onUnmounted, reactive, ref, watch } from "vue";
++import { computed, nextTick, onMounted, onUnmounted, reactive, ref, watch } from "vue";
+ import { useAuthStore } from "../stores/auth";
+ import { useContextStore } from "../stores/context";
+ import PageArtwork from "../components/ui/PageArtwork.vue";
+@@ -8,6 +8,10 @@
+ import HomeworkAiSettings from "../components/homework/HomeworkAiSettings.vue";
+ import HomeworkGroupManager from "../components/homework/HomeworkGroupManager.vue";
+ import HomeworkCard from "../components/homework/HomeworkCard.vue";
++import HomeworkModerationDialog from "../components/homework/HomeworkModerationDialog.vue";
++import HomeworkCorrectionPanel from "../components/homework/HomeworkCorrectionPanel.vue";
++import HomeworkReports from "../components/homework/HomeworkReports.vue";
++import { correctionPayload } from "../features/homework/moderation";
+ import HomeworkDuplicateWarning from "../components/homework/HomeworkDuplicateWarning.vue";
+ import {
+   homeworkRpc,
+@@ -19,6 +23,7 @@
+   type HomeworkContext,
+   type Notice,
+   type Subject,
++  type Correction,
+ } from "../features/homework/api";
+ import { homeworkTabs, resolveHomeworkTab, useHomeworkViewStore } from "../features/homework/view-context";
+ const view = useHomeworkViewStore();
+@@ -58,6 +63,51 @@
+   deleteTarget = ref<Notice | null>(null),
+   deleteReason = ref(""),
+   reviewReasons = reactive<Record<string, string>>({});
++const activeCorrection = ref<Correction|null>(null);
++const composerDialog = ref<HTMLDialogElement|null>(null);
++let composerReturnFocus:HTMLElement|null=null;
++watch(editing,async open=>{
++  if(open){
++    composerReturnFocus=typeof HTMLElement!=='undefined' && document.activeElement instanceof HTMLElement?document.activeElement:null;
++    await nextTick();
++    if(editing.value)composerDialog.value?.showModal?.();
++  }else{
++    composerDialog.value?.close?.();
++    if(composerReturnFocus?.isConnected)composerReturnFocus.focus();
++    composerReturnFocus=null;
++  }
++});
++watch(busy,async()=>{
++  await nextTick();
++  const dialog=composerDialog.value;
++  // Disabling the focused save button can send focus to body; keep it in the
++  // still-open editor during and after an asynchronous draft save.
++  if(editing.value && dialog?.open && !dialog.contains(document.activeElement)){
++    dialog.querySelector<HTMLElement>('select:not(:disabled), input:not(:disabled), textarea:not(:disabled), button:not(:disabled)')?.focus();
++  }
++});
++function composerKeydown(event:KeyboardEvent){
++  if(event.key!=='Tab'||!composerDialog.value)return;
++  const controls=Array.from(composerDialog.value.querySelectorAll<HTMLElement>('button:not(:disabled), input:not(:disabled), select:not(:disabled), textarea:not(:disabled), a[href], [tabindex]:not([tabindex="-1"])')).filter(el=>el.getClientRects().length>0);
++  const first=controls[0],last=controls[controls.length-1];
++  if(!first){event.preventDefault();composerDialog.value.focus();return;}
++  if(event.shiftKey && (document.activeElement===first||document.activeElement===composerDialog.value)){event.preventDefault();last.focus();}
++  else if(!event.shiftKey && document.activeElement===last){event.preventDefault();first.focus();}
++}
++const moderation = ref<{ notice:Notice; mode:'report'|'correction_request'|'emergency_remove'|'withdraw' }|null>(null);
++const correctionNotices = computed(() => new Map([...(data.value?.notices||[]),...(data.value?.history||[])].map(n=>[n.id,n])));
++function openModeration(mode:NonNullable<typeof moderation.value>['mode'],notice:Notice){
++  if(admin.value||busy.value)return;error.value='';moderation.value={mode,notice};
++}
++async function moderate(action:string,payload:Record<string,unknown>){await act(action,payload);if(!error.value)moderation.value=null;}
++async function decideCorrection(payload:Record<string,unknown>){
++  if(!teacher.value||busy.value)return;
++  if(payload.decision!=='approved'){await act('correction_decide',payload);return;}
++  busy.value=true;error.value='';
++  try{const result=await submitHomework(classId.value,{...payload,action:'correction_decide'});
++    message.value=result.message||(result.notice?.status==='published'?'Đã xác nhận và công bố chỉnh sửa.':'Đã xác nhận chỉnh sửa; bài đang qua kiểm tra trùng.');view.refreshVersion++;await load();
++  }catch(e){error.value=e instanceof Error?e.message:'Chưa xác nhận được chỉnh sửa.';}finally{busy.value=false;}
++}
+ const form = reactive({
+   id: "",
+   revision: 0,
+@@ -85,8 +135,8 @@
+   set: (value: string) => { view.selectedTab = value; },
+ });
+ watch([role, () => auth.currentUser?.id], () => {
+-  contextRequest++; assigned.value=[]; selectedClass.value='';
+-  view.selectedTab = tab.value; editing.value = false; deleteTarget.value = null;
++  loadId++; contextRequest++; assigned.value=[]; selectedClass.value='';
++  view.selectedTab = tab.value; editing.value = false; deleteTarget.value = null; moderation.value=null; activeCorrection.value=null;
+   data.value = null; void loadContext(); void load();
+ });
+ const selectedSubject = computed(() =>
+@@ -142,7 +192,8 @@
+   error.value = "";
+   message.value = "";
+   try {
+-    await homeworkRpc(action, classId.value, payload);
++    const result = await homeworkRpc<{ok?:boolean;expired?:boolean;message?:string}>(action, classId.value, payload);
++    if(result?.expired){await load();throw new Error(result.message||'Đã hết hạn chỉnh sửa.');}
+     message.value = "Đã lưu thay đổi.";
+     view.refreshVersion++;
+     await load();
+@@ -155,20 +206,24 @@
+   }
+ }
+ function compose(n?: Notice) {
+-  if (admin.value) return;
++  if (admin.value || (n && n.author_id !== auth.currentUser?.id)) return;
++  activeCorrection.value=n?.correction ? data.value?.corrections?.find(c=>c.id===n.correction?.id)||null : null;
++  if(n?.correction && (!activeCorrection.value || activeCorrection.value.status!=='awaiting_author'))return;
++  const draft=activeCorrection.value?.rounds.find(r=>r.round===activeCorrection.value?.round)?.draft;
+   Object.assign(form, {
+     id: n?.id || "",
+     revision: n?.revision || 0,
+     request_id: crypto.randomUUID(),
+-    subject_id: n?.subject_id || "",
+-    english_group_id: n?.english_group_id || "",
+-    title: n?.title || "",
+-    content: n?.content || "",
+-    deadline: n ? localDeadline(n.due_at) : "",
++    subject_id: draft?.subject_id || n?.subject_id || "",
++    english_group_id: draft ? draft.english_group_id || '' : n?.english_group_id || "",
++    title: draft?.title || n?.title || "",
++    content: draft?.content || n?.content || "",
++    deadline: draft ? localDeadline(draft.due_at) : n ? localDeadline(n.due_at) : "",
+   });
+   editing.value = true;
+ }
+ async function send() {
++  if(activeCorrection.value){await saveCorrection(true);return;}
+   if (busy.value) return;
+   busy.value = true;
+   error.value = "";
+@@ -199,6 +254,19 @@
+     busy.value = false;
+   }
+ }
++async function saveCorrection(resubmit:boolean){
++  if(!activeCorrection.value||busy.value)return;
++  const c=activeCorrection.value;busy.value=true;error.value='';
++  try{
++    const result=await homeworkRpc<Correction & {expired?:boolean;message?:string}>(resubmit?'correction_submit':'correction_save',classId.value,{
++      ...correctionPayload(form.id,c),revision_data:{subject_id:form.subject_id,english_group_id:selectedSubject.value?.is_english?form.english_group_id:null,title:form.title,content:form.content,due_at:utcDeadline(form.deadline)}
++    });
++    if(result.expired){editing.value=false;await load();throw new Error(result.message||'Đã hết hạn chỉnh sửa.');}
++    if(resubmit){editing.value=false;message.value='Đã gửi lại GV. Đồng hồ 72 giờ đã dừng.';tab.value='corrections';}
++    else{activeCorrection.value={...c,...result};message.value='Đã lưu bản nháp riêng tư; bạn vẫn cần bấm Gửi lại GV trước hạn.';}
++    view.refreshVersion++;await load();
++  }catch(e){error.value=e instanceof Error?e.message:'Chưa lưu được chỉnh sửa.';}finally{busy.value=false;}
++}
+ async function retry(n: Notice) {
+   if (busy.value) return;
+   busy.value = true;
+@@ -216,7 +284,8 @@
+   } finally { busy.value = false; }
+ }
+ function remove(n: Notice) {
+-  if (admin.value) return;
++  if (admin.value || n.author_id !== auth.currentUser?.id) return;
++  if(n.correction){openModeration('withdraw',n);return;}
+   deleteTarget.value = n;
+   deleteReason.value = "";
+ }
+@@ -269,7 +338,7 @@
+   );
+ }
+ watch([classId,role], () => { if(!admin.value)view.scopeClassId=classId.value; },{immediate:true});
+-watch(classId, () => { week.value=""; subject.value=""; editSubject(); deleteTarget.value=null; Object.keys(reviewReasons).forEach(k=>delete reviewReasons[k]); });
++watch(classId, () => { week.value=""; subject.value=""; editSubject(); deleteTarget.value=null; moderation.value=null;activeCorrection.value=null; Object.keys(reviewReasons).forEach(k=>delete reviewReasons[k]); });
+ watch([classId, week], () => {
+   loadId++;
+   editing.value = false;
+@@ -366,6 +435,7 @@
+             :now="now"
+             @edit="compose"
+             @remove="remove"
++            @report="openModeration('report',$event)" @correction="openModeration('correction_request',$event)" @emergency="openModeration('emergency_remove',$event)" @withdraw="openModeration('withdraw',$event)"
+             @heart="act('heart', { id: n.id, liked: !n.liked })"
+             @remind="act('remind', { id: n.id })"
+           />
+@@ -383,6 +453,7 @@
+               :now="now"
+               @edit="compose"
+               @remove="remove"
++              @report="openModeration('report',$event)" @correction="openModeration('correction_request',$event)" @emergency="openModeration('emergency_remove',$event)" @withdraw="openModeration('withdraw',$event)"
+               @heart="act('heart', { id: n.id, liked: !n.liked })"
+               @remind="act('remind', { id: n.id })"
+             />
+@@ -408,11 +479,12 @@
+               :now="now"
+               @edit="compose"
+               @remove="remove"
++              @report="openModeration('report',$event)" @correction="openModeration('correction_request',$event)" @emergency="openModeration('emergency_remove',$event)" @withdraw="openModeration('withdraw',$event)"
+               @heart="act('heart', { id: n.id, liked: !n.liked })"
+               @remind="act('remind', { id: n.id })"
+             />
+             <button v-if="!admin && n.can_retry" type="button" :disabled="busy" @click="retry(n)">Thử kiểm tra AI lại</button>
+-            <HomeworkDuplicateWarning v-if="!admin"
++            <HomeworkDuplicateWarning v-if="!admin && n.author_id===auth.currentUser?.id"
+               :notice="n"
+               :visible-notices="data.notices"
+               :busy="busy"
+@@ -422,6 +494,12 @@
+           </div>
+         </div>
+       </section>
++      <section v-if="tab==='corrections'" class="correction-list">
++        <h2>Yêu cầu chỉnh sửa Báo bài</h2>
++        <p v-if="!data.corrections?.length" class="empty">Chưa có yêu cầu chỉnh sửa.</p>
++        <HomeworkCorrectionPanel v-for="c in data.corrections||[]" :key="c.id+':'+c.version" :correction="c" :notice="correctionNotices.get(c.notice_id)" :subjects="data.subjects" :groups="data.groups" :role="role" :user-id="auth.currentUser?.id||''" :busy="busy" :now="now" @edit="compose" @withdraw="openModeration('withdraw',$event)" @decide="decideCorrection" />
++      </section>
++      <HomeworkReports v-if="teacher && tab==='reports'" :key="classId" :reports="data.reports||[]" :statistics="data.report_statistics||[]" :busy="busy" @process="act('report_process',$event)" @view="jump" />
+       <section v-if="tab === 'awards'">
+         <div class="section-heading">
+           <h2>🌟 Góc tuyên dương</h2>
+@@ -523,6 +601,7 @@
+               {{ n.score != null ? `Mức giống: ${n.score}% · ` : ""
+               }}{{ n.reason || "Chưa nhận được kết quả AI." }}
+             </p>
++            <p v-if="n.candidate?.correction" role="status">Bài cũ đang có yêu cầu chỉnh sửa. GV cần xử lý correction trước khi thay bài cũ.</p>
+             <label
+               >Lý do quyết định<input
+                 v-model="reviewReasons[n.id]"
+@@ -543,7 +622,7 @@
+                 >
+                   Giữ bài cũ</button
+                 ><button
+-                  :disabled="busy"
++                  :disabled="busy || !!n.candidate?.correction"
+                   @click="
+                     act('review', {
+                       id: n.id,
+@@ -613,6 +692,7 @@
+         <article v-for="n in data.trash" :key="n.id" class="panel">
+           <h3>{{ n.title }}</h3>
+           <p>{{ n.delete_reason }}</p>
++          <p>Người gỡ: {{n.deleted_actor_name||(n.deleted_actor_type==='system'?'System':n.deleted_by)||'Không có thông tin'}}</p>
+           <button v-if="teacher" :disabled="busy" @click="act('restore', { id: n.id })">
+             Khôi phục
+           </button>
+@@ -644,20 +724,21 @@
+       </section>
+       <HomeworkAiSettings v-if="teacher" v-show="tab === 'ai_settings'" :key="classId" :class-id="classId" :week-id="week" :role="role" :settings="data.ai_settings" @updated="acceptManagementUpdate" @busy="managementBusy" />
+     </template>
+-    <div
++    <HomeworkModerationDialog v-if="moderation" :key="moderation.notice.id+moderation.mode" :notice="moderation.notice" :mode="moderation.mode" :busy="busy" :error="error" @close="moderation=null" @submit="moderate" />
++    <dialog
+       v-if="editing && !admin"
+-      class="modal-backdrop"
+-      @keydown.esc="!busy && (editing = false)"
+-    >
+-      <section
++      ref="composerDialog"
++      @cancel.prevent="!busy && (editing = false)"
++      @keydown="composerKeydown"
+         role="dialog"
+         aria-modal="true"
+         aria-labelledby="compose-title"
+-        class="modal"
++        class="modal composer-dialog"
+       >
+         <h2 id="compose-title">
+           {{ form.id ? "Sửa Báo bài" : "✏️ Đăng Báo bài" }}
+         </h2>
++        <p v-if="activeCorrection"><strong v-if="activeCorrection.round===2">Lần chỉnh sửa cuối. </strong>{{activeCorrection.rounds.find(r=>r.round===activeCorrection?.round)?.reason}} — Hạn gửi lại: {{dateLabel(activeCorrection.rounds.find(r=>r.round===activeCorrection?.round)!.due_at)}}</p>
+         <form @submit.prevent="send">
+           <div class="form-grid">
+             <label
+@@ -710,17 +791,16 @@
+               required
+           /></label>
+           <p v-if="error" role="alert" class="error">{{ error }}</p>
+-          <p>Nội dung được kiểm tra trùng trước khi công bố.</p>
++          <p>{{activeCorrection?'Bản nháp chỉ bạn và giáo viên thấy. Bấm Gửi lại GV để dừng đồng hồ 72 giờ; bài công khai hiện tại vẫn được giữ đến khi GV duyệt.':'Nội dung được kiểm tra trùng trước khi công bố.'}}</p>
+           <div class="actions">
+             <button type="button" :disabled="busy" @click="editing = false">
+               Đóng</button
+-            ><button class="primary" :disabled="busy">
+-              {{ busy ? "Đang lưu và kiểm tra…" : "Đăng Báo bài" }}
++            ><button v-if="activeCorrection" type="button" :disabled="busy" @click="saveCorrection(false)">Lưu bản nháp</button><button class="primary" :disabled="busy">
++              {{ busy ? "Đang lưu và kiểm tra…" : activeCorrection ? "Gửi lại GV" : "Đăng Báo bài" }}
+             </button>
+           </div>
+         </form>
+-      </section>
+-    </div>
++    </dialog>
+     <div v-if="deleteTarget" class="modal-backdrop">
+       <section
+         role="dialog"
+@@ -988,6 +1068,7 @@
+   background: var(--surface, #fff);
+   box-sizing: border-box;
+ }
++.composer-dialog{border:0;color:var(--text,inherit);margin:auto;width:min(620px,calc(100% - 36px))}.composer-dialog::backdrop{background:#142c3d77}
+ .primary {
+   background: #285d53;
+   color: #fff;
+--- a/supabase/functions/homework-review/index.ts
++++ b/supabase/functions/homework-review/index.ts
+@@ -21,7 +21,7 @@
+     // submissions. No client status, AI score, or author identity is trusted.
+     const { data: notice, error: submitError } = await user.rpc(
+       "homework_api",
+-      { p_action: body.action === "retry" ? "retry" : "submit", p_data: body },
++      { p_action: body.action === "correction_decide" ? "correction_decide" : body.action === "retry" ? "retry" : "submit", p_data: body },
+     );
+     if (submitError) return json(req, 400, { error: submitError.message });
+     if (notice.status !== "pending_duplicate_review")
+--- a/tests/bug-001/regression.test.ts
++++ b/tests/bug-001/regression.test.ts
+@@ -52,7 +52,7 @@
+ })
+ describe('BUG-001 actual Vue component interactions (virtual renderer)',()=>{
+  it('resets Owl context after every Admin tab click without path change',async()=>{const root=renderPair();await settle();for(const label of ['Tổng quan','Danh mục môn','Lịch sử đăng','🌟 Góc tuyên dương','Thùng rác','Nhật ký','Cấu hình']){await click(root,label);const owl=findAll(root,n=>n.props.class==='owl-button')[0];await owl.props.onClick();await settle();expect(speech(root)).toContain(label.replace('🌟 ',''));expect(speech(root)).not.toMatch(/Dashboard|đăng ký/);expect(env.route.path).toBe('/homework');}})
+- it('renders create/edit wording and dispatches the existing reminder action',async()=>{actor('teacher');const root=renderPair();await settle();const launch=findAll(root,n=>n.props.class==='composer-launch')[0];await launch.props.onClick();await settle();expect(findAll(root,n=>n.type==='h2').map(textOf)).toContain('✏️ Đăng Báo bài');await click(root,'Đóng');await click(root,'Sửa');expect(findAll(root,n=>n.type==='h2').map(textOf)).toContain('Sửa Báo bài');await click(root,'Đóng');await click(root,'🔔 Nhắc');expect(env.rpc).toHaveBeenCalledWith('remind','c',{id:'n'});expect(env.submit).not.toHaveBeenCalled()})
++it('renders create/edit wording and dispatches the existing reminder action',async()=>{actor('teacher');env.rpc.mockImplementation(async(action:string)=>action==='load'?{...data(),notices:[{...notice,author_id:'u',author_role:'teacher'}]}:extra(action));const root=renderPair();await settle();const launch=findAll(root,n=>n.props.class==='composer-launch')[0];await launch.props.onClick();await settle();expect(findAll(root,n=>n.type==='h2').map(textOf)).toContain('✏️ Đăng Báo bài');await click(root,'Đóng');await click(root,'Sửa');expect(findAll(root,n=>n.type==='h2').map(textOf)).toContain('Sửa Báo bài');await click(root,'Đóng');await click(root,'🔔 Nhắc');expect(env.rpc).toHaveBeenCalledWith('remind','c',{id:'n'});expect(env.submit).not.toHaveBeenCalled()})
+  it('drops forbidden context immediately when Admin becomes Student',async()=>{const root=renderPair();await settle();await click(root,'Cấu hình');actor('student');await settle();expect(findAll(root,n=>n.type==='button').map(textOf)).not.toContain('Cấu hình');const owl=findAll(root,n=>n.props.class==='owl-button')[0];await owl.props.onClick();await settle();expect(speech(root)).toContain('Bảng Báo bài');expect(speech(root)).not.toContain('Cấu hình')})
+  it('clears old message during quick route changes and handles failed load',async()=>{actor('teacher');env.rpc.mockRejectedValue(new Error('offline'));const root=renderPair();await settle();const owl=findAll(root,n=>n.props.class==='owl-button')[0];await owl.props.onClick();await settle();expect(speech(root)).toContain('Báo bài');env.route.path='/review';await settle();await owl.props.onClick();await settle();expect(speech(root)).toMatch(/duyệt|đăng ký/);env.route.path='/homework';await settle();await owl.props.onClick();await settle();expect(speech(root)).toContain('Báo bài');expect(speech(root)).not.toContain('đăng ký')})
+ })
+@@ -103,9 +103,9 @@
+     expect(speech(root)).not.toContain('buổi tự học')
+   })
+   for (const [role, labels] of [
+-    ['student', ['Bảng Báo bài','Lịch sử đăng','🌟 Góc tuyên dương']],
+-    ['monitor', ['Bảng Báo bài','Lịch sử đăng','🌟 Góc tuyên dương','AI trùng']],
+-    ['teacher', ['Bảng Báo bài','Lịch sử đăng','🌟 Góc tuyên dương','AI trùng','Cài đặt AI','Môn học','Tiếng Anh','Thùng rác','Nhật ký']],
++    ['student', ['Bảng Báo bài','Lịch sử đăng','Yêu cầu chỉnh sửa','🌟 Góc tuyên dương']],
++    ['monitor', ['Bảng Báo bài','Lịch sử đăng','Yêu cầu chỉnh sửa','🌟 Góc tuyên dương','AI trùng']],
++    ['teacher', ['Bảng Báo bài','Lịch sử đăng','Yêu cầu chỉnh sửa','Báo sai thông tin','🌟 Góc tuyên dương','AI trùng','Cài đặt AI','Môn học','Tiếng Anh','Thùng rác','Nhật ký']],
+   ] as const) it(`matches actual tab permissions and Owl for ${role}`, async () => {
+     actor(role);const root=renderPair();await settle()
+     const nav=findAll(root,n=>n.props['aria-label']==='Các mục Báo bài')[0]
+--- /dev/null
++++ b/tests/feat-005/ai-regression.test.mjs
+@@ -0,0 +1,43 @@
++import {test} from 'node:test';import assert from 'node:assert/strict';
++import {setup,seed,rpc,server,ids} from './fixture.mjs';
++import {reviewSnapshot} from '../../supabase/functions/homework-review/logic.js';
++const revision=n=>Object.fromEntries(['subject_id','english_group_id','title','content','due_at'].map(k=>[k,n[k]]));
++const token=(n,c)=>({id:n.id,correction_id:c.id,round:c.round,version:c.version});
++test('AC-519: approved material correction still exact-rejects with semantic disabled, preserving history and withholding board notifications',async()=>{
++ const db=await setup();try{
++  const a=await seed(db);const b=await rpc(db,ids.other,'submit',{...revision(a),title:'Different B',content:'Original B task',request_id:crypto.randomUUID()});
++  let snap=await server(db,'snapshot',{id:b.id});await server(db,'finish',{id:b.id,revision:snap.notice.revision,fingerprint:snap.fingerprint,score:0,candidate_id:null});
++  await rpc(db,ids.t,'ai_settings',{semantic_duplicate_enabled:false,duplicate_review_threshold:70,duplicate_auto_threshold:90});
++  let c=await rpc(db,ids.t,'correction_request',{id:b.id,issue_types:['content'],reason:'Sửa nhiệm vụ'});
++  c=await rpc(db,ids.other,'correction_submit',{...token(b,c),revision_data:revision(a)});
++  const approved=await rpc(db,ids.t,'correction_decide',{...token(b,c),decision:'approved'});assert.equal(approved.status,'pending_duplicate_review');
++  snap=await server(db,'snapshot',{id:b.id});let providerCalls=0;
++  const review=await reviewSnapshot(snap,async()=>{providerCalls++;throw Error('semantic should be off');});assert.equal(providerCalls,0);assert.equal(review.score,100);assert.equal(review.candidate_id,a.id);
++  const before=(await db.query("select count(*) n from homework_notifications where notice_id=$1 and kind='published'",[b.id])).rows[0].n;
++  await server(db,'finish',{id:b.id,revision:snap.notice.revision,fingerprint:snap.fingerprint,...review});
++  const data=await rpc(db,ids.other,'load');assert.equal(data.history.find(x=>x.id===b.id).status,'duplicate_rejected');assert.ok(!data.notices.some(x=>x.id===b.id));
++  assert.equal((await db.query("select count(*) n from homework_notifications where notice_id=$1 and kind='published'",[b.id])).rows[0].n,before);
++ }finally{await db.close();}
++});
++test('AC-519: AI failure after approved correction remains pending and retryable; stale finalizers cannot publish',async()=>{
++ const db=await setup();try{
++  const n=await seed(db);let c=await rpc(db,ids.t,'correction_request',{id:n.id,issue_types:['content'],reason:'Sửa bài'});
++  c=await rpc(db,ids.s,'correction_submit',{...token(n,c),revision_data:{...revision(n),content:'New substantive task'}});
++  await rpc(db,ids.t,'correction_decide',{...token(n,c),decision:'approved'});
++  const snap=await server(db,'snapshot',{id:n.id});await server(db,'finish',{id:n.id,revision:snap.notice.revision,fingerprint:snap.fingerprint,error:'AI_UNAVAILABLE'});
++  let data=await rpc(db,ids.s,'load');assert.equal(data.history[0].can_retry,true);assert.equal(data.notices.length,0);assert.equal(data.corrections[0].status,'approved');
++  await rpc(db,ids.s,'submit',{...data.history[0],content:'Another revision'});
++  const stale=await server(db,'finish',{id:n.id,revision:snap.notice.revision,fingerprint:snap.fingerprint,score:0,candidate_id:null});assert.equal(stale.stale,true);
++  const current=await server(db,'snapshot',{id:n.id});await server(db,'finish',{id:n.id,revision:current.notice.revision,fingerprint:current.fingerprint,score:0,candidate_id:null});
++  data=await rpc(db,ids.s,'load');assert.equal(data.notices[0].content,'Another revision');
++ }finally{await db.close();}
++});
++test('under migration 09: reactions, ranking and Teacher reminder rate limit survive ownership changes',async()=>{
++ const db=await setup();try{
++  const n=await seed(db);await rpc(db,ids.other,'heart',{id:n.id,liked:true});await rpc(db,ids.other,'heart',{id:n.id,liked:true});assert.equal((await rpc(db,ids.s,'load')).notices[0].hearts,1);
++  await rpc(db,ids.t,'remind',{id:n.id});await assert.rejects(rpc(db,ids.t,'remind',{id:n.id}),/giới hạn nhắc/);
++  const before=(await rpc(db,ids.s,'load')).leaderboard.find(x=>x.id===ids.s);assert.equal(before.notices,1);assert.equal(before.hearts,1);
++  await rpc(db,ids.s,'delete',{id:n.id,reason:'Manual'});let data=await rpc(db,ids.s,'load');assert.equal(data.leaderboard.find(x=>x.id===ids.s).notices,0);
++  await rpc(db,ids.t,'restore',{id:n.id});data=await rpc(db,ids.s,'load');assert.equal(data.notices[0].hearts,1);assert.equal(data.notices[0].deleted_actor_type,null);
++ }finally{await db.close();}
++});
+--- /dev/null
++++ b/tests/feat-005/browser.mjs
+@@ -0,0 +1,34 @@
++import {chromium,expect} from '@playwright/test';
++import {mkdir,writeFile} from 'node:fs/promises';import {fileURLToPath} from 'node:url';
++import {startPreview} from './preview-server.mjs';
++const evidence=new URL('../../docs/feat-005/evidence/',import.meta.url);await mkdir(evidence,{recursive:true});
++const fixture=await startPreview();let browser;const errors=[];const events=[];
++try{
++ browser=await chromium.launch({executablePath:'C:/Program Files/Google/Chrome/Application/chrome.exe',headless:true});
++ const context=await browser.newContext({viewport:{width:1280,height:1000}});
++ context.on('page',p=>{p.on('pageerror',e=>errors.push(e.message));p.on('console',m=>{if(m.type()==='error')errors.push(m.text());});p.on('response',r=>{if(r.status()>=400)errors.push(r.status()+' '+r.url());});});
++ async function pageFor(role){const p=await context.newPage();await p.goto('http://127.0.0.1:4175/tests/feat-005/preview.html?role='+role);await expect(p.getByRole('heading',{name:'Báo bài',exact:true})).toBeVisible();await expect(p.getByRole('heading',{name:'Bài tập',exact:true})).toBeVisible();return p;}
++ const monitor=await pageFor('monitor');
++ await expect(monitor.getByRole('button',{name:'Sửa',exact:true})).toHaveCount(0);await expect(monitor.getByRole('button',{name:'🔔 Nhắc',exact:true})).toHaveCount(0);
++ await monitor.getByRole('button',{name:'Báo sai thông tin',exact:true}).click();
++ const report=monitor.getByRole('dialog');await expect(report).toBeVisible();await report.getByLabel('Ghi chú (không bắt buộc)').fill('PRIVATE_REPORT_BROWSER');await report.getByRole('button',{name:'Báo sai thông tin',exact:true}).click();await expect(report).toHaveCount(0);events.push('Monitor report submitted; edit/delete/remind absent.');
++ const teacher=await pageFor('teacher');await teacher.getByRole('button',{name:'Báo sai thông tin',exact:true}).click();await expect(teacher.getByText('PRIVATE_REPORT_BROWSER',{exact:true})).toBeVisible();await teacher.getByRole('button',{name:'Hợp lệ',exact:true}).click();await expect(teacher.getByText('Chờ xử lý',{exact:false})).toHaveCount(0);
++ await teacher.screenshot({path:fileURLToPath(new URL('teacher-reports.png',evidence)),fullPage:true});
++ await teacher.getByRole('button',{name:'Bảng Báo bài',exact:true}).click();await expect(teacher.getByRole('button',{name:'Sửa',exact:true})).toHaveCount(0);
++ await teacher.getByRole('button',{name:'Yêu cầu chỉnh sửa Báo bài',exact:true}).click();const request=teacher.getByRole('dialog');await request.getByLabel('Lý do / hướng dẫn bắt buộc').fill('Sửa bài tập theo hướng dẫn');await request.getByRole('button',{name:'Yêu cầu chỉnh sửa Báo bài',exact:true}).click();await expect(request).toHaveCount(0);events.push('Assigned Teacher sees report and requests correction.');
++ const author=await pageFor('student');await expect(author.getByText('PRIVATE_REPORT_BROWSER')).toHaveCount(0);await expect(author.getByRole('button',{name:'Báo sai thông tin',exact:true})).toHaveCount(0);await expect(author.getByRole('button',{name:'Xóa',exact:true})).toHaveCount(0);
++ await author.getByRole('button',{name:'Sửa',exact:true}).click();let editor=author.getByRole('dialog');await editor.getByLabel('Nội dung',{exact:true}).fill('PRIVATE_BROWSER_REVISION');await editor.getByRole('button',{name:'Lưu bản nháp',exact:true}).click();await expect(author.getByText('Đã lưu bản nháp riêng tư',{exact:false})).toBeVisible();
++ await monitor.getByRole('button',{name:'↻ Làm mới'}).click();await expect(monitor.getByText('PRIVATE_BROWSER_REVISION')).toHaveCount(0);await expect(monitor.getByText('Trang 10 bài 1',{exact:true})).toBeVisible();
++ await editor.getByRole('button',{name:'Gửi lại GV',exact:true}).click();await expect(editor).toHaveCount(0);await expect(author.getByText('Đồng hồ đã dừng',{exact:false})).toBeVisible();events.push('Private draft saved; published board unchanged; author resubmission stops timer.');
++ await teacher.getByRole('button',{name:'↻ Làm mới'}).click();await teacher.getByRole('button',{name:'Yêu cầu chỉnh sửa',exact:true}).click();await teacher.getByLabel('Lý do nếu chưa đạt').fill('Cần thêm nội dung');await teacher.getByRole('button',{name:'Chưa đạt — mở vòng 2',exact:true}).click();await expect(teacher.getByText('Lần chỉnh sửa cuối',{exact:false}).first()).toBeVisible();
++ await author.getByRole('button',{name:'↻ Làm mới'}).click();await expect(author.getByText('Lần chỉnh sửa cuối',{exact:false}).first()).toBeVisible();await author.getByRole('button',{name:'Sửa và gửi lại GV',exact:true}).click();editor=author.getByRole('dialog');await editor.getByLabel('Nội dung',{exact:true}).fill('Bài tập đã chỉnh sửa hoàn chỉnh');await editor.getByRole('button',{name:'Gửi lại GV',exact:true}).click();await expect(editor).toHaveCount(0);
++ await teacher.getByRole('button',{name:'↻ Làm mới'}).click();await teacher.getByRole('button',{name:'Đạt',exact:true}).click();await expect(teacher.getByText('Đã xác nhận và công bố chỉnh sửa.',{exact:true})).toBeVisible();await monitor.getByRole('button',{name:'↻ Làm mới'}).click();await expect(monitor.getByText('Bài tập đã chỉnh sửa hoàn chỉnh',{exact:true})).toBeVisible();events.push('Round 2 final warning; Teacher approval runs actual duplicate logic with local deterministic AI provider.');
++ await author.getByRole('button',{name:'↻ Làm mới'}).click();await author.setViewportSize({width:390,height:844});await author.screenshot({path:fileURLToPath(new URL('author-correction-mobile.png',evidence)),fullPage:true});
++ const overflow=await author.evaluate(()=>document.documentElement.scrollWidth>window.innerWidth+1);expect(overflow).toBe(false);
++ await teacher.screenshot({path:fileURLToPath(new URL('teacher-correction-desktop.png',evidence)),fullPage:true});
++ await teacher.getByRole('button',{name:'Bảng Báo bài',exact:true}).click();await teacher.getByRole('button',{name:'Gỡ bài',exact:true}).click();const emergency=teacher.getByRole('dialog');await emergency.getByLabel('Lý do / hướng dẫn bắt buộc').fill('Kiểm tra gỡ bài khẩn cấp');await emergency.getByRole('button',{name:'Gỡ bài khẩn cấp',exact:true}).click();await expect(emergency).toHaveCount(0);await monitor.getByRole('button',{name:'↻ Làm mới'}).click();await expect(monitor.getByRole('heading',{name:'Bài tập',exact:true})).toHaveCount(0);events.push('Emergency removal hides notice from board.');
++ const admin=await context.newPage();await admin.goto('http://127.0.0.1:4175/tests/feat-005/preview.html?role=admin');await admin.getByRole('button',{name:'Thùng rác',exact:true}).click();await expect(admin.getByText('Người gỡ:',{exact:false})).toBeVisible();await expect(admin.getByRole('button',{name:'Yêu cầu chỉnh sửa',exact:true})).toHaveCount(0);await expect(admin.getByRole('button',{name:'Báo sai thông tin',exact:true})).toHaveCount(0);events.push('Admin Trash attribution visible; daily moderation actions absent.');
++ expect(errors).toEqual([]);events.push('No browser console/page errors; 390px width has no horizontal overflow.');
++ await writeFile(new URL('browser.json',evidence),JSON.stringify({status:'PASS',executedAt:new Date().toISOString(),environment:'Headless Chrome + real Vue page + PGlite 05–09; deterministic local AI; no live Auth/Edge deployment',events,errors},null,2));console.log('Browser PASS: '+events.length+' checks');
++}catch(e){await writeFile(new URL('browser.json',evidence),JSON.stringify({status:'FAIL',events,errors,error:e.stack},null,2));throw e;}
++finally{await browser?.close();await fixture.close();}
+--- /dev/null
++++ b/tests/feat-005/fixture.mjs
+@@ -0,0 +1,35 @@
++import { readFile } from 'node:fs/promises';
++import { createFixture, ids } from '../homework/fixture.mjs';
++export { ids };
++export const classId = '4e0b25e4-ec47-4745-8b2b-ba91c1504254';
++export const classB = '40000000-0000-0000-0000-000000000002';
++export async function setup(upgrade = true) {
++  const db = await createFixture();
++  await db.exec(`alter table profiles drop constraint profiles_class_id_fkey;
++    update classes set id='${classId}'; update profiles set class_id='${classId}'; update class_teachers set class_id='${classId}';
++    alter table profiles add foreign key(class_id) references classes(id);
++    alter table classes add column code text default '7A9'; alter table classes add column name text default '7A9';`);
++  for (const file of ['05-FEAT-001-BAO-BAI.sql','06-FEAT-001-AI-RECOVERY.sql','07-FEAT-002-PERMISSIONS-LIFECYCLE.sql','08-FEAT-004-MULTI-CLASS-CATALOG.sql'])
++    await db.exec(await readFile(new URL('../../database/upgrade/'+file, import.meta.url), 'utf8'));
++  if (upgrade && !process.env.FEAT005_BASELINE) await migrate(db);
++  return db;
++}
++export async function migrate(db) { await db.exec(await readFile(new URL('../../database/upgrade/09-FEAT-005-OWNERSHIP-CORRECTION.sql', import.meta.url), 'utf8')); }
++export async function rpc(db, user, action, payload = {}, scope = classId) {
++  await db.exec(`set role authenticated; set request.jwt.claim.sub='${user}';`);
++  try { return (await db.query('select public.homework_api($1,$2::jsonb) r',[action, JSON.stringify({class_id:scope,...payload})])).rows[0].r; }
++  finally { await db.exec('reset role'); }
++}
++export async function server(db, action, payload) {
++  await db.exec('set role service_role');
++  try { return (await db.query('select public.homework_ai($1,$2::jsonb) r',[action,JSON.stringify(payload)])).rows[0].r; }
++  finally { await db.exec('reset role'); }
++}
++export async function seed(db, author=ids.s) {
++  const cat = (await rpc(db,ids.a,'catalog_list',{grade:7},''))[0] || await rpc(db,ids.a,'catalog_save',{grade:7,name:'Toán'},'');
++  const subject = await rpc(db,ids.t,'subject_save',{catalog_subject_id:cat.id});
++  const n = await rpc(db,author,'submit',{subject_id:subject.id,title:'Bài tập',content:'Trang 10 bài 1',due_at:'2026-10-10T12:00:00Z',request_id:crypto.randomUUID()});
++  const snap = await server(db,'snapshot',{id:n.id});
++  await server(db,'finish',{id:n.id,revision:snap.notice.revision,fingerprint:snap.fingerprint,score:0,candidate_id:null});
++  return {...n,status:'published'};
++}
+--- /dev/null
++++ b/tests/feat-005/ownership.test.mjs
+@@ -0,0 +1,12 @@
++import { test } from 'node:test';
++import assert from 'node:assert/strict';
++import { setup,seed,rpc,ids } from './fixture.mjs';
++test('AC-501/509: Teacher and Monitor cannot edit another author through the real RPC', async () => {
++  const db=await setup();
++  try {
++    const n=await seed(db);
++    for(const user of [ids.t,ids.m,ids.other,ids.a]) await assert.rejects(rpc(db,user,'submit',{...n,content:'forged edit'}),{code:'42501'});
++    assert.equal((await db.query('select content from homework_notices where id=$1',[n.id])).rows[0].content,n.content);
++    await rpc(db,ids.s,'submit',{...n,content:n.content+' '});
++  } finally { await db.close(); }
++});
+--- /dev/null
++++ b/tests/feat-005/page.test.ts
+@@ -0,0 +1,17 @@
++import {beforeEach,afterEach,it,expect,vi}from'vitest';import{reactive}from'vue';import{createPinia,setActivePinia}from'pinia';
++import{mount,settle,click,findAll,textOf}from'../bug-001/renderer';
++const env=vi.hoisted(()=>({auth:null as any,ctx:null as any,rpc:vi.fn()}));
++vi.mock('../../src/stores/auth',()=>({useAuthStore:()=>env.auth}));vi.mock('../../src/stores/context',()=>({useContextStore:()=>env.ctx}));
++vi.mock('../../src/services/legacy-supabase',()=>({legacyApi:{teacherListUsers:async()=>({users:[]})}}));
++vi.mock('../../src/features/homework/api',async original=>({...await original<any>(),homeworkRpc:env.rpc}));
++import Page from'../../src/pages/HomeworkPage.vue';
++const n={id:'n',class_id:'a',author_id:'s',author_role:'student',author_name:'Student',title:'New B',content:'B',subject:'Toán',status:'pending_duplicate_review',score:80,due_at:'2099-01-01T00:00:00Z',created_at:'2026-09-01T00:00:00Z',candidate:{id:'target',title:'Old A',content:'A',subject:'Toán',status:'published',due_at:'2099-01-01T00:00:00Z',created_at:'2026-09-01T00:00:00Z',correction:{id:'c',round:1,version:1,status:'awaiting_author'}}};
++const data=()=>({settings:{seed_threshold:3},subjects:[],groups:[],notices:[],history:[],queue:[n],audit:[],trash:[],members:[],learners:[],leaderboard:[],notifications:[],corrections:[],reports:[],ai_settings:{semantic_duplicate_enabled:true,duplicate_review_threshold:70,duplicate_auto_threshold:90}});
++let app:any;beforeEach(()=>{setActivePinia(createPinia());env.auth=reactive({role:'teacher',currentUser:{id:'t',classId:null}});env.ctx=reactive({selectedClassId:'a',selectedWeekId:null,weeks:[]});env.rpc.mockReset().mockImplementation(async action=>action==='context'?{classes:[{id:'a',code:'7A',grade:7,active:true,school_year_id:'y'}]}:data());vi.stubGlobal('Document',class{});vi.stubGlobal('ShadowRoot',class{});vi.stubGlobal('document',{activeElement:null});});
++afterEach(()=>{app?.unmount();vi.unstubAllGlobals();});
++it('Product addendum: UI blocks replacement target with open correction while preserving other duplicate choices',async()=>{
++ const m=mount(Page);app=m.app;await settle();await settle();await findAll(m.root,x=>x.type==='button'&&textOf(x).trim().startsWith('AI trùng'))[0].props.onClick();await settle();
++ expect(textOf(m.root)).toContain('GV cần xử lý correction trước');
++ expect(findAll(m.root,x=>x.type==='button'&&textOf(x).trim()==='Giữ bài mới')[0].props.disabled).toBe(true);
++ expect(findAll(m.root,x=>x.type==='button'&&textOf(x).trim()==='Giữ bài cũ')[0].props.disabled).toBe(false);
++});
+--- /dev/null
++++ b/tests/feat-005/preview-server.mjs
+@@ -0,0 +1,21 @@
++// Local isolated PostgreSQL + real Vue page, no external credentials or AI calls.
++import {createServer} from 'vite';
++import {setup,seed,rpc,server,ids,classId} from './fixture.mjs';
++import {reviewSnapshot} from '../../supabase/functions/homework-review/logic.js';
++export async function startPreview(){
++ const db=await setup();await seed(db);let chain=Promise.resolve();
++ const vite=await createServer({server:{host:'127.0.0.1',port:4175,strictPort:true},plugins:[{name:'feat005-fixture',configureServer(vite){vite.middlewares.use('/__feat005_fixture',(req,res)=>{
++  let body='';req.on('data',x=>body+=x);req.on('end',()=>{chain=chain.then(async()=>{res.setHeader('Content-Type','application/json');try{
++   const p=JSON.parse(body);if(!Object.values(ids).includes(p.actor))throw Error('Fixture actor only');
++   let value=await rpc(db,p.actor,p.action,p.data,p.data?.class_id??classId);
++   if(p.review&&value.status==='pending_duplicate_review'){
++    const snap=await server(db,'snapshot',{id:value.id});
++    if(!snap.done){const result=await reviewSnapshot(snap,async payload=>payload.mode==='edit'?{material_change:true}:{score:0,candidate_id:null,reason:'Local deterministic provider'});
++     const final=await server(db,'finish',{id:value.id,revision:snap.notice.revision,fingerprint:snap.fingerprint,...result});value={...value,status:final.status};}
++   }
++   res.end(JSON.stringify({data:value,error:null}));
++  }catch(e){res.end(JSON.stringify({data:null,error:{message:e.message}}));}});});
++ });}}]});await vite.listen();
++ return {db,close:async()=>{await vite.close();await db.close();}};
++}
++if(process.argv[1]?.endsWith('preview-server.mjs')){await startPreview();console.log('FEAT-005 fixture http://127.0.0.1:4175/tests/feat-005/preview.html');}
+--- /dev/null
++++ b/tests/feat-005/preview.html
+@@ -0,0 +1 @@
++<!doctype html><html lang="vi"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1"><link rel="icon" href="data:,"><title>FEAT-005 Local verification</title></head><body><div id="app"></div><script type="module" src="./preview.js"></script></body></html>
+--- /dev/null
++++ b/tests/feat-005/preview.js
+@@ -0,0 +1,11 @@
++import '../../src/styles/tokens.css';import '../../src/styles/themes.css';import '../../src/styles/base.css';
++import {createApp,h} from 'vue';import {createPinia} from 'pinia';
++import {useAuthStore} from '../../src/stores/auth';import {useContextStore} from '../../src/stores/context';
++import HomeworkPage from '../../src/pages/HomeworkPage.vue';
++const role=new URLSearchParams(location.search).get('role')||'student';
++const actor='00000000-0000-0000-0000-00000000000'+({student:3,monitor:4,teacher:5,admin:6}[role]);
++const classId='4e0b25e4-ec47-4745-8b2b-ba91c1504254';
++async function call(action,data,review=false){return fetch('/__feat005_fixture',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({actor,action,data,review})}).then(r=>r.json());}
++window.SupabaseService={init:async()=>({rpc:async(_,p)=>call(p.p_action,p.p_data),functions:{invoke:async(_,p)=>{const result=await call(p.body.action||'submit',p.body,true);return result.error?result:{data:{ok:true,notice:result.data},error:null};}}})};
++const app=createApp({render:()=>h('main',{style:'max-width:1180px;margin:auto;padding:20px'},[h('p','LOCAL FIXTURE — '+role),h(HomeworkPage)])});app.use(createPinia());
++useAuthStore().currentUser={id:actor,role,classId,name:role,fullName:role};useContextStore().selectedClassId=classId;app.mount('#app');
+--- /dev/null
++++ b/tests/feat-005/rc2-browser.mjs
+@@ -0,0 +1,49 @@
++import {chromium,expect} from '@playwright/test';
++import {mkdir,writeFile,readFile,copyFile} from 'node:fs/promises';import {fileURLToPath} from 'node:url';
++import {constants} from 'node:fs';
++import {startPreview} from './preview-server.mjs';import {rpc,ids} from './fixture.mjs';
++const output=new URL('../../docs/feat-005/evidence/rc2/',import.meta.url);await mkdir(output,{recursive:true});
++try{const previous=JSON.parse(await readFile(new URL('browser.json',output),'utf8'));if(previous.status==='FAIL')await copyFile(new URL('browser.json',output),new URL('browser-before.json',output),constants.COPYFILE_EXCL);}catch(e){if(!['ENOENT','EEXIST'].includes(e.code))throw e;}
++const fixture=await startPreview();let browser;const result={checks:[],errors:[],status:'RUNNING'};
++try{
++ const db=fixture.db;const n=(await rpc(db,ids.s,'load')).notices[0];
++ const cat=await rpc(db,ids.a,'catalog_save',{grade:7,name:'Tiếng Anh kiểm chứng',is_english:true},'');
++ const subject=await rpc(db,ids.t,'subject_save',{catalog_subject_id:cat.id});const group=await rpc(db,ids.t,'group_save',{name:'Nhóm English kiểm chứng'});
++ await rpc(db,ids.t,'group_assign',{student_id:ids.s,english_group_id:group.id});
++ await rpc(db,ids.t,'correction_request',{id:n.id,issue_types:['subject'],reason:'Sửa môn và nhóm áp dụng'});
++ browser=await chromium.launch({executablePath:'C:/Program Files/Google/Chrome/Application/chrome.exe',headless:true});
++ const context=await browser.newContext({viewport:{width:1280,height:960}});
++ context.on('page',p=>{p.on('pageerror',e=>result.errors.push(e.message));p.on('console',m=>{if(m.type()==='error')result.errors.push(m.text());});});
++ const page=await context.newPage();await page.goto('http://127.0.0.1:4175/tests/feat-005/preview.html?role=student');
++ const trigger=page.getByRole('button',{name:'Sửa',exact:true});await trigger.click();const modal=page.getByRole('dialog');await expect(modal).toBeVisible();
++ const inside=()=>page.evaluate(()=>document.querySelector('[role=dialog]').contains(document.activeElement));
++ expect(await inside(),'R-002 focus enters correction editor').toBe(true);
++ const first=modal.getByRole('combobox',{name:'Môn học',exact:true});const last=modal.getByRole('button',{name:'Gửi lại GV',exact:true});
++ await last.focus();await page.keyboard.press('Tab');await expect(first).toBeFocused();
++ await page.keyboard.press('Shift+Tab');await expect(last).toBeFocused();
++ await page.keyboard.press('Escape');await expect(modal).toHaveCount(0);await expect(trigger).toBeFocused();
++ await trigger.click();await modal.getByRole('button',{name:'Đóng',exact:true}).click();await expect(trigger).toBeFocused();
++ result.checks.push('R-002: focus entry, Tab/Shift+Tab wrapping, Escape and Close return to trigger');
++ await trigger.click();await first.selectOption(subject.id);await modal.getByRole('combobox',{name:'Lớp Tiếng Anh áp dụng'}).selectOption(group.id);
++ await modal.getByRole('button',{name:'Lưu bản nháp',exact:true}).click();await expect(page.getByText('Đã lưu bản nháp riêng tư',{exact:false})).toBeVisible();
++ await expect(modal.getByRole('button',{name:'Lưu bản nháp',exact:true})).toBeEnabled();
++ await expect.poll(inside).toBe(true);
++ result.focusAfterSave=await page.evaluate(()=>{const d=document.querySelector('[role=dialog]');return {tag:document.activeElement.tagName,text:document.activeElement.textContent.slice(0,100),open:d.open,modal:d.matches(':modal'),inside:d.contains(document.activeElement)}});
++ expect(await inside()).toBe(true);
++ await page.setViewportSize({width:390,height:844});expect(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth+1)).toBe(false);
++ await page.screenshot({path:fileURLToPath(new URL('editor-mobile.png',output)),fullPage:true});
++ await modal.getByRole('button',{name:'Gửi lại GV',exact:true}).click();await expect(modal).toHaveCount(0);
++ const teacher=await context.newPage();await teacher.goto('http://127.0.0.1:4175/tests/feat-005/preview.html?role=teacher');
++ await teacher.getByRole('button',{name:'Yêu cầu chỉnh sửa',exact:true}).click();await teacher.locator('.correction-panel details').first().locator('summary').click();
++ const published=teacher.locator('.revision-comparison section').first();const submitted=teacher.locator('.revision-comparison section').last();
++ await expect(published).toContainText('Toán');await expect(published).toContainText('Không áp dụng');
++ await expect(submitted).toContainText('Tiếng Anh kiểm chứng');await expect(submitted).toContainText('Nhóm English kiểm chứng');
++ await teacher.screenshot({path:fileURLToPath(new URL('teacher-comparison-desktop.png',output)),fullPage:true});
++ await teacher.setViewportSize({width:390,height:844});expect(await teacher.evaluate(()=>document.documentElement.scrollWidth>innerWidth+1)).toBe(false);
++ await teacher.screenshot({path:fileURLToPath(new URL('teacher-comparison-mobile.png',output)),fullPage:true});
++ await teacher.getByRole('button',{name:'Đạt',exact:true}).click();await expect(teacher.getByText('Đã xác nhận và công bố chỉnh sửa.',{exact:true})).toBeVisible();
++ const approved=(await rpc(db,ids.s,'load')).notices.find(x=>x.id===n.id);expect(approved.subject_id).toBe(subject.id);expect(approved.english_group_id).toBe(group.id);
++ result.checks.push('R-001: old/new subject and group visible, desktop/mobile no overflow, approval publishes checked revision');
++ expect(result.errors).toEqual([]);result.status='PASS';
++}catch(e){result.status='FAIL';result.error=e.stack;throw e;}
++finally{await browser?.close();await fixture.close();result.executed_at=new Date().toISOString();await writeFile(new URL('browser.json',output),JSON.stringify(result,null,2));console.log(JSON.stringify(result,null,2));}
+--- /dev/null
++++ b/tests/feat-005/regression.config.ts
+@@ -0,0 +1,2 @@
++import config from './vitest.config';
++export default {...config,test:{...config.test,include:['tests/feat-005/*.test.ts','tests/feat-004/*.test.ts','tests/feat-003/*.test.ts','tests/bug-001/*.test.ts','tests/homework/warning.test.ts']}};
+--- /dev/null
++++ b/tests/feat-005/replacement.test.mjs
+@@ -0,0 +1,22 @@
++import {test} from 'node:test';import assert from 'node:assert/strict';
++import {setup,seed,rpc,server,ids} from './fixture.mjs';
++test('Product addendum: replacement blocks both open correction states atomically and becomes available after closure',async()=>{
++ for(const submitted of [false,true]){const db=await setup();try{
++  const a=await seed(db);let c=await rpc(db,ids.t,'correction_request',{id:a.id,issue_types:['content'],reason:'Please correct A'});
++  const revision=Object.fromEntries(['subject_id','english_group_id','title','content','due_at'].map(k=>[k,a[k]]));
++  const token=()=>({id:a.id,correction_id:c.id,round:c.round,version:c.version});
++  if(submitted)c=await rpc(db,ids.s,'correction_submit',{...token(),revision_data:revision});
++  const b=await rpc(db,ids.other,'submit',{...revision,title:'B',content:'B work',request_id:crypto.randomUUID()});
++  const snap=await server(db,'snapshot',{id:b.id});await server(db,'finish',{id:b.id,revision:snap.notice.revision,fingerprint:snap.fingerprint,score:80,candidate_id:a.id});
++  const before=(await db.query('select to_jsonb(c) data from homework_corrections c')).rows;
++  await assert.rejects(rpc(db,ids.t,'review',{id:b.id,decision:'replace_existing'}),/GV cần xử lý correction trước/);
++  assert.deepEqual((await db.query('select to_jsonb(c) data from homework_corrections c')).rows,before);
++  assert.equal((await db.query('select status from homework_notices where id=$1',[a.id])).rows[0].status,'published');
++  assert.equal((await db.query('select status from homework_notices where id=$1',[b.id])).rows[0].status,'pending_duplicate_review');
++  if(!submitted)c=await rpc(db,ids.s,'correction_submit',{...token(),revision_data:revision});
++  await rpc(db,ids.t,'correction_decide',{...token(),decision:'approved'});
++  await rpc(db,ids.t,'review',{id:b.id,decision:'replace_existing'});
++  assert.equal((await db.query('select status from homework_notices where id=$1',[a.id])).rows[0].status,'replaced');
++  assert.equal((await db.query('select status from homework_corrections where id=$1',[c.id])).rows[0].status,'approved');
++ }finally{await db.close();}}
++});
+--- /dev/null
++++ b/tests/feat-005/ui.test.ts
+@@ -0,0 +1,49 @@
++import {beforeEach,afterEach,it,expect,vi} from 'vitest';
++import {h} from 'vue';
++import {mount,textOf,findAll,click,settle} from '../bug-001/renderer';
++import Card from '../../src/components/homework/HomeworkCard.vue';
++import CorrectionPanel from '../../src/components/homework/HomeworkCorrectionPanel.vue';
++import Reports from '../../src/components/homework/HomeworkReports.vue';
++import {homeworkTabs} from '../../src/features/homework/view-context';
++import type {Notice,Correction} from '../../src/features/homework/api';
++const notice={id:'n',class_id:'c',author_id:'s',author_role:'student',author_name:'Author',title:'Bài tập',content:'Bản công khai',due_at:'2099-01-01T00:00:00Z',created_at:'2026-09-01T00:00:00Z',status:'published',subject:'Toán',hearts:0} as Notice;
++let app:any;beforeEach(()=>{vi.stubGlobal('Document',class{});vi.stubGlobal('ShadowRoot',class{});vi.stubGlobal('document',{activeElement:null});});afterEach(()=>{app?.unmount();vi.unstubAllGlobals();});
++function render(c:any,props:any){const mounted=mount({render:()=>h(c,props)});app=mounted.app;return mounted.root;}
++const buttons=(root:any)=>findAll(root,n=>n.type==='button').map(n=>textOf(n).trim());
++it('AC-501/503: only author edits/deletes; Monitor reports; Teacher requests correction/removes; Student cannot report',()=>{
++ for(const [role,id] of [['monitor','m'],['teacher','t'],['student','other'],['admin','a']]){
++  const root=render(Card,{notice,userId:id,role,busy:false,now:0});const actions=buttons(root);expect(actions).not.toContain('Sửa');expect(actions).not.toContain('Xóa');
++  expect(actions.includes('Báo sai thông tin')).toBe(role==='monitor');expect(actions.includes('Gỡ bài')).toBe(role==='teacher');expect(actions.includes('Yêu cầu chỉnh sửa Báo bài')).toBe(role==='teacher');
++  if(role==='monitor')expect(actions).not.toContain('🔔 Nhắc');app.unmount();app=null;
++ }
++ const root=render(Card,{notice,userId:'s',role:'student',busy:false,now:0});expect(buttons(root)).toContain('Sửa');expect(buttons(root)).toContain('Xóa');
++});
++it('AC-511/515/518/520: pending published card, final round badge and withdrawal replaces delete',()=>{
++ const root=render(Card,{notice:{...notice,correction:{id:'cor',round:2,version:4,status:'awaiting_teacher'}},userId:'s',role:'student',busy:false,now:0});
++ expect(textOf(root)).toContain('Bản công khai');expect(textOf(root)).toContain('Lần chỉnh sửa cuối');expect(textOf(root)).toContain('Đang chờ GV xác nhận chỉnh sửa');expect(buttons(root)).toContain('Xin rút bài');expect(buttons(root)).not.toContain('Xóa');expect(buttons(root)).not.toContain('Sửa');
++});
++const correction={id:'cor',notice_id:'n',class_id:'c',version:4,round:2,status:'awaiting_teacher',closed_at:null,rounds:[{round:2,requested_at:'2026-09-01T00:00:00Z',due_at:'2026-09-04T00:00:00Z',reason:'Sửa lại bài',issue_types:['content'],draft:{title:'Revision riêng tư',content:'Nội dung mới',subject_id:'sub',english_group_id:null,due_at:'2026-10-01T00:00:00Z'},submitted_at:'2026-09-02T00:00:00Z'}],events:[]} as Correction;
++it('correction panel shows timer stopped, private revision, optimistic version and requires reject reason',async()=>{
++ const decide=vi.fn();const root=render(CorrectionPanel,{correction,notice,userId:'t',role:'teacher',busy:false,now:Date.now(),onDecide:decide});
++ expect(textOf(root)).toContain('Đồng hồ đã dừng');expect(textOf(root)).toContain('Revision riêng tư');expect(findAll(root,n=>n.type==='button'&&textOf(n).includes('Chưa đạt'))[0].props.disabled).toBe(true);
++ await click(root,'Đạt');expect(decide).toHaveBeenCalledWith({id:'n',correction_id:'cor',round:2,version:4,decision:'approved',reason:''});
++ findAll(root,n=>n.type==='textarea')[0].props['onUpdate:modelValue']('Vẫn sai');await settle();await findAll(root,n=>n.type==='form')[0].props.onSubmit({preventDefault(){}});expect(decide).toHaveBeenLastCalledWith(expect.objectContaining({decision:'rejected',reason:'Vẫn sai'}));
++});
++it('reports show Teacher-only identity, outcomes, counts and no automatic punishment',async()=>{
++ const process=vi.fn();const root=render(Reports,{reports:[{id:'r',notice_id:'n',reporter_name:'Cán sự Mai',reporter_code:'HS01',created_at:'2026-09-01T00:00:00Z',category:'content',status:'open',note:'Thông tin sai',events:[]}],statistics:[{reporter_id:'m',full_name:'Mai',total:3,valid:0,invalid:1,suspected_abuse:2}],busy:false,onProcess:process});
++ expect(textOf(root)).toContain('Cán sự Mai');expect(textOf(root)).toContain('HS01');expect(textOf(root)).toContain('không tự khóa');await click(root,'Hợp lệ');expect(process).toHaveBeenCalledWith({id:'n',report_id:'r',outcome:'valid',note:''});
++ for(const role of ['student','monitor','admin'])expect(homeworkTabs(role).map(t=>t.id)).not.toContain('reports');expect(homeworkTabs('teacher').map(t=>t.id)).toContain('reports');expect(homeworkTabs('admin').map(t=>t.id)).not.toContain('corrections');
++});
++it('R-001: Teacher can compare published and submitted subject/group, including inactive catalog entries',()=>{
++ const root=render(CorrectionPanel,{correction:{...correction,rounds:[{...correction.rounds[0],draft:{...correction.rounds[0].draft,subject_id:'english',english_group_id:'e2'}}]},
++  notice:{...notice,subject_id:'math',subject:'Toán',english_group_id:null,english_group:null},userId:'t',role:'teacher',busy:false,now:0,
++  subjects:[{id:'math',name:'Toán',is_active:true},{id:'english',name:'Tiếng Anh mới',is_active:false}],groups:[{id:'e2',name:'Nhóm English 2',is_active:false}]});
++ const comparison=findAll(root,n=>n.props.class==='revision-comparison')[0];expect(comparison).toBeDefined();
++ expect(textOf(comparison)).toContain('Bản đang công khai');expect(textOf(comparison)).toContain('Bản gửi lại');
++ expect(textOf(comparison)).toContain('Toán');expect(textOf(comparison)).toContain('Không áp dụng');expect(textOf(comparison)).toContain('Tiếng Anh mới');expect(textOf(comparison)).toContain('Nhóm English 2');
++});
++it('R-001: removed group is shown explicitly and unknown references never reuse another subject/group name',()=>{
++ const root=render(CorrectionPanel,{correction,notice:{...notice,subject_id:'english',subject:'Tiếng Anh cũ',english_group_id:'old-group',english_group:'Nhóm cũ'},userId:'t',role:'teacher',busy:false,now:0,subjects:[],groups:[]});
++ expect(textOf(root)).toContain('Tiếng Anh cũ');expect(textOf(root)).toContain('Nhóm cũ');
++ expect(textOf(root)).toContain('Môn không còn trong danh mục lớp');expect(textOf(root)).toContain('Không áp dụng');
++});
+--- /dev/null
++++ b/tests/feat-005/vitest.config.ts
+@@ -0,0 +1,5 @@
++import { defineConfig } from 'vitest/config';
++import vue from '@vitejs/plugin-vue';
++const plugin=vue();const hook=plugin.transform!;const transform=typeof hook==='function'?hook:hook.handler;
++plugin.transform=function(code,id,options){return transform.call(this,code,id,{...options,ssr:false});};
++export default defineConfig({plugins:[plugin],test:{include:['tests/feat-005/*.test.ts']}});
+--- /dev/null
++++ b/tests/feat-005/workflow.test.mjs
+@@ -0,0 +1,133 @@
++import { test } from 'node:test';
++import assert from 'node:assert/strict';
++import { setup,seed,rpc,server,migrate,ids,classId,classB } from './fixture.mjs';
++const revision = n => Object.fromEntries(['subject_id','english_group_id','title','content','due_at'].map(k=>[k,n[k]]));
++const token = (n,c) => ({id:n.id,correction_id:c.id,round:c.round,version:c.version});
++const request = (db,n) => rpc(db,ids.t,'correction_request',{id:n.id,issue_types:['deadline','content'],reason:'Sửa nội dung và hạn'});
++async function maintenance(db) {await db.exec('set role service_role');try{await db.exec('select public.homework_maintenance()');}finally{await db.exec('reset role');}}
++async function overdue(db,c) { await db.query("update homework_correction_rounds set requested_at=clock_timestamp()-interval '73 hours',due_at=clock_timestamp()-interval '1 hour' where correction_id=$1 and round=$2",[c.id,c.round]); }
++test('reports: role matrix, confidentiality in every reader, Teacher outcomes/statistics without role changes',async()=>{
++ const db=await setup();try{const n=await seed(db);
++ for(const u of [ids.s,ids.other,ids.t,ids.a]) await assert.rejects(rpc(db,u,'report',{id:n.id,category:'content'}),{code:'42501'});
++ await assert.rejects(rpc(db,ids.m,'report',{id:n.id,category:'content',reporter_id:ids.t}));
++ await rpc(db,ids.m,'report',{id:n.id,category:'content',note:'REPORTER_PRIVATE_NOTE'});
++ await assert.rejects(rpc(db,ids.m,'report',{id:n.id,category:'content'}),{code:'23505'});
++ let data=await rpc(db,ids.t,'load');let report=data.reports[0];assert.equal(report.reporter_id,ids.m);assert.equal(report.events[0].actor_id,ids.m);
++ for(const u of [ids.s,ids.other,ids.m,ids.a]){const d=await rpc(db,u,'load');assert.equal(d.reports,undefined);assert.ok(!JSON.stringify(d).includes('REPORTER_PRIVATE_NOTE'));assert.ok(!JSON.stringify(d).includes('reporter_id'));}
++ assert.ok(!JSON.stringify(await rpc(db,ids.a,'oversight',{},'')).includes('REPORTER_PRIVATE_NOTE'));
++ for(const outcome of ['valid','invalid','suspected_abuse']){
++  await rpc(db,ids.t,'report_process',{id:n.id,report_id:report.id,outcome,note:'Teacher-only note'});
++  await assert.rejects(rpc(db,ids.t,'report_process',{id:n.id,report_id:report.id,outcome}));
++  if(outcome!=='suspected_abuse'){await rpc(db,ids.m,'report',{id:n.id,category:'other'});report=(await rpc(db,ids.t,'load')).reports.find(x=>x.status==='open');}
++ }
++ data=await rpc(db,ids.t,'load');assert.deepEqual(data.report_statistics.map(({total,valid,invalid,suspected_abuse})=>({total,valid,invalid,suspected_abuse})),[{total:3,valid:1,invalid:1,suspected_abuse:1}]);
++ await rpc(db,ids.m,'report',{id:n.id,category:'deadline'});assert.equal((await db.query('select role from profiles where id=$1',[ids.m])).rows[0].role,'monitor');
++ }finally{await db.close();}
++});
++test('correction private draft, ordinary edit/delete rejection, resubmission stops timer, approval preserves AI gate',async()=>{
++ const db=await setup();try{const n=await seed(db);let c=await request(db,n);
++ await assert.rejects(request(db,n));
++ for(const action of ['delete','submit'])await assert.rejects(rpc(db,ids.s,action,{...n,reason:'bypass'}));
++ for(const u of [ids.m,ids.other,ids.a])await assert.rejects(rpc(db,u,'correction_request',{id:n.id,issue_types:['content'],reason:'no'}),{code:'42501'});
++ const draft={...revision(n),content:'PRIVATE_REVISION_NEW_TASK'};
++ c=await rpc(db,ids.s,'correction_save',{...token(n,c),revision_data:draft});
++ assert.equal((await rpc(db,ids.s,'load')).corrections[0].rounds[0].draft.content,draft.content);
++ for(const u of [ids.other,ids.m,ids.a])assert.ok(!JSON.stringify(await rpc(db,u,'load')).includes(draft.content));
++ assert.ok(!JSON.stringify(await rpc(db,ids.a,'oversight',{},'')).includes(draft.content));
++ assert.equal((await rpc(db,ids.t,'load')).notices[0].content,n.content);
++ c=await rpc(db,ids.s,'correction_submit',{...token(n,c),revision_data:draft});
++ await overdue(db,c);await maintenance(db);
++ assert.equal((await rpc(db,ids.s,'load')).notices[0].correction.status,'awaiting_teacher');
++ await assert.rejects(rpc(db,ids.s,'correction_save',{...token(n,c),revision_data:revision(n)}));
++ const result=await rpc(db,ids.t,'correction_decide',{...token(n,c),decision:'approved'});
++ assert.equal(result.status,'pending_duplicate_review');assert.equal(result.content,draft.content);
++ assert.equal((await rpc(db,ids.other,'load')).notices.length,0);
++ const snap=await server(db,'snapshot',{id:n.id});assert.equal(snap.notice.content,draft.content);
++ await server(db,'finish',{id:n.id,revision:snap.notice.revision,fingerprint:snap.fingerprint,score:0,candidate_id:null});
++ assert.equal((await rpc(db,ids.other,'load')).notices[0].content,draft.content);
++ assert.ok((await rpc(db,ids.s,'inbox')).some(x=>x.kind==='correction_approved'));
++ }finally{await db.close();}
++});
++test('exact 72 hour window, two rounds, stale decisions rejected, terminal deletion is System with separate Teacher actor',async()=>{
++ const db=await setup();try{const n=await seed(db);let c=await request(db,n);
++ let row=(await db.query("select extract(epoch from(due_at-requested_at)) seconds from homework_correction_rounds where correction_id=$1",[c.id])).rows[0];assert.equal(Number(row.seconds),72*3600);
++ c=await rpc(db,ids.s,'correction_submit',{...token(n,c),revision_data:revision(n)});const old=token(n,c);
++ await assert.rejects(rpc(db,ids.t,'correction_decide',{...old,decision:'rejected',reason:' '}));
++ c=await rpc(db,ids.t,'correction_decide',{...old,decision:'rejected',reason:'Cần sửa thêm'});assert.equal(c.round,2);
++ await assert.rejects(rpc(db,ids.t,'correction_decide',{...old,decision:'rejected',reason:'double-click'}));
++ c=await rpc(db,ids.s,'correction_submit',{...token(n,c),revision_data:revision(n)});
++ await rpc(db,ids.t,'correction_decide',{...token(n,c),decision:'rejected',reason:'Vẫn sai'});
++ row=(await db.query('select * from homework_notices where id=$1',[n.id])).rows[0];assert.equal(row.status,'deleted');assert.equal(row.deleted_actor_type,'system');assert.equal(row.deleted_by,null);
++ const events=(await db.query('select * from homework_moderation_events where notice_id=$1',[n.id])).rows;
++ assert.equal(events.find(e=>e.event_type==='correction_rejected'&&e.round===2).actor_id,ids.t);
++ assert.equal(events.find(e=>e.event_type==='system_soft_delete').actor_id,null);
++ assert.equal((await db.query('select count(*) n from homework_correction_rounds')).rows[0].n,2);
++ await assert.rejects(request(db,n));await assert.rejects(rpc(db,ids.t,'correction_decide',{...token(n,c),decision:'approved'}));
++ await assert.rejects(rpc(db,ids.other,'heart',{id:n.id,liked:true}));
++ assert.ok((await rpc(db,ids.s,'inbox')).some(x=>x.kind==='correction_rejected_final'));
++ assert.equal((await db.query('select count(*) n from profiles')).rows[0].n,5);
++ }finally{await db.close();}
++});
++test('timeout both rounds, scheduler authorization/idempotency and timeout-before-resubmit race ordering',async()=>{
++ for(const round of [1,2]){const db=await setup();try{const n=await seed(db);let c=await request(db,n);
++ if(round===2){c=await rpc(db,ids.s,'correction_submit',{...token(n,c),revision_data:revision(n)});c=await rpc(db,ids.t,'correction_decide',{...token(n,c),decision:'rejected',reason:'Lần cuối'});}
++ await overdue(db,c);
++ const result=await rpc(db,ids.s,'correction_submit',{...token(n,c),revision_data:revision(n)});assert.equal(result.expired,true);
++ await maintenance(db);await maintenance(db);
++ const rows=(await db.query("select * from homework_moderation_events where event_type='system_soft_delete'")).rows;assert.equal(rows.length,1);assert.equal(rows[0].actor_type,'system');
++ assert.equal((await rpc(db,ids.s,'load')).notices.length,0);assert.ok((await rpc(db,ids.s,'inbox')).some(x=>x.kind==='correction_timeout'));
++ await db.exec(`set role authenticated;set request.jwt.claim.sub='${ids.t}';`);await assert.rejects(db.exec('select public.homework_maintenance()'),{code:'42501'});await db.exec('reset role');
++ }finally{await db.close();}}
++});
++test('withdraw and emergency removal retain real user, close timer and require reasons and correct role',async()=>{
++ for(const action of ['withdraw','emergency_remove']){const db=await setup();try{const n=await seed(db);const c=await request(db,n);const user=action==='withdraw'?ids.s:ids.t;
++ const p={...token(n,c),category:'seriously_incorrect_information',reason:'Nội dung cần gỡ'};
++ await assert.rejects(rpc(db,user,action,{...p,reason:''}));
++ for(const bad of [ids.other,ids.m,ids.a])await assert.rejects(rpc(db,bad,action,p));
++ await rpc(db,user,action,p);const row=(await db.query('select * from homework_notices where id=$1',[n.id])).rows[0];assert.equal(row.deleted_actor_type,'user');assert.equal(row.deleted_by,user);
++ assert.equal((await rpc(db,ids.t,'load')).corrections[0].status,action==='withdraw'?'withdrawn_by_author':'emergency_removed');
++ await overdue(db,c);await maintenance(db);assert.equal((await db.query("select count(*) n from homework_moderation_events where event_type='system_soft_delete'")).rows[0].n,0);
++ }finally{await db.close();}}
++});
++test('System hard-delete: confirmation/reason/Admin gates, tombstone before purge, private data purge and marker',async()=>{
++ const db=await setup();try{const n=await seed(db);await rpc(db,ids.m,'report',{id:n.id,category:'content',note:'SECRET_REPORT'});const c=await request(db,n);await overdue(db,c);await maintenance(db);
++ const p={id:n.id,confirm_irreversible:true,hard_delete_reason:'Reviewed permanent removal'};
++ for(const u of [ids.s,ids.m,ids.t])await assert.rejects(rpc(db,u,'hard_delete',p));
++ await assert.rejects(rpc(db,ids.a,'hard_delete',{...p,confirm_irreversible:false}));await assert.rejects(rpc(db,ids.a,'hard_delete',{...p,hard_delete_reason:' '}));
++ await db.exec("create function reject_tombstone() returns trigger language plpgsql as $$begin raise exception 'test gate';end$$;create trigger reject_t before insert on homework_tombstones for each row execute function reject_tombstone();");
++ await assert.rejects(rpc(db,ids.a,'hard_delete',p),/test gate/);assert.equal((await db.query('select count(*) n from homework_notices')).rows[0].n,1);
++ await db.exec('drop trigger reject_t on homework_tombstones');await rpc(db,ids.a,'hard_delete',p);
++ const t=(await db.query('select * from homework_tombstones')).rows[0];assert.equal(t.soft_delete_actor_type,'system');assert.equal(t.soft_deleted_by,null);assert.equal(t.hard_deleted_by,ids.a);
++ for(const table of ['homework_reports','homework_corrections','homework_correction_rounds','homework_moderation_events','homework_notices','homework_notifications'])assert.equal((await db.query(`select count(*) n from ${table}`)).rows[0].n,0,table);
++ assert.equal((await db.query('select count(*) n from homework_contribution_events where notice_id=$1',[n.id])).rows[0].n,0);
++ assert.ok((await db.query('select count(*) n from homework_contribution_events where notice_id is null')).rows[0].n>0,'unrelated subject/catalog audit is preserved');
++ for(const key of ['title','content','due_at','reporter_id'])assert.equal(t[key],undefined);
++ const data=await rpc(db,ids.s,'load');assert.equal(data.history_markers.length,1);assert.ok(!JSON.stringify(data).includes('SECRET_REPORT'));assert.equal((await rpc(db,ids.a,'hard_delete',p)).already_deleted,true);
++ }finally{await db.close();}
++});
++test('migration preserves old user deletion, populated notice rows and immutable tombstones',async()=>{
++ const db=await setup(false);try{const n=await seed(db);await rpc(db,ids.s,'delete',{id:n.id,reason:'Manual'});await rpc(db,ids.a,'hard_delete',{id:n.id,confirm_irreversible:true,hard_delete_reason:'Existing tombstone'});
++ const before=(await db.query('select to_jsonb(t) r from homework_tombstones t')).rows[0].r;
++ const n2=await seed(db);await rpc(db,ids.s,'delete',{id:n2.id,reason:'Still in trash'});
++ const rowBefore=(await db.query('select to_jsonb(n) r from homework_notices n')).rows[0].r;await migrate(db);
++ assert.deepEqual((await db.query("select to_jsonb(t)-'soft_delete_actor_type' r from homework_tombstones t")).rows[0].r,before);
++ assert.deepEqual((await db.query("select to_jsonb(n)-'deleted_actor_type' r from homework_notices n")).rows[0].r,rowBefore);
++ assert.equal((await db.query('select deleted_actor_type from homework_notices')).rows[0].deleted_actor_type,'user');
++ await rpc(db,ids.a,'hard_delete',{id:n2.id,confirm_irreversible:true,hard_delete_reason:'Manual actor preserved'});
++ assert.ok((await db.query('select * from homework_tombstones')).rows.every(x=>x.soft_deleted_by===ids.s&&x.soft_delete_actor_type==='user'));
++ await assert.rejects(db.exec("update homework_tombstones set soft_delete_actor_type='system'"),/immutable/);
++ }finally{await db.close();}
++});
++test('class isolation, forged notice/correction IDs, private function/table access and Monitor remind denial',async()=>{
++ const db=await setup();try{const n=await seed(db);const c=await request(db,n);
++ await db.exec(`insert into classes(id,school_year_id,active,code,name,grade)values('${classB}','${ids.y}',true,'8A','8A',8);`);
++ for(const user of [ids.s,ids.m,ids.t])for(const action of ['load','report','correction_request','correction_submit','correction_decide','emergency_remove'])await assert.rejects(rpc(db,user,action,{...token(n,c),reason:'forged',category:'content'},classB));
++ await assert.rejects(rpc(db,ids.other,'correction_submit',{...token(n,c),revision_data:revision(n)}),{code:'42501'});
++ await assert.rejects(rpc(db,ids.s,'correction_submit',{...token(n,c),correction_id:crypto.randomUUID(),revision_data:revision(n)}));
++ await assert.rejects(rpc(db,ids.m,'remind',{id:n.id}),{code:'42501'});
++ for(const user of [ids.s,ids.m,ids.t,ids.a]){await db.exec(`set role authenticated;set request.jwt.claim.sub='${user}';`);
++  for(const sql of ['select * from homework_reports','select * from homework_correction_rounds','select * from homework_moderation_events','update homework_notices set author_id=null',"select homework_private.api_v4('delete','{}')","select homework_private.api_v3('delete','{}')",'select homework_maintenance()'])await assert.rejects(db.exec(sql),{code:'42501'});
++  await db.exec('reset role');}
++ await db.exec('update class_teachers set active=false');await assert.rejects(rpc(db,ids.t,'load'),{code:'42501'});
++ }finally{await db.close();}
++});

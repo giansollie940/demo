@@ -1,0 +1,11 @@
+{
+  "status": "RESOLVED_PASS",
+  "scenario": "Replacement is rejected while A has open correction. After the original deadline, maintenance still times out A normally.",
+  "observed": {
+    "notice_status": "deleted",
+    "correction_status": "timeout",
+    "closed_at": "2026-09-14T17:28:33.389Z"
+  },
+  "decision": "DEC-FEAT005-REPLACEMENT-GUARD; approved by Product Owner 2026-09-15",
+  "note": "Original failure evidence is retained separately. No correction terminal outcome was invented."
+}

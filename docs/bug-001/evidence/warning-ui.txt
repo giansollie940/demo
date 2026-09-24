@@ -1,0 +1,15 @@
+npm warn Unknown env config "http-proxy". This will stop working in the next major version of npm.
+
+> so-tu-hoc-vue@8.8.0 test:homework:ui
+> vitest run tests/homework/warning.test.ts
+
+
+ RUN  v3.2.7 /workspace/scratch/6ad2feb3a2a4/bug-001-work
+
+ ✓ tests/homework/warning.test.ts (3 tests) 30ms
+
+ Test Files  1 passed (1)
+      Tests  3 passed (3)
+   Start at  01:20:13
+   Duration  875ms (transform 518ms, setup 0ms, collect 586ms, tests 30ms, environment 0ms, prepare 64ms)
+

@@ -1,0 +1,103 @@
+npm warn Unknown env config "http-proxy". This will stop working in the next major version of npm.
+
+ RUN  v3.2.7 /workspace/scratch/6ad2feb3a2a4/bug-001-work
+
+ ❯ tests/bug-001/regression.test.ts (12 tests | 9 failed) 71ms
+   × BUG-001 route authorization > allows Admin direct URL and menu navigation to homework 11ms
+     → expected '/admin' to be '/homework' // Object.is equality
+   ✓ BUG-001 route authorization > still denies Admin teacher/student routes and permits admin/settings 2ms
+   ✓ BUG-001 route authorization > preserves learner/teacher access and unauthenticated redirect 2ms
+   × BUG-001 Owl module isolation > isolates homework from legacy needs-revision for student 2ms
+     → expected false to be true // Object.is equality
+   × BUG-001 Owl module isolation > isolates homework from legacy needs-revision for monitor 1ms
+     → expected false to be true // Object.is equality
+   × BUG-001 Owl module isolation > isolates homework from legacy needs-revision for teacher 1ms
+     → expected false to be true // Object.is equality
+   × BUG-001 Owl module isolation > isolates homework from legacy needs-revision for admin 1ms
+     → expected false to be true // Object.is equality
+   ✓ BUG-001 Owl module isolation > preserves legacy revision urgency outside homework 0ms
+   × BUG-001 actual Vue component interactions (virtual renderer) > resets Owl context after every Admin tab click without path change 17ms
+     → expected 'Cú Thông TháiDashboard tuần đang xem:…' to contain 'Tổng quan'
+   × BUG-001 actual Vue component interactions (virtual renderer) > renders create/edit wording and dispatches the existing reminder action 24ms
+     → expected [ '📅 Những bài cần hoàn thành', …(1) ] to include '✏️ Đăng Báo bài'
+   × BUG-001 actual Vue component interactions (virtual renderer) > drops forbidden context immediately when Admin becomes Student 5ms
+     → expected 'Cú Thông TháiBạn có 1 đăng ký được gi…' to contain 'Bảng Báo bài'
+   × BUG-001 actual Vue component interactions (virtual renderer) > clears old message during quick route changes and handles failed load 3ms
+     → expected 'Cú Thông TháiDashboard tuần đang xem:…' to contain 'Báo bài'
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 9 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/bug-001/regression.test.ts > BUG-001 route authorization > allows Admin direct URL and menu navigation to homework
+AssertionError: expected '/admin' to be '/homework' // Object.is equality
+
+Expected: "/homework"
+Received: "/admin"
+
+ ❯ tests/bug-001/regression.test.ts:36:143
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/9]⎯
+
+ FAIL  tests/bug-001/regression.test.ts > BUG-001 Owl module isolation > isolates homework from legacy needs-revision for student
+ FAIL  tests/bug-001/regression.test.ts > BUG-001 Owl module isolation > isolates homework from legacy needs-revision for monitor
+ FAIL  tests/bug-001/regression.test.ts > BUG-001 Owl module isolation > isolates homework from legacy needs-revision for teacher
+ FAIL  tests/bug-001/regression.test.ts > BUG-001 Owl module isolation > isolates homework from legacy needs-revision for admin
+AssertionError: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ tests/bug-001/regression.test.ts:41:287
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/9]⎯
+
+ FAIL  tests/bug-001/regression.test.ts > BUG-001 actual Vue component interactions (virtual renderer) > resets Owl context after every Admin tab click without path change
+AssertionError: expected 'Cú Thông TháiDashboard tuần đang xem:…' to contain 'Tổng quan'
+
+Expected: "Tổng quan"
+Received: "Cú Thông TháiDashboard tuần đang xem: 1 học sinh/cán sự hoạt động."
+
+ ❯ tests/bug-001/regression.test.ts:45:419
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/9]⎯
+
+ FAIL  tests/bug-001/regression.test.ts > BUG-001 actual Vue component interactions (virtual renderer) > renders create/edit wording and dispatches the existing reminder action
+AssertionError: expected [ '📅 Những bài cần hoàn thành', …(1) ] to include '✏️ Đăng Báo bài'
+ ❯ tests/bug-001/regression.test.ts:46:307
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/9]⎯
+
+ FAIL  tests/bug-001/regression.test.ts > BUG-001 actual Vue component interactions (virtual renderer) > drops forbidden context immediately when Admin becomes Student
+AssertionError: expected 'Cú Thông TháiBạn có 1 đăng ký được gi…' to contain 'Bảng Báo bài'
+
+Expected: "Bảng Báo bài"
+Received: "Cú Thông TháiBạn có 1 đăng ký được giáo viên hoặc AI yêu cầu chỉnh sửa."
+
+ ❯ tests/bug-001/regression.test.ts:47:382
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/9]⎯
+
+ FAIL  tests/bug-001/regression.test.ts > BUG-001 actual Vue component interactions (virtual renderer) > clears old message during quick route changes and handles failed load
+AssertionError: expected 'Cú Thông TháiDashboard tuần đang xem:…' to contain 'Báo bài'
+
+Expected: "Báo bài"
+Received: "Cú Thông TháiDashboard tuần đang xem: 1 học sinh/cán sự hoạt động."
+
+ ❯ tests/bug-001/regression.test.ts:48:312
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/9]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  9 failed | 3 passed (12)
+   Start at  01:17:43
+   Duration  2.54s (transform 1.64s, setup 0ms, collect 2.27s, tests 71ms, environment 0ms, prepare 53ms)
+

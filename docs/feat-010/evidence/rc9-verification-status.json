@@ -1,0 +1,18 @@
+{
+  "release": "RC9-FULL",
+  "status": "RUNTIME_VERIFICATION_PENDING",
+  "source_integration": "PASS",
+  "js_syntax": "PASS",
+  "m51_definition": "PASS",
+  "m52_definition": "PASS",
+  "full_runtime_suite": "NOT_RUN",
+  "baseline_rc8": {
+    "verification_checks": "18/18 PASS",
+    "tests": "404 PASS / 0 FAIL",
+    "mutations": "50/50 caught",
+    "typecheck": "PASS",
+    "production_build": "PASS"
+  },
+  "expected_rc9_mutation_bar": "52/52 caught",
+  "production_touched": false
+}
