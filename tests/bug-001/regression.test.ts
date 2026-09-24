@@ -76,12 +76,12 @@ describe('BUG-001 context boundaries', () => {
       expect(inside.some(m => /đăng ký|buổi tự học/.test(m.text))).toBe(false)
     }
   })
-  it('isolates actionable teacher registration queue while retaining Review alerts', () => {
+  it('keeps actionable registration queue with Teacher while isolating Admin, including stale Review routes', () => {
     const state = legacy(); state.registrations[0].status = 'submitted'
-    for (const role of ['teacher', 'admin']) {
-      expect(buildOwlContextMessages({ state, user: user(role), path: '/review' }).some(m => m.urgent)).toBe(true)
-      expect(buildOwlContextMessages({ state, user: user(role), path: '/homework' }).some(m => m.urgent)).toBe(false)
-    }
+    expect(buildOwlContextMessages({ state, user: user('teacher'), path: '/review' }).some(m => m.urgent)).toBe(true)
+    expect(buildOwlContextMessages({ state, user: user('admin'), path: '/review' }).some(m => m.urgent)).toBe(false)
+    expect(buildOwlContextMessages({ state, user: user('teacher'), path: '/homework' }).some(m => m.urgent)).toBe(false)
+    expect(buildOwlContextMessages({ state, user: user('admin'), path: '/homework' }).some(m => m.urgent)).toBe(false)
   })
   it('normalizes forged/unknown tabs against role without leaking forbidden context', () => {
     for (const [role, tabs] of [
