@@ -6,6 +6,7 @@ import type { DevicePolicySlot } from '../registrations/device-policy'
 
 export interface OwlQuote { id?: string; text: string; author: string; url?: string }
 export interface OwlMessage { kind: 'urgent' | 'page' | 'tip' | 'quote'; text: string; urgent?: boolean; quote?: OwlQuote }
+export interface TeacherQueueWeekSnapshot { weekId: string; registrations: RegistrationRecord[] }
 
 export const OWL_QUOTES: OwlQuote[] = [
   { text: 'Hãy xây dựng niềm đam mê học tập. Nếu bạn làm được, bạn sẽ không ngừng tiến bộ.', author: "Anthony J. D'Angelo" },
@@ -59,6 +60,13 @@ export function createQuoteRotator(baseQuotes: OwlQuote[] = OWL_QUOTES, { recent
 function weekRegistrations(state: LegacyState, weekId: string | null | undefined): RegistrationRecord[] {
   const targetWeekId = weekId || state.currentWeekId
   return state.registrations.filter(row => row.weekId === targetWeekId && row.isDeleted !== true)
+}
+function teacherQueueRegistrations(state: LegacyState, weekId: string | null | undefined, snapshots?: TeacherQueueWeekSnapshot[]): RegistrationRecord[] {
+  const targetWeekId = weekId || state.currentWeekId
+  const snapshot = targetWeekId ? snapshots?.find(item => item.weekId === targetWeekId) : undefined
+  return snapshot
+    ? snapshot.registrations.filter(row => row.weekId === targetWeekId && row.isDeleted !== true)
+    : weekRegistrations(state, targetWeekId)
 }
 function learnerCount(state: LegacyState): number { return state.users.filter(user => user.active !== false && ['student','monitor'].includes(user.role)).length }
 function mine(state: LegacyState, user: CurrentUser, weekId: string | null | undefined): RegistrationRecord[] { return weekRegistrations(state, weekId).filter(row => row.studentId === user.id) }
@@ -158,7 +166,7 @@ function monitorClassSupportMessages({ state, weekId, nowMs }: { state: LegacySt
   return messages
 }
 
-export function buildOwlContextMessages({ state, user, path, weekId = state?.currentWeekId, nowMs = Date.now(), homeworkTab, deviceTab = false, devicePolicySlots }: { state: LegacyState | null; user: CurrentUser; path: string; weekId?: string | null; nowMs?: number; homeworkTab?: string | null; deviceTab?: boolean; devicePolicySlots?: DevicePolicySlot[] }): OwlMessage[] {
+export function buildOwlContextMessages({ state, user, path, weekId = state?.currentWeekId, nowMs = Date.now(), homeworkTab, deviceTab = false, devicePolicySlots, teacherQueueWeeks }: { state: LegacyState | null; user: CurrentUser; path: string; weekId?: string | null; nowMs?: number; homeworkTab?: string | null; deviceTab?: boolean; devicePolicySlots?: DevicePolicySlot[]; teacherQueueWeeks?: TeacherQueueWeekSnapshot[] }): OwlMessage[] {
   const route = routeName(path)
   // Resolve this subsystem before reading any Registration/Schedule state.
   if (route === 'homework') {
@@ -188,13 +196,26 @@ export function buildOwlContextMessages({ state, user, path, weekId = state?.cur
     if (route === 'admin' && deviceTab) messages.push({ kind:'page', text:'Thiết bị điện tử: chọn lớp và tuần để xem trạng thái từng tiết cùng lịch sử; Admin chỉ có quyền xem.' })
     else messages.push({ kind:'page', text:`Quản trị lớp, giáo viên và phân quyền vẫn dùng các Edge Function hiện có.` })
   } else if (user.role === 'teacher') {
-    const current = weekRegistrations(state, weekId)
+    const targetWeekId = weekId || state.currentWeekId
+    const current = teacherQueueRegistrations(state, targetWeekId, teacherQueueWeeks)
     const unresolved = current.filter(row => pendingForTeacher(row, state, nowMs))
     const waiting = unresolved.length
-    // The red dot represents actionable work, never a generic unread-notification count.
-    // This prevents an already-approved registration from keeping the owl in alert state
-    // when a stale or late notification event is still present locally.
-    if (waiting) messages.push({ kind:'urgent', urgent:true, text:`${weekLabel} còn ${waiting} đăng ký cần giáo viên xử lý.` })
+    // Selected-week data comes from the same bounded week query used by the approval surface.
+    // If that week is clear, surface actionable work from another monitored open week.
+    if (waiting) {
+      messages.push({ kind:'urgent', urgent:true, text:`${weekLabel} còn ${waiting} đăng ký cần giáo viên xử lý.` })
+    } else {
+      const otherQueue = (teacherQueueWeeks ?? [])
+        .filter(item => item.weekId !== targetWeekId)
+        .map(item => {
+          const candidateWeek = state.weeks.find(candidate => candidate.id === item.weekId)
+          const count = item.registrations.filter(row => pendingForTeacher(row, state, nowMs)).length
+          return { week: candidateWeek, count }
+        })
+        .filter(item => item.week && item.count > 0)
+        .sort((a, b) => Number(a.week?.number ?? 0) - Number(b.week?.number ?? 0))[0]
+      if (otherQueue?.week) messages.push({ kind:'urgent', urgent:true, text:`Tuần ${otherQueue.week.number} có ${otherQueue.count} đăng ký cần giáo viên xử lý.` })
+    }
     if (route === 'students') messages.push({ kind:'page', text:`Lớp hiện có ${learnerCount(state)} học sinh/cán sự đang hoạt động.` })
     else if (route === 'review') messages.push({ kind:'page', text: waiting ? `Mở từng đăng ký để xem lý do AI và phản hồi học sinh.` : `Danh sách duyệt của ${weekLabel} hiện đã gọn.` })
     else if (route === 'tracking') messages.push({ kind:'page', text:`Theo dõi từng buổi bằng bộ lọc để tìm nhanh học sinh chưa đăng ký hoặc cần xử lý.` })
