@@ -137,14 +137,14 @@ describe('FEAT-002 actual role UI',()=>{
   env.rpc.mockImplementation(async(action:string)=>action==='oversight'?{...extra(action),trash:[{...notice,status:'deleted',delete_reason:'mistake'}]}:action==='load'?data():extra(action));
   const root=renderPair();await settle();await click(root,'Thùng rác');expect(findAll(root,n=>n.type==='button').map(textOf)).not.toContain('Khôi phục');
   await click(root,'Xóa vĩnh viễn');expect(textOf(root)).toContain('không thể hoàn tác');
-  const dialog=findAll(root,n=>n.props.role==='dialog')[0];const textarea=findAll(dialog,n=>n.type==='textarea')[0];expect(textarea.props.maxlength).toBe('500');
+  const dialog=findAll(root,n=>n.props.role==='alertdialog')[0];const textarea=findAll(dialog,n=>n.type==='textarea')[0];expect(textarea.props.maxlength).toBe('500');
   const submit=findAll(dialog,n=>n.type==='button'&&textOf(n)==='Xác nhận xóa vĩnh viễn')[0];expect(submit.props.disabled).toBe(true);
   textarea.props['onUpdate:modelValue']('  Wrong task  ');
   findAll(dialog,n=>n.type==='input'&&n.props.type==='checkbox')[0].props['onUpdate:modelValue'](true);await settle();
   expect(submit.props.disabled).toBe(false);
   await findAll(dialog,n=>n.type==='form')[0].props.onSubmit({preventDefault(){}});await settle();
   expect(env.rpc).toHaveBeenCalledWith('hard_delete','c',{id:'n',confirm_irreversible:true,hard_delete_reason:'Wrong task'});
-  expect(findAll(root,n=>n.props.role==='dialog')).toHaveLength(0);
+  expect(findAll(root,n=>n.props.role==='alertdialog')).toHaveLength(0);
  });
  it('personal tombstone is a redacted marker with no notice action',async()=>{
   actor('student');env.rpc.mockImplementation(async(action:string)=>action==='load'?{...data(),history_markers:[{notice_id:'gone',marker:'[Đã xóa vĩnh viễn]',original_created_at:notice.created_at,hard_deleted_at:notice.created_at}]}:{});
