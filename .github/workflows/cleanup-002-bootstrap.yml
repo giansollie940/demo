@@ -123,15 +123,18 @@ jobs:
         run: node --test tests/immediate-watcher-tdz.test.mjs tests/v9-banner-artwork-regression.test.mjs
 
       - name: FEAT-009 mascot tests
-        run: npx vitest run tests/unit/owl-mascot-v2.test.ts tests/feat-009/motion.test.ts
+        run: |
+          npx vitest run --config tests/feat-009/vitest.config.ts
+          npx vitest run tests/unit/owl-mascot-v2.test.ts
 
       - name: FEAT-010 UI regression
-        run: npx vitest run --config tests/feat-010/vitest.config.ts tests/feat-010/ui.test.ts
+        run: npx vitest run --config tests/feat-010/vitest.config.ts
 
       - name: FEAT-012 storage live regression
         run: |
           node --test tests/admin-live-v2/signals.test.mjs
-          npx vitest run tests/admin-live-v2/live-channel.test.ts tests/feat-008/dashboard.test.ts
+          npx vitest run --config tests/admin-live-v2/vitest.config.ts
+          npx vitest run --config tests/feat-008/vitest.config.ts
 
       - name: Typecheck
         run: npm run typecheck
