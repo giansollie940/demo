@@ -1,0 +1,32 @@
+name: BUG-003 TDD
+
+on:
+  push:
+    branches:
+      - bug/owl-admin-role-isolation
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: '.nvmrc'
+          cache: npm
+      - run: npm ci
+      - name: Owl unit tests
+        run: npm run test:unit
+      - name: BUG-001 regression
+        run: npm run test:bug-001
+      - name: Static tests
+        run: npm run test:static
+      - name: Typecheck
+        run: npm run typecheck
+      - name: Production build
+        run: npm run build:pages
