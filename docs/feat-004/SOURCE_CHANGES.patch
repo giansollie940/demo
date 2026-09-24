@@ -1,0 +1,1076 @@
+--- a/database/upgrade/08-FEAT-004-MULTI-CLASS-CATALOG.sql
++++ b/database/upgrade/08-FEAT-004-MULTI-CLASS-CATALOG.sql
+@@ -0,0 +1,153 @@
++-- FEAT-004. Apply after 07. Entire upgrade is atomic, including preflight.
++begin;
++lock table public.classes, public.class_subjects in access exclusive mode;
++do $$declare missing jsonb; ambiguous jsonb; begin
++ select jsonb_agg(jsonb_build_object('class_id',id,'code',code,'name',name)) into missing
++ from public.classes where id<>'4e0b25e4-ec47-4745-8b2b-ba91c1504254'::uuid;
++ if missing is not null then raise exception 'FEAT-004 explicit grade mapping required: %',missing;end if;
++ -- Same normalized label with differing canonical metadata requires Product review.
++ select jsonb_agg(to_jsonb(x)) into ambiguous from (
++ select lower(trim(name)) label,array_agg(id) subject_ids from public.class_subjects
++ group by lower(trim(name)) having count(distinct (name,short_name,icon,is_english))>1
++ )x;
++ if ambiguous is not null then raise exception 'FEAT-004 ambiguous subject mapping: %',ambiguous;end if;
++end$$;
++alter table public.classes add column grade smallint;
++update public.classes set grade=7 where id='4e0b25e4-ec47-4745-8b2b-ba91c1504254';
++alter table public.classes alter column grade set not null;
++alter table public.classes add constraint classes_grade_v1 check(grade between 6 and 12);
++create function homework_private.immutable_grade() returns trigger language plpgsql set search_path=pg_catalog,public as $$
++begin if new.grade is distinct from old.grade then raise exception 'Đổi khối lớp cần flow riêng';end if;return new;end$$;
++create trigger classes_immutable_grade before update of grade on public.classes for each row execute function homework_private.immutable_grade();
++create index classes_grade_scope on public.classes(grade,id);
++create table public.grade_subject_catalog(
++ id uuid primary key default gen_random_uuid(),grade smallint not null check(grade between 6 and 12),
++ name text not null check(length(trim(name)) between 1 and 100),short_name text not null default '' check(length(short_name)<=40),
++ icon text not null default '📚' check(length(icon) between 1 and 40),sort_order integer not null default 0,
++ is_active boolean not null default true,is_english boolean not null default false,
++ created_at timestamptz not null default now(),updated_at timestamptz not null default now(),unique(grade,name)
++);
++alter table public.grade_subject_catalog enable row level security;
++revoke all on public.grade_subject_catalog from public,anon,authenticated;
++insert into public.grade_subject_catalog(grade,name,short_name,icon,is_english,sort_order)
++ select c.grade,s.name,s.short_name,s.icon,s.is_english,min(s.sort_order)
++ from public.class_subjects s join public.classes c on c.id=s.class_id group by c.grade,s.name,s.short_name,s.icon,s.is_english;
++alter table public.class_subjects add column catalog_subject_id uuid references public.grade_subject_catalog(id);
++update public.class_subjects s set catalog_subject_id=g.id from public.classes c,public.grade_subject_catalog g
++ where c.id=s.class_id and g.grade=c.grade and (g.name,g.short_name,g.icon,g.is_english)=(s.name,s.short_name,s.icon,s.is_english);
++alter table public.class_subjects alter column catalog_subject_id set not null;
++create index class_subjects_catalog on public.class_subjects(catalog_subject_id,class_id);
++create index homework_history_scope on public.homework_notices(class_id,created_at desc,author_id,status);
++create index homework_audit_scope on public.homework_contribution_events(class_id,created_at desc,actor_id,event_type);
++create table public.homework_catalog_events(
++ id uuid primary key default gen_random_uuid(),grade smallint not null,actor_id uuid not null references public.profiles(id),
++ event_type text not null default 'catalog_save',catalog_id uuid not null references public.grade_subject_catalog(id),
++ before_data jsonb,after_data jsonb,created_at timestamptz not null default now()
++);
++alter table public.homework_catalog_events enable row level security;
++revoke all on public.homework_catalog_events from public,anon,authenticated;
++-- Enforce relation and canonical metadata even for privileged callers.
++create function homework_private.class_subject_catalog_guard() returns trigger language plpgsql set search_path=pg_catalog,public as $$
++declare g public.grade_subject_catalog; cg smallint;begin
++ select * into g from public.grade_subject_catalog where id=new.catalog_subject_id for share;
++ select grade into cg from public.classes where id=new.class_id;
++ if g.id is null or cg is distinct from g.grade then raise exception 'Môn không thuộc khối của lớp';end if;
++ if tg_op='UPDATE' and (new.class_id is distinct from old.class_id or new.catalog_subject_id is distinct from old.catalog_subject_id) then raise exception 'Không đổi liên kết môn lớp';end if;
++ if (tg_op='INSERT' or (new.is_active and not old.is_active)) and not g.is_active then raise exception 'Môn catalog đã ngừng hoạt động';end if;
++ new.name:=g.name;new.short_name:=g.short_name;new.icon:=g.icon;new.is_english:=g.is_english;
++ return new;end$$;
++create trigger class_subject_catalog_guard before insert or update on public.class_subjects for each row execute function homework_private.class_subject_catalog_guard();
++create or replace function homework_private.actor(p_class uuid) returns public.profiles language plpgsql security definer set search_path=pg_catalog,public as $$
++declare a public.profiles;begin
++ select * into a from public.profiles where id=auth.uid() and active and deleted_at is null;
++ if a.id is null then raise exception 'Phiên đăng nhập không hợp lệ' using errcode='42501';end if;
++ if not exists(select 1 from public.classes where id=p_class and (active or a.role::text='admin')) then raise exception 'Lớp không hoạt động';end if;
++ if a.role::text='admin' then return a;end if;
++ if a.role::text='teacher' and exists(select 1 from public.class_teachers where class_id=p_class and teacher_id=a.id and active) then return a;end if;
++ if a.role::text in('student','monitor') and a.class_id=p_class then return a;end if;
++ raise exception 'Bạn không có quyền trong lớp này' using errcode='42501';end$$;
++
++-- Move the old dispatcher out of exposed schemas; it must not remain a bypass API.
++alter function public.homework_api(text,jsonb) set schema homework_private;
++alter function homework_private.homework_api(text,jsonb) rename to api_v3;
++revoke all on function homework_private.api_v3(text,jsonb) from public,anon,authenticated;
++create function public.homework_api(p_action text,p_data jsonb default '{}'::jsonb) returns jsonb
++language plpgsql security definer set search_path=pg_catalog,public as $$
++declare a public.profiles;c uuid:=nullif(p_data->>'class_id','')::uuid;g public.grade_subject_catalog;
++ s public.class_subjects;rid uuid:=nullif(p_data->>'id','')::uuid;gr integer:=nullif(p_data->>'grade','')::integer;
++ out_data jsonb;before_json jsonb;scope uuid[];lim integer:=least(100,greatest(1,coalesce((p_data->>'limit')::int,100)));
++ offst integer:=greatest(0,coalesce((p_data->>'offset')::int,0));start_at timestamptz:=nullif(p_data->>'from','')::timestamptz;
++ end_at timestamptz:=nullif(p_data->>'to','')::timestamptz;who uuid:=nullif(p_data->>'actor_id','')::uuid;
++ state text:=nullif(p_data->>'status','');event text:=nullif(p_data->>'event_type','');
++begin
++ select * into a from public.profiles where id=auth.uid() and active and deleted_at is null;
++ if a.id is null then raise exception 'Cần đăng nhập' using errcode='42501';end if;
++ if gr is not null and gr not between 6 and 12 then raise exception 'Khối không hợp lệ';end if;
++ if p_action='context' then
++ return jsonb_build_object('weeks',coalesce((select jsonb_agg(jsonb_build_object('id',w.id,'school_year_id',w.school_year_id,'week_number',w.week_number) order by w.start_date)from public.weeks w where a.role::text='admin' or exists(select 1 from public.classes x where x.school_year_id=w.school_year_id and x.active and ((a.role::text='teacher' and exists(select 1 from public.class_teachers t where t.class_id=x.id and t.teacher_id=a.id and t.active))or(a.role::text in('student','monitor') and a.class_id=x.id)))),'[]'),'grades',jsonb_build_array(6,7,8,9,10,11,12),'classes',coalesce((select jsonb_agg(jsonb_build_object('id',x.id,'code',x.code,'name',x.name,'grade',x.grade,'active',x.active,'school_year_id',x.school_year_id) order by x.grade,x.code,x.id)
++ from public.classes x where a.role::text='admin' or (x.active and ((a.role::text='teacher' and exists(select 1 from public.class_teachers t where t.class_id=x.id and t.teacher_id=a.id and t.active))or(a.role::text in('student','monitor') and a.class_id=x.id)))),'[]'));
++ end if;
++ if p_action in('catalog_list','catalog_save','oversight') then
++ if a.role::text<>'admin' then raise exception 'Chỉ Admin được giám sát/catalog' using errcode='42501';end if;
++ if c is not null and not exists(select 1 from public.classes where id=c and (gr is null or grade=gr)) then raise exception 'Khối/lớp không khớp';end if;
++ if p_action='catalog_list' then return coalesce((select jsonb_agg(to_jsonb(x) order by grade,sort_order,name) from public.grade_subject_catalog x where gr is null or x.grade=gr),'[]');end if;
++ if p_action='catalog_save' then
++ if exists(select 1 from jsonb_object_keys(p_data) k where k not in('class_id','id','grade','name','short_name','icon','sort_order','is_active','is_english')) then raise exception 'Payload catalog không hợp lệ';end if;
++ if gr is null then raise exception 'Cần chọn khối';end if;
++ -- Catalog edits and class activation share row locks; no inactive activation race.
++ if rid is not null then
++ select * into g from public.grade_subject_catalog where id=rid and grade=gr for update;
++ if not found then raise exception 'Không tìm thấy môn catalog';end if;before_json:=to_jsonb(g);
++ if g.is_english is distinct from coalesce((p_data->>'is_english')::boolean,g.is_english) and exists(select 1 from public.class_subjects cs where cs.catalog_subject_id=rid and (exists(select 1 from public.homework_notices n where n.subject_id=cs.id)or exists(select 1 from public.homework_tombstones t where t.subject_id=cs.id))) then raise exception 'Môn đã có lịch sử; giữ nguyên loại Tiếng Anh';end if;
++ update public.grade_subject_catalog set name=trim(p_data->>'name'),short_name=coalesce(p_data->>'short_name',short_name),icon=coalesce(p_data->>'icon',icon),sort_order=coalesce((p_data->>'sort_order')::int,sort_order),is_active=coalesce((p_data->>'is_active')::boolean,is_active),is_english=coalesce((p_data->>'is_english')::boolean,is_english),updated_at=now() where id=rid returning * into g;
++ else
++ insert into public.grade_subject_catalog(grade,name,short_name,icon,sort_order,is_active,is_english) values(gr,trim(p_data->>'name'),coalesce(p_data->>'short_name',''),coalesce(p_data->>'icon','📚'),coalesce((p_data->>'sort_order')::int,0),coalesce((p_data->>'is_active')::boolean,true),coalesce((p_data->>'is_english')::boolean,false)) returning * into g;rid:=g.id;
++ end if;
++ update public.class_subjects set name=g.name,short_name=g.short_name,icon=g.icon,is_english=g.is_english,updated_at=now() where catalog_subject_id=rid;
++ insert into public.homework_catalog_events(grade,actor_id,catalog_id,before_data,after_data)values(gr,a.id,rid,before_json,to_jsonb(g));
++ perform homework_private.audit(cs.class_id,null,a.id,'catalog_save',before_json,to_jsonb(g)) from (select distinct class_id from public.class_subjects where catalog_subject_id=rid)cs;
++ return to_jsonb(g);
++ end if;
++ select coalesce(array_agg(id),'{}'::uuid[])into scope from public.classes where (c is null or id=c)and(gr is null or grade=gr);
++ if start_at is not null and end_at is not null and start_at>=end_at then raise exception 'Khoảng thời gian không hợp lệ';end if;
++ out_data:=jsonb_build_object('metrics',(select jsonb_build_object('published',count(*)filter(where status='published'),'week',count(*)filter(where published_at>=date_trunc('week',now() at time zone 'Asia/Ho_Chi_Minh') at time zone 'Asia/Ho_Chi_Minh' and status='published'),'pending',count(*)filter(where homework_private.actionable(n)),'deleted',count(*)filter(where status='deleted'),'contributors',count(distinct author_id)filter(where status='published' and exists(select 1 from public.profiles p where p.id=n.author_id and p.role::text in('student','monitor'))))from public.homework_notices n where class_id=any(scope)),
++ 'hearts',(select count(*)from public.homework_notice_reactions r join public.homework_notices n on n.id=r.notice_id where n.class_id=any(scope)and n.status='published'));
++ return out_data||jsonb_build_object(
++ 'history',coalesce((select jsonb_agg(row_data order by happened desc,id)from(
++ select n.id,n.created_at happened,homework_private.card(n,a.id) row_data from public.homework_notices n where n.class_id=any(scope)and(who is null or n.author_id=who)and(state is null or n.status=state)and(start_at is null or n.created_at>=start_at)and(end_at is null or n.created_at<end_at)
++ union all select t.notice_id,t.original_created_at,to_jsonb(t)||jsonb_build_object('id',t.notice_id,'status','hard_deleted','marker','[Đã xóa vĩnh viễn]')from public.homework_tombstones t where t.class_id=any(scope)and(who is null or t.author_id=who)and(state is null or state='hard_deleted')and(start_at is null or t.original_created_at>=start_at)and(end_at is null or t.original_created_at<end_at)
++ order by happened desc,id limit lim offset offst)x),'[]'),
++ 'audit',coalesce((select jsonb_agg(x.row_data order by x.created_at desc,x.id)from(
++ select *from(
++ select e.id,e.class_id,e.actor_id,e.event_type,e.created_at,to_jsonb(e)row_data from public.homework_contribution_events e where e.class_id=any(scope)
++ union all select t.notice_id,t.class_id,t.hard_deleted_by,'hard_delete',t.hard_deleted_at,jsonb_build_object('id',t.notice_id,'class_id',t.class_id,'actor_id',t.hard_deleted_by,'event_type','hard_delete','created_at',t.hard_deleted_at,'before_data',null,'after_data',to_jsonb(t))from public.homework_tombstones t where t.class_id=any(scope)
++ )e where (who is null or e.actor_id=who)and(event is null or e.event_type=event)and(start_at is null or e.created_at>=start_at)and(end_at is null or e.created_at<end_at)order by created_at desc,id limit lim offset offst)x),'[]'),
++ 'catalog_audit',coalesce((select jsonb_agg(to_jsonb(x)order by x.created_at desc,x.id)from(select *from public.homework_catalog_events e where c is null and(gr is null or e.grade=gr)and(who is null or e.actor_id=who)and(event is null or e.event_type=event)and(start_at is null or e.created_at>=start_at)and(end_at is null or e.created_at<end_at)order by created_at desc,id limit lim offset offst)x),'[]'),
++ 'trash',coalesce((select jsonb_agg(row_data order by deleted_at desc,id)from(select n.id,n.deleted_at,homework_private.card(n,a.id)||jsonb_build_object('delete_reason',n.delete_reason)row_data from public.homework_notices n where n.class_id=any(scope)and status='deleted'order by n.deleted_at desc,n.id limit lim offset offst)x),'[]'),
++ 'people',coalesce((select jsonb_agg(jsonb_build_object('id',p.id,'name',p.full_name)order by p.full_name)from public.profiles p where p.class_id=any(scope)or p.id in(select actor_id from public.homework_contribution_events where class_id=any(scope))or p.id in(select hard_deleted_by from public.homework_tombstones where class_id=any(scope))or(c is null and p.id in(select actor_id from public.homework_catalog_events where gr is null or grade=gr))),'[]'));
++ end if;
++ -- Lock assignment/class rows so deactivation cannot race an authorized mutation.
++ perform 1 from public.classes where id=c for share;
++ if a.role::text='teacher' then perform 1 from public.class_teachers where class_id=c and teacher_id=a.id for share;end if;
++ a:=homework_private.actor(c);
++ if p_action='subject_save' then
++ if a.role::text<>'teacher' then raise exception 'Chỉ Teacher được cấu hình môn lớp' using errcode='42501';end if;
++ if exists(select 1 from jsonb_object_keys(p_data) k where k not in('class_id','id','catalog_subject_id','sort_order','is_active')) then raise exception 'Chỉ sửa thứ tự/trạng thái môn lớp';end if;
++ select *into g from public.grade_subject_catalog where id=(p_data->>'catalog_subject_id')::uuid and grade=(select grade from public.classes where id=c)for share;
++ if not found then raise exception 'Catalog không thuộc khối lớp';end if;
++ perform pg_advisory_xact_lock(hashtextextended('homework:'||c::text,0));
++ if rid is null then select *into s from public.class_subjects where class_id=c and catalog_subject_id=g.id order by created_at,id limit 1;rid:=s.id;
++ else select *into s from public.class_subjects where id=rid and class_id=c and catalog_subject_id=g.id;if not found then raise exception 'Môn không thuộc lớp/catalog';end if;end if;
++ before_json:=case when s.id is null then null else to_jsonb(s)end;
++ if rid is null then insert into public.class_subjects(class_id,catalog_subject_id,name,sort_order,is_active)values(c,g.id,g.name,coalesce((p_data->>'sort_order')::int,g.sort_order),coalesce((p_data->>'is_active')::boolean,true))returning id into rid;
++ else update public.class_subjects set sort_order=coalesce((p_data->>'sort_order')::int,sort_order),is_active=coalesce((p_data->>'is_active')::boolean,is_active),updated_at=now()where id=rid;end if;
++ perform homework_private.audit(c,null,a.id,'subject_save',before_json,(select to_jsonb(x)from public.class_subjects x where id=rid));return jsonb_build_object('id',rid);
++ end if;
++ out_data:=homework_private.api_v3(p_action,p_data);
++ if p_action='load' and a.role::text='teacher' then out_data:=out_data||jsonb_build_object('history',coalesce((select jsonb_agg(homework_private.card(n,a.id) order by n.created_at desc,n.id)from public.homework_notices n where n.class_id=c),'[]'),'catalog',coalesce((select jsonb_agg(to_jsonb(cat) order by cat.sort_order,cat.name)from public.grade_subject_catalog cat where cat.is_active and cat.grade=(select grade from public.classes where id=c)),'[]'));end if;
++ return out_data;
++end$$;
++revoke all on all functions in schema homework_private from public,anon,authenticated;
++revoke all on function public.homework_api(text,jsonb) from public,anon;
++grant execute on function public.homework_api(text,jsonb) to authenticated;
++commit;
+--- a/package.json
++++ b/package.json
+@@ -23,7 +23,9 @@
+     "test:homework:ui": "vitest run tests/homework/warning.test.ts",
+     "test:bug-001": "vitest run --config tests/bug-001/vitest.config.ts",
+     "test:feat-002": "FEAT002_UPGRADE=1 node --test tests/homework/*.test.mjs tests/feat-002/*.test.mjs",
+-    "test:feat-003": "vitest run --config tests/feat-003/vitest.config.ts"
++    "test:feat-003": "vitest run --config tests/feat-003/vitest.config.ts",
++    "test:feat-004": "node --test tests/feat-004/*.test.mjs && vitest run --config tests/feat-004/vitest.config.ts",
++    "test:feat-004:regression": "FEAT002_UPGRADE=1 FEAT004_UPGRADE=1 node --test tests/homework/database.test.mjs tests/feat-002/database.test.mjs"
+   },
+   "dependencies": {
+     "@tanstack/vue-query": "^5.0.0",
+--- a/src/components/admin/AdminClassDialog.vue
++++ b/src/components/admin/AdminClassDialog.vue
+@@ -15,5 +15,5 @@
+ watch(()=>[props.open,props.item] as const,()=>{form.code=props.item?.code??'';form.name=props.item?.name??'';touched.value=false},{immediate:true})
+ function submit(){touched.value=true;const code=form.code.trim().toUpperCase(),name=form.name.trim();if(!code||!name)return;emit('save',{code,name})}
+ </script>
+-<template><Teleport to="body"><div v-if="open" class="dialog-backdrop" @click.self="emit('close')"><form class="dialog" novalidate @submit.prevent="submit"><header><div><Building2/><span><b>Chỉnh sửa lớp</b><small>{{ item?.code }}</small></span></div><button type="button" aria-label="Đóng" @click="emit('close')"><X/></button></header><label>Mã lớp<input v-model="form.code" required maxlength="40" :aria-invalid="codeInvalid"><small v-if="codeInvalid" class="field-error" role="alert">Hãy nhập mã lớp.</small></label><label>Tên lớp<input v-model="form.name" required maxlength="120" :aria-invalid="nameInvalid"><small v-if="nameInvalid" class="field-error" role="alert">Hãy nhập tên lớp.</small></label><p v-if="error" class="error">{{ error }}</p><footer><AppButton type="button" variant="secondary" :disabled="saving" @click="emit('close')">Hủy</AppButton><AppButton type="submit" :loading="saving">Lưu thay đổi</AppButton></footer></form></div></Teleport></template>
++<template><Teleport to="body"><div v-if="open" class="dialog-backdrop" @click.self="emit('close')"><form class="dialog" novalidate @submit.prevent="submit"><header><div><Building2/><span><b>Chỉnh sửa lớp</b><small>{{ item?.code }}</small></span></div><button type="button" aria-label="Đóng" @click="emit('close')"><X/></button></header><p>Khối {{ item?.grade }} · Khối được giữ nguyên khi sửa lớp.</p><label>Mã lớp<input v-model="form.code" required maxlength="40" :aria-invalid="codeInvalid"><small v-if="codeInvalid" class="field-error" role="alert">Hãy nhập mã lớp.</small></label><label>Tên lớp<input v-model="form.name" required maxlength="120" :aria-invalid="nameInvalid"><small v-if="nameInvalid" class="field-error" role="alert">Hãy nhập tên lớp.</small></label><p v-if="error" class="error">{{ error }}</p><footer><AppButton type="button" variant="secondary" :disabled="saving" @click="emit('close')">Hủy</AppButton><AppButton type="submit" :loading="saving">Lưu thay đổi</AppButton></footer></form></div></Teleport></template>
+ <style scoped>.dialog-backdrop{position:fixed;inset:0;z-index:130;display:grid;place-items:center;padding:18px;background:rgb(36 25 35/.45);backdrop-filter:blur(8px)}.dialog{width:min(480px,100%);display:grid;gap:14px;padding:20px;border:1px solid var(--border);border-radius:22px;background:var(--surface);box-shadow:0 30px 80px rgb(30 20 30/.28)}header,header>div,footer{display:flex;align-items:center;gap:10px}header{justify-content:space-between}header>div>svg{width:25px;color:var(--color-primary)}header span{display:grid}header small{color:var(--text-muted)}header button{border:0;background:transparent;color:var(--text-muted)}header button svg{width:20px}label{display:grid;gap:6px;font-size:var(--font-size-ui-min);font-weight:800;color:var(--text-muted)}input{min-height:44px;border:1px solid var(--border);border-radius:11px;padding:8px 10px;background:var(--input);color:var(--text)}footer{justify-content:flex-end}.error{margin:0;color:var(--color-danger);font-weight:750}.field-error{color:var(--color-danger);font-weight:800}input[aria-invalid="true"]{border-color:var(--color-danger)}</style>
+--- a/src/components/homework/HomeworkAdminOversight.vue
++++ b/src/components/homework/HomeworkAdminOversight.vue
+@@ -0,0 +1,73 @@
++<script setup lang="ts">
++import {computed,onMounted,onUnmounted,reactive,ref,watch} from 'vue';
++import AppCard from '../ui/AppCard.vue';
++import AppButton from '../ui/AppButton.vue';
++import {homeworkRpc,dateLabel,stateLabels,type HomeworkContext,type HomeworkData,type CatalogSubject,type Notice} from '../../features/homework/api';
++import {homeworkTabs,useHomeworkViewStore,resolveHomeworkTab}from '../../features/homework/view-context';
++
++const view=useHomeworkViewStore();
++const tab=computed({get:()=>resolveHomeworkTab('admin',view.selectedTab).id,set:(v:string)=>{view.selectedTab=v;}});
++const context=ref<HomeworkContext>({classes:[],grades:[6,7,8,9,10,11,12]});
++const grade=ref<number|''>(''),classId=ref(''),week=ref('');
++const classes=computed(()=>context.value.classes.filter(c=>grade.value===''||c.grade===grade.value));
++const weeks=computed(()=>(context.value.weeks||[]).filter(w=>w.school_year_id===context.value.classes.find(c=>c.id===classId.value)?.school_year_id));
++interface Audit {id:string;class_id?:string;actor_id:string;event_type:string;created_at:string;before_data:unknown;after_data:unknown}
++interface Oversight {metrics:Record<string,number>;hearts:number;history:Array<Notice & {marker?:string;hard_deleted_at?:string}>;audit:Audit[];catalog_audit:Audit[];trash:Notice[];people:Array<{id:string;name:string}>}
++const result=ref<Oversight|null>(null),classData=ref<HomeworkData|null>(null),catalog=ref<CatalogSubject[]>([]);
++const filters=reactive({actor_id:'',status:'',event_type:'',from:'',to:''});const offset=ref(0);
++const loading=ref(false),busy=ref(false),error=ref(''),message=ref('');let generation=0;
++const defaults=()=>({id:'',grade:grade.value||7,name:'',short_name:'',icon:'📚',sort_order:0,is_active:true,is_english:false});
++const form=reactive(defaults());const target=ref<Notice|null>(null),reason=ref(''),confirmed=ref(false),seed=ref(3),alert=ref('system');
++const labels:Record<string,string>={published:'Đã đăng',week:'Đăng trong tuần',pending:'Chờ GV xử lý',deleted:'Đã xóa',contributors:'HS đóng góp'};
++const events:Record<string,string>={submit:'Đăng/sửa Báo bài',notice_invalidated:'Xóa Báo bài',notice_restored:'Khôi phục',hard_delete:'Xóa vĩnh viễn',review_keep_existing:'Giữ bài cũ',review_replace_existing:'Thay bằng bài mới',review_keep_both:'Giữ cả hai',reminder:'Nhắc lại',ai_settings:'Cài đặt AI',subject_save:'Môn của lớp',catalog_save:'Danh mục môn khối',group_save:'Nhóm Tiếng Anh',group_assign:'Phân nhóm',settings:'Cấu hình tuyên dương'};
++function fail(e:unknown){return e instanceof Error?e.message:'Không thực hiện được thao tác';}
++async function load(){const seq=++generation;loading.value=true;error.value='';result.value=null;classData.value=null;catalog.value=[];
++ try{const [data,items,local]=await Promise.all([
++ homeworkRpc<Oversight>('oversight',classId.value,{grade:grade.value||null,...filters,from:filters.from?`${filters.from}T00:00:00+07:00`:null,to:filters.to?`${filters.to}T00:00:00+07:00`:null,offset:offset.value}),
++ homeworkRpc<CatalogSubject[]>('catalog_list','',{grade:grade.value||null}),
++ classId.value&&['awards','settings'].includes(tab.value)?homeworkRpc<HomeworkData>('load',classId.value,{week_id:week.value||null}):Promise.resolve(null)]);
++ if(seq!==generation)return;result.value=data;catalog.value=items;classData.value=local;
++ if(local){seed.value=local.settings.seed_threshold;alert.value=local.alert_level||'system';}
++ }catch(e){if(seq===generation)error.value=fail(e);}finally{if(seq===generation)loading.value=false;}}
++async function initialize(){loading.value=true;try{context.value=await homeworkRpc<HomeworkContext>('context','');await load();}catch(e){error.value=fail(e);loading.value=false;}}
++function resetScope(){generation++;offset.value=0;week.value='';filters.actor_id='';target.value=null;reason.value='';confirmed.value=false;message.value='';Object.assign(form,defaults());}
++watch(grade,()=>{classId.value='';resetScope();void load();});
++watch(classId,()=>{view.scopeClassId=classId.value;resetScope();void load();});
++view.scopeClassId='';
++watch([tab,week],()=>{offset.value=0;target.value=null;message.value='';void load();});
++watch(()=>({...filters}),()=>{offset.value=0;void load();});
++watch(offset,()=>void load());
++async function mutation(action:string,payload:Record<string,unknown>,scope=classId.value){if(busy.value)return;busy.value=true;error.value='';message.value='';const seq=generation;
++ try{await homeworkRpc(action,scope,payload);if(seq!==generation)return;target.value=null;message.value='Đã lưu thay đổi.';view.refreshVersion++;await load();}catch(e){if(seq===generation)error.value=fail(e);}finally{busy.value=false;}}
++async function saveCatalog(){await mutation('catalog_save',{...form,id:form.id||null},'');if(!error.value)Object.assign(form,defaults());}
++function editCatalog(s:CatalogSubject){Object.assign(form,{id:s.id,grade:s.grade,name:s.name,short_name:s.short_name,icon:s.icon,sort_order:s.sort_order,is_active:s.is_active,is_english:s.is_english});}
++function selectDelete(n:Notice){target.value=n;reason.value='';confirmed.value=false;}
++function hardDelete(){if(target.value&&confirmed.value&&reason.value.trim())void mutation('hard_delete',{id:target.value.id,hard_delete_reason:reason.value.trim(),confirm_irreversible:true},target.value.class_id);}
++function classLabel(id:string){return context.value.classes.find(c=>c.id===id)?.code||id;}
++onMounted(initialize);onUnmounted(()=>{generation++;});
++</script>
++<template>
++<section class="oversight">
++ <header><p class="eyebrow">QUẢN TRỊ BÁO BÀI</p><h1>Giám sát học tập</h1><p>Tổng quan theo khối, lịch sử theo lớp và danh mục môn chuẩn.</p></header>
++ <AppCard><div class="toolbar"><label>Khối<select v-model.number="grade" :disabled="busy"><option value="">Tất cả khối</option><option v-for="g in context.grades" :key="g" :value="g">Khối {{ g }}</option></select></label><label>Lớp<select v-model="classId" :disabled="busy"><option value="">Tất cả lớp</option><option v-for="c in classes" :key="c.id" :value="c.id">{{ c.code }} · Khối {{ c.grade }}{{ c.active?'':' · Đã khóa' }}</option></select></label><AppButton variant="secondary" :disabled="loading||busy" @click="load">Làm mới</AppButton></div></AppCard>
++ <nav class="tabs" aria-label="Các mục Báo bài"><AppButton v-for="t in homeworkTabs('admin')" :key="t.id" :variant="tab===t.id?'primary':'secondary'" :aria-current="tab===t.id?'page':undefined" :disabled="busy" @click="tab=t.id">{{ t.label }}</AppButton></nav>
++ <p v-if="error" role="alert" class="error">{{ error }}</p><p v-if="message" role="status">{{ message }}</p><p v-if="loading" role="status">Đang tải dữ liệu theo phạm vi đã chọn…</p>
++ <template v-if="result">
++ <div v-if="tab==='overview'" class="metrics"><AppCard v-for="(label,key) in labels" :key="key"><strong>{{ result.metrics[key]||0 }}</strong><p>{{ label }}</p></AppCard><AppCard><strong>{{ result.hearts }}</strong><p>Tim hợp lệ</p></AppCard></div>
++ <AppCard v-if="tab==='catalog'"><h2>Danh mục môn theo khối</h2><p>Giáo viên kích hoạt các môn này cho lớp được phân công.</p><div class="catalog-list"><button v-for="s in catalog" :key="s.id" @click="editCatalog(s)" :disabled="busy">{{ s.icon }} {{ s.name }} · Khối {{ s.grade }} · {{ s.is_active?'Hoạt động':'Tạm ngưng' }}</button></div>
++ <form class="form-grid" @submit.prevent="saveCatalog"><label>Khối<select v-model.number="form.grade" :disabled="!!form.id||busy" required><option v-for="g in context.grades" :key="g" :value="g">{{g}}</option></select></label><label>Tên môn<input v-model="form.name" required maxlength="100" :disabled="busy"></label><label>Tên ngắn<input v-model="form.short_name" maxlength="40" :disabled="busy"></label><label>Biểu tượng<input v-model="form.icon" required maxlength="40" :disabled="busy"></label><label>Thứ tự mặc định<input v-model.number="form.sort_order" type="number" step="1" :disabled="busy"></label><label class="check"><input v-model="form.is_english" type="checkbox" :disabled="busy">Môn Tiếng Anh</label><label class="check"><input v-model="form.is_active" type="checkbox" :disabled="busy">Hoạt động</label><div class="toolbar"><AppButton type="submit" :disabled="busy">{{form.id?'Lưu môn':'Thêm môn'}}</AppButton><AppButton type="button" variant="secondary" :disabled="busy" @click="Object.assign(form,defaults())">Nhập mới</AppButton></div></form></AppCard>
++ <AppCard v-if="tab==='history'||tab==='audit'"><h2>{{tab==='history'?'Lịch sử hoạt động':'Nhật ký quản trị'}}</h2><div class="toolbar"><label>{{tab==='history'?'Người đăng':'Người thực hiện'}}<select v-model="filters.actor_id"><option value="">Tất cả</option><option v-for="p in result.people" :key="p.id" :value="p.id">{{p.name}}</option></select></label><label>Từ ngày<input v-model="filters.from" type="date"></label><label>Đến trước ngày<input v-model="filters.to" type="date"></label><label v-if="tab==='history'">Trạng thái<select v-model="filters.status"><option value="">Tất cả</option><option v-for="(label,key) in {...stateLabels,hard_deleted:'Đã xóa vĩnh viễn'}" :key="key" :value="key">{{label}}</option></select></label><label v-else>Hành động<select v-model="filters.event_type"><option value="">Tất cả</option><option v-for="(label,key) in events" :key="key" :value="key">{{label}}</option></select></label></div>
++ <template v-if="tab==='history'"><article v-for="n in result.history" :key="n.id"><h3>{{ n.marker||n.title }}</h3><p>{{classLabel(n.class_id)}} · {{n.author_name||n.author_id}} · {{stateLabels[n.status]||n.status}}</p><template v-if="!n.marker"><p>{{n.content}}</p><small>{{dateLabel(n.created_at)}}</small></template><p v-else>Đã xóa vĩnh viễn · {{dateLabel(n.hard_deleted_at!)}}</p></article><p v-if="!result.history.length">Không có hoạt động khớp bộ lọc.</p></template>
++ <template v-else><article v-for="e in [...result.audit,...result.catalog_audit]" :key="e.id"><strong>{{e.event_type==='submit'?(e.before_data?'Sửa Báo bài':'Đăng Báo bài'):(events[e.event_type]||e.event_type)}}</strong><p>{{e.class_id?classLabel(e.class_id):'Danh mục khối'}} · {{result.people.find(p=>p.id===e.actor_id)?.name||e.actor_id}} · {{dateLabel(e.created_at)}}</p><details><summary>Chi tiết nhật ký</summary><pre>{{JSON.stringify({before:e.before_data,after:e.after_data},null,2)}}</pre></details></article><p v-if="!result.audit.length&&!result.catalog_audit.length">Không có nhật ký khớp bộ lọc.</p></template>
++ </AppCard>
++ <AppCard v-if="tab==='awards'"><h2>Tuyên dương theo lớp</h2><p v-if="!classId">Chọn một lớp để xem tuyên dương.</p><template v-else-if="classData"><label>Thời gian<select v-model="week"><option value="">Năm học của lớp</option><option v-for="w in weeks" :key="w.id" :value="w.id">Tuần {{w.week_number}}</option></select></label><div class="form-grid"><section><h3>🐦 Chim sẻ đưa tin</h3><p v-for="p in classData.leaderboard.filter(p=>p.notices>0).sort((a,b)=>a.notice_rank-b.notice_rank)" :key="p.id">#{{p.notice_rank}} · {{p.full_name}} · {{p.notices}} bài</p></section><section><h3>⭐ Ngôi sao dẫn đường</h3><p v-for="p in classData.leaderboard.filter(p=>p.hearts>0).sort((a,b)=>a.heart_rank-b.heart_rank)" :key="p.id">#{{p.heart_rank}} · {{p.full_name}} · {{p.hearts}} tim</p></section><section><h3>🌱 Mầm xanh đóng góp</h3><p v-for="p in classData.leaderboard.filter(p=>p.seed_at)" :key="p.id">{{p.full_name}} · {{p.year_notices}} bài</p></section></div><p v-if="!classData.leaderboard.some(p=>p.notices||p.hearts)">Chưa có đóng góp hợp lệ trong thời gian này.</p></template></AppCard>
++ <AppCard v-if="tab==='trash'"><h2>Thùng rác theo lớp</h2><p>Xóa vĩnh viễn từng bài đã xóa. Không thể hoàn tác.</p><article v-for="n in result.trash" :key="n.id"><h3>{{n.title}}</h3><p>{{classLabel(n.class_id)}} · {{n.delete_reason}}</p><AppButton variant="danger" :disabled="busy" @click="selectDelete(n)">Xóa vĩnh viễn</AppButton></article><p v-if="!result.trash.length">Thùng rác trống trong phạm vi này.</p></AppCard>
++ <AppCard v-if="target" role="dialog" aria-label="Xóa vĩnh viễn"><h2>Xóa vĩnh viễn: {{target.title}}</h2><form @submit.prevent="hardDelete"><label>Lý do<textarea v-model="reason" required maxlength="500" :disabled="busy" /></label><label class="check"><input v-model="confirmed" type="checkbox" :disabled="busy">Tôi xác nhận thao tác không thể hoàn tác</label><div class="toolbar"><AppButton type="submit" variant="danger" :disabled="busy||!confirmed||!reason.trim()">Xác nhận xóa vĩnh viễn</AppButton><AppButton variant="secondary" type="button" :disabled="busy" @click="target=null">Hủy</AppButton></div></form></AppCard>
++ <AppCard v-if="tab==='settings'"><h2>Cấu hình quản trị</h2><p v-if="!classData">Chọn một lớp để cấu hình tuyên dương.</p><template v-else><form @submit.prevent="mutation('settings',{seed_threshold:seed})"><label>Số bài để nhận Mầm xanh<input v-model.number="seed" type="number" min="1" max="100" required></label><AppButton type="submit" :disabled="busy">Lưu cấu hình</AppButton></form><form @submit.prevent="mutation('alert_settings',{alert_level:alert})"><label>Cảnh báo Admin<select v-model="alert"><option value="system">Chỉ lỗi hệ thống</option><option value="backlog">Lỗi hệ thống + tồn đọng</option><option value="all">Tất cả cảnh báo</option></select></label><AppButton type="submit" :disabled="busy">Lưu cảnh báo</AppButton></form></template></AppCard>
++ <div v-if="['history','audit','trash'].includes(tab)" class="toolbar"><AppButton variant="secondary" :disabled="offset===0||loading" @click="offset=Math.max(0,offset-100)">Trang trước</AppButton><span>Trang {{offset/100+1}}</span><AppButton variant="secondary" :disabled="loading||(tab==='history'?result.history.length:tab==='trash'?result.trash.length:Math.max(result.audit.length,result.catalog_audit.length))<100" @click="offset+=100">Trang sau</AppButton></div>
++ </template>
++</section>
++</template>
++<style scoped>
++.oversight{display:grid;gap:20px;min-width:0}.toolbar,.tabs,.catalog-list{display:flex;flex-wrap:wrap;align-items:end;gap:12px}.tabs{align-items:center}.toolbar label{flex:1;min-width:180px}.form-grid,.metrics{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(240px,100%),1fr));gap:16px}.metrics strong{font-size:2rem}label{display:grid;gap:8px;margin-block:10px}.check{display:flex;align-items:center}.check input{width:20px;min-height:20px}input,select,textarea{width:100%;min-width:0;min-height:44px;border:1px solid var(--border);border-radius:var(--radius-md,12px);padding:10px;background:var(--surface-raised);color:var(--text)}.catalog-list button{padding:12px;border:1px solid var(--border);border-radius:12px;background:var(--surface-raised);color:var(--text);text-align:left}article{padding:16px 0;border-bottom:1px solid var(--border);overflow-wrap:anywhere}pre{white-space:pre-wrap;overflow-wrap:anywhere}.error{color:var(--color-danger)}@media(max-width:640px){.toolbar{align-items:stretch}.toolbar label{min-width:0;flex-basis:100%}.tabs :deep(button){white-space:normal}header h1{font-size:1.6rem}}
++</style>
+--- a/src/components/homework/HomeworkInbox.vue
++++ b/src/components/homework/HomeworkInbox.vue
+@@ -16,7 +16,7 @@
+   items = ref<HomeworkNotification[]>([]),
+   error = ref("");
+ const classId = computed(
+-  () =>
++  () => view.scopeClassId !== undefined ? view.scopeClassId :
+     ctx.selectedClassId ||
+     auth.currentUser?.classId ||
+     ctx.classes.find((c) => c.active)?.id ||
+@@ -56,7 +56,7 @@
+ watch(
+   [classId, () => auth.currentUser?.id, () => view.refreshVersion],
+   () => {
+-    items.value = [];
++    items.value = []; open.value=false; error.value="";
+     void refresh();
+   },
+   { immediate: true },
+--- a/src/components/layout/TopBar.vue
++++ b/src/components/layout/TopBar.vue
+@@ -1,5 +1,6 @@
+ <script setup lang="ts">
+ import { computed, ref } from 'vue'
++import {useRoute}from 'vue-router'
+ import { onClickOutside } from '@vueuse/core'
+ import { ChevronDown, LogOut, Menu, Moon, SlidersHorizontal, Sun } from 'lucide-vue-next'
+ import IconButton from '../ui/IconButton.vue'
+@@ -13,6 +14,7 @@
+ import { appDialog } from '../../features/shared/app-dialog'
+ import type { UserRole } from '../../types/legacy'
+ 
++const route=useRoute();const isHomework=computed(()=>route.path==='/homework')
+ const emit=defineEmits<{menu:[];logout:[]}>()
+ const auth=useAuthStore();const context=useContextStore();const preferences=usePreferencesStore()
+ const profileOpen=ref(false);const profileMenu=ref<HTMLElement|null>(null)
+@@ -35,13 +37,13 @@
+   <header class="topbar">
+     <div class="left">
+       <IconButton label="Mở menu" class="mobile-menu" @click="emit('menu')"><Menu/></IconButton>
+-      <label v-if="isTeacher||isAdmin" class="school-year-bubble"><span>Năm học</span><i v-if="context.selectedSchoolYear?.active" class="year-status-dot" aria-label="Năm học đang hoạt động"></i><select :value="context.selectedSchoolYearId??''" @change="changeSchoolYear"><option v-for="item in context.schoolYears" :key="item.id" :value="item.id">{{ item.name }}</option></select></label>
+-      <div v-else class="school-year-bubble static-year"><span>Năm học</span><b>{{ context.selectedSchoolYear?.name||state?.settings.schoolYear||'—' }}</b></div>
++      <label v-if="!isHomework&&(isTeacher||isAdmin)" class="school-year-bubble"><span>Năm học</span><i v-if="context.selectedSchoolYear?.active" class="year-status-dot" aria-label="Năm học đang hoạt động"></i><select :value="context.selectedSchoolYearId??''" @change="changeSchoolYear"><option v-for="item in context.schoolYears" :key="item.id" :value="item.id">{{ item.name }}</option></select></label>
++      <div v-else-if="!isHomework" class="school-year-bubble static-year"><span>Năm học</span><b>{{ context.selectedSchoolYear?.name||state?.settings.schoolYear||'—' }}</b></div>
+     </div>
+     <div class="context-controls">
+       <HomeworkInbox v-if="auth.currentUser"/>
+-      <label v-if="isTeacher" class="compact control-bubble"><span>Lớp</span><select :value="context.selectedClassId??''" @change="changeClass"><option v-for="item in context.classes" :key="item.id" :value="item.id">{{ item.code }}{{ item.name&&item.name!==item.code?` · ${item.name}`:'' }}</option></select></label>
+-      <label v-if="!isAdmin" class="compact control-bubble"><span>Tuần</span><select :value="context.selectedWeekId??''" @change="changeWeek"><option v-for="item in context.weeks" :key="item.id" :value="item.id">Tuần {{ item.number }}</option></select></label>
++      <label v-if="isTeacher&&!isHomework" class="compact control-bubble"><span>Lớp</span><select :value="context.selectedClassId??''" @change="changeClass"><option v-for="item in context.classes" :key="item.id" :value="item.id">{{ item.code }}{{ item.name&&item.name!==item.code?` · ${item.name}`:'' }}</option></select></label>
++      <label v-if="!isAdmin&&!isHomework" class="compact control-bubble"><span>Tuần</span><select :value="context.selectedWeekId??''" @change="changeWeek"><option v-for="item in context.weeks" :key="item.id" :value="item.id">Tuần {{ item.number }}</option></select></label>
+       <IconButton class="theme-bubble" label="Đổi giao diện" @click="preferences.toggleTheme"><Sun v-if="preferences.resolvedTheme==='dark'"/><Moon v-else/></IconButton>
+       <div v-if="auth.currentUser" ref="profileMenu" class="profile-menu">
+         <button class="profile-chip" type="button" :title="`${auth.currentUser.name} · ${roleLabel}`" :aria-expanded="profileOpen" aria-haspopup="menu" @click="profileOpen=!profileOpen">
+--- a/src/features/admin/admin-directory.ts
++++ b/src/features/admin/admin-directory.ts
+@@ -7,7 +7,7 @@
+ export interface AdminSchoolYearRecord {id:string;name:string;startDate:string;endDate:string;active:boolean}
+ export interface AdminCalendarWeekRecord {id:string;schoolYearId:string;number:number;startDate:string;endDate:string;status:string}
+ export interface AdminSchoolYearPeriodRecord {schoolYearId:string;number:number;start:string;end:string}
+-export interface AdminClassRecord {id:string;schoolYearId:string;code:string;name:string;active:boolean;learnerCount:number;profileCount:number;registrationCount:number;canDelete:boolean;deleteBlockers:Array<{code?:string;message?:string}>}
++export interface AdminClassRecord {id:string;schoolYearId:string;code:string;name:string;grade:number;active:boolean;learnerCount:number;profileCount:number;registrationCount:number;canDelete:boolean;deleteBlockers:Array<{code?:string;message?:string}>}
+ export interface AdminTeacherRecord {id:string;code:string;fullName:string;active:boolean}
+ export interface AdminAssignmentRecord {classId:string;teacherId:string;active:boolean}
+ export interface AdminTimetableTemplateRecord {id:string;schoolYearId:string;name:string;active:boolean;latestVersionId:string|null;latestVersionNumber:number}
+@@ -36,7 +36,7 @@
+   const schoolYears=(Array.isArray(raw.schoolYears)?raw.schoolYears:Array.isArray(raw.school_years)?raw.school_years:[]).map(item=>{const row=item as Record<string,unknown>;return{id:text(row.id),name:text(row.name),startDate:text(row.start_date??row.startDate),endDate:text(row.end_date??row.endDate),active:row.is_active===true||row.active===true}}).filter(row=>row.id)
+   const weeks=(Array.isArray(raw.weeks)?raw.weeks:[]).map(item=>{const row=item as Record<string,unknown>;return{id:text(row.id),schoolYearId:text(row.school_year_id??row.schoolYearId),number:num(row.week_number??row.number),startDate:text(row.start_date??row.startDate),endDate:text(row.end_date??row.endDate),status:text(row.status||'upcoming')}}).filter(row=>row.id&&row.schoolYearId)
+   const periods=(Array.isArray(raw.periods)?raw.periods:Array.isArray(raw.schoolYearPeriods)?raw.schoolYearPeriods:[]).map(item=>{const row=item as Record<string,unknown>;return{schoolYearId:text(row.school_year_id??row.schoolYearId),number:num(row.period_number??row.number),start:text(row.start_time??row.start).slice(0,5),end:text(row.end_time??row.end).slice(0,5)}}).filter(row=>row.schoolYearId&&row.number>0)
+-  const classes=(Array.isArray(raw.classes)?raw.classes:[]).map(item=>{const row=item as Record<string,unknown>;return{id:text(row.id),schoolYearId:text(row.school_year_id??row.schoolYearId),code:text(row.code),name:text(row.name??row.code),active:on(row.active),learnerCount:num(row.learnerCount??row.learner_count),profileCount:num(row.profileCount??row.profile_count),registrationCount:num(row.registrationCount??row.registration_count),canDelete:row.canDelete===true||row.can_delete===true,deleteBlockers:(Array.isArray(row.deleteBlockers)?row.deleteBlockers:Array.isArray(row.delete_blockers)?row.delete_blockers:[]) as Array<{code?:string;message?:string}>}}).filter(row=>row.id)
++  const classes=(Array.isArray(raw.classes)?raw.classes:[]).map(item=>{const row=item as Record<string,unknown>;return{id:text(row.id),schoolYearId:text(row.school_year_id??row.schoolYearId),code:text(row.code),name:text(row.name??row.code),grade:num(row.grade),active:on(row.active),learnerCount:num(row.learnerCount??row.learner_count),profileCount:num(row.profileCount??row.profile_count),registrationCount:num(row.registrationCount??row.registration_count),canDelete:row.canDelete===true||row.can_delete===true,deleteBlockers:(Array.isArray(row.deleteBlockers)?row.deleteBlockers:Array.isArray(row.delete_blockers)?row.delete_blockers:[]) as Array<{code?:string;message?:string}>}}).filter(row=>row.id)
+   const teachers=(Array.isArray(raw.teachers)?raw.teachers:[]).map(item=>{const row=item as Record<string,unknown>;return{id:text(row.id),code:text(row.student_code??row.code),fullName:text(row.full_name??row.fullName??row.name),active:on(row.active)}}).filter(row=>row.id)
+   const assignments=(Array.isArray(raw.assignments)?raw.assignments:[]).map(item=>{const row=item as Record<string,unknown>;return{classId:text(row.class_id??row.classId),teacherId:text(row.teacher_id??row.teacherId),active:on(row.active)}}).filter(row=>row.classId&&row.teacherId)
+   const users=(Array.isArray(raw.users)?raw.users:[]).map(item=>{const row=item as Record<string,unknown>;return{id:text(row.id),code:text(row.code??row.student_code).toUpperCase(),fullName:text(row.fullName??row.full_name??row.name),role:String(row.role??'student') as DirectoryUser['role'],classId:(row.classId??row.class_id??null) as string|null,active:on(row.active),deletedAt:(row.deletedAt??row.deleted_at??null) as string|null}}).filter(row=>row.id)
+@@ -53,7 +53,7 @@
+ async function optimistic(runtime:AdminMutationRuntime,patch:(data:AdminDirectory)=>AdminDirectory,task:()=>Promise<unknown>){const before=runtime.queryClient.getQueryData<AdminDirectory>(adminDirectoryKey);if(before)runtime.queryClient.setQueryData<AdminDirectory>(adminDirectoryKey,patch(before));try{const result=await task();await refresh(runtime);return result}catch(error){if(before)runtime.queryClient.setQueryData(adminDirectoryKey,before);throw error}}
+ 
+ export async function assignTeacher(runtime:AdminMutationRuntime,classId:string,teacherId:string,enabled:boolean){return optimistic(runtime,data=>({...data,assignments:enabled?[...data.assignments.filter(row=>!(row.classId===classId&&row.teacherId===teacherId)),{classId,teacherId,active:true}]:data.assignments.map(row=>row.classId===classId&&row.teacherId===teacherId?{...row,active:false}:row)}),()=>legacyApi.adminManageClasses(enabled?'assign_teacher':'unassign_teacher',{classId,teacherId}))}
+-export async function createClass(runtime:AdminMutationRuntime,input:{code:string;name:string;schoolYearId:string|null}){await legacyApi.adminManageClasses('create_class',{code:input.code,name:input.name,schoolYearId:input.schoolYearId});await refresh(runtime)}
++export async function createClass(runtime:AdminMutationRuntime,input:{code:string;name:string;grade:number;schoolYearId:string|null}){await legacyApi.adminManageClasses('create_class',{code:input.code,name:input.name,grade:input.grade,schoolYearId:input.schoolYearId});await refresh(runtime)}
+ export async function updateClass(runtime:AdminMutationRuntime,classId:string,changes:Record<string,unknown>){return optimistic(runtime,data=>({...data,classes:data.classes.map(row=>row.id===classId?{...row,...changes}:row)}),()=>legacyApi.adminManageClasses('update_class',{classId,...changes}))}
+ export async function deleteClass(runtime:AdminMutationRuntime,classId:string){await legacyApi.adminManageClasses('delete_class',{classId});await refresh(runtime)}
+ export async function createTeacher(runtime:AdminMutationRuntime,input:TeacherUserChanges){const result=await legacyApi.teacherCreateUser(input);await refresh(runtime);return result}
+--- a/src/features/homework/api.ts
++++ b/src/features/homework/api.ts
+@@ -29,7 +29,11 @@
+   reason?: string | null;
+   delete_reason?: string;
+ }
++export interface HomeworkClass { id: string; code: string; name: string; grade: number; active: boolean; school_year_id: string }
++export interface HomeworkContext { weeks?: Array<{id:string;school_year_id:string;week_number:number}>; grades: number[]; classes: HomeworkClass[] }
++export interface CatalogSubject extends Subject { grade: number }
+ export interface Subject {
++  catalog_subject_id?: string;
+   id: string;
+   name: string;
+   short_name: string;
+@@ -53,6 +57,7 @@
+   created_at: string;
+ }
+ export interface HomeworkData {
++  catalog?: CatalogSubject[];
+   ai_settings?: { semantic_duplicate_enabled: boolean; duplicate_review_threshold: number; duplicate_auto_threshold: number };
+   review_history?: Notice[];
+   history_markers?: Array<{ notice_id: string; marker: string; original_created_at: string; hard_deleted_at: string }>;
+--- a/src/features/homework/view-context.ts
++++ b/src/features/homework/view-context.ts
+@@ -5,7 +5,7 @@
+ export function homeworkTabs(role: string) {
+   return [
+     ...(role === 'admin' ? [{ id: 'overview', label: 'Tổng quan' }] : []),
+-    { id: 'board', label: 'Bảng Báo bài' },
++    ...(role !== 'admin' ? [{ id: 'board', label: 'Bảng Báo bài' }] : [{ id: 'catalog', label: 'Danh mục môn' }]),
+     { id: 'history', label: 'Lịch sử đăng' },
+     { id: 'awards', label: '🌟 Góc tuyên dương' },
+     ...(['teacher', 'monitor'].includes(role) ? [{ id: 'queue', label: 'AI trùng' }] : []),
+@@ -30,5 +30,7 @@
+ export const useHomeworkViewStore = defineStore('homework-view', () => {
+   const selectedTab = ref<string | null>(null)
+   const refreshVersion = ref(0)
+-  return { selectedTab, refreshVersion }
++  // undefined outside Báo bài; empty string is an explicit all/no-class scope.
++  const scopeClassId = ref<string | undefined>(undefined)
++  return { selectedTab, refreshVersion, scopeClassId }
+ })
+--- a/src/pages/AdminPage.vue
++++ b/src/pages/AdminPage.vue
+@@ -60,7 +60,7 @@
+ const showYearForm=ref(false)
+ const showClassForm=ref(false)
+ const yearForm=reactive({name:'',startDate:'',endDate:'',setActive:true})
+-const classForm=reactive({code:'',name:''})
++const classForm=reactive({code:'',name:'',grade:'' as number|''})
+ const editingClass=ref<import('../features/admin/admin-directory').AdminClassRecord|null>(null)
+ const classDialogError=ref('')
+ 
+@@ -154,7 +154,7 @@
+   catch(error){setTimetableFeedback({schoolYearId,state:'error',message:error instanceof Error?error.message:'Không lưu được phiên bản TKB.',selectedTemplateId:input.templateId})}
+ }
+ async function assignYearTimetable(input:{classId:string;schoolYearId:string;templateVersionId:string;effectiveFrom:string;effectiveTo:string}){try{await run(`timetable-assignment:${input.classId}`,()=>assignTimetableTemplate(runtime(),input),'Đã gán mẫu TKB theo khoảng hiệu lực.')}catch{}}
+-async function submitClass(){const code=classForm.code.trim().toUpperCase(),name=classForm.name.trim();if(!code||!name){status.value='error';statusMessage.value='Hãy nhập đủ mã lớp và tên lớp.';return}if(!selectedYearId.value){status.value='error';statusMessage.value='Hãy chọn năm học trước khi tạo lớp.';return}try{await run('create-class',()=>createClass(runtime(),{code,name,schoolYearId:selectedYearId.value}),'Đã tạo lớp.')}catch{return};classForm.code='';classForm.name='';showClassForm.value=false}
++async function submitClass(){const code=classForm.code.trim().toUpperCase(),name=classForm.name.trim();if(!Number.isInteger(classForm.grade)||Number(classForm.grade)<6||Number(classForm.grade)>12){status.value='error';statusMessage.value='Hãy chọn khối từ 6 đến 12.';return}if(!code||!name){status.value='error';statusMessage.value='Hãy nhập đủ mã lớp và tên lớp.';return}if(!selectedYearId.value){status.value='error';statusMessage.value='Hãy chọn năm học trước khi tạo lớp.';return}try{await run('create-class',()=>createClass(runtime(),{code,name,grade:Number(classForm.grade),schoolYearId:selectedYearId.value}),'Đã tạo lớp.')}catch{return};classForm.code='';classForm.name='';classForm.grade='';showClassForm.value=false}
+ function editClass(id:string){editingClass.value=data.value.classes.find(row=>row.id===id)??null;classDialogError.value=''}
+ async function saveClassDialog(payload:{code:string;name:string}){const item=editingClass.value;if(!item)return;try{await run(`class:${item.id}`,()=>updateClass(runtime(),item.id,payload),'Đã cập nhật lớp.');editingClass.value=null}catch(error){classDialogError.value=error instanceof Error?error.message:'Không cập nhật được lớp.'}}
+ async function toggleClass(id:string){const item=data.value.classes.find(row=>row.id===id);if(!item)return;if(item.active&&!await appDialog.confirm({title:'Khóa lớp',body:'Khóa lớp này? Backend chỉ cho phép khi trạng thái hợp lệ.',confirmLabel:'Khóa lớp',danger:true}))return;try{await run(`class:${id}`,()=>updateClass(runtime(),id,{active:!item.active}),item.active?'Đã khóa lớp.':'Đã kích hoạt lớp.')}catch{}}
+@@ -210,7 +210,7 @@
+ 
+     <template v-else-if="tab==='classes'">
+       <div class="section-actions"><div><h2>Lớp học · {{ selectedYear?.name||'—' }}</h2><p>{{ yearClasses.length }} lớp trong năm học đang chọn.</p></div><AppButton :disabled="!selectedYearId" @click="showClassForm=!showClassForm"><Plus/>Tạo lớp</AppButton></div>
+-      <AppCard v-if="showClassForm" padding="md"><form class="quick-form" novalidate @submit.prevent="submitClass"><label>Mã lớp<input v-model="classForm.code" required maxlength="40" placeholder="7A1"></label><label>Tên lớp<input v-model="classForm.name" required maxlength="120" placeholder="Lớp 7A1"></label><AppButton type="submit" :loading="busyKey==='create-class'">Tạo lớp</AppButton></form></AppCard>
++      <AppCard v-if="showClassForm" padding="md"><form class="quick-form" novalidate @submit.prevent="submitClass"><label>Khối<select v-model.number="classForm.grade" required><option value="">Chọn khối</option><option v-for="g in [6,7,8,9,10,11,12]" :key="g" :value="g">{{ g }}</option></select></label><label>Mã lớp<input v-model="classForm.code" required maxlength="40" placeholder="7A1"></label><label>Tên lớp<input v-model="classForm.name" required maxlength="120" placeholder="Lớp 7A1"></label><AppButton type="submit" :loading="busyKey==='create-class'">Tạo lớp</AppButton></form></AppCard>
+       <section class="class-grid"><AdminClassCard v-for="item in yearClasses" :key="item.id" :item="item" :teachers="assignedTeachers(item.id)" :busy="busyKey===`class:${item.id}`" @edit="editClass(item.id)" @toggle="toggleClass(item.id)" @delete="removeClass(item.id)"/></section>
+     </template>
+ 
+--- a/src/pages/HomeworkPage.vue
++++ b/src/pages/HomeworkPage.vue
+@@ -4,6 +4,7 @@
+ import { useContextStore } from "../stores/context";
+ import PageArtwork from "../components/ui/PageArtwork.vue";
+ import PageBannerArt from "../components/ui/PageBannerArt.vue";
++import HomeworkAdminOversight from "../components/homework/HomeworkAdminOversight.vue";
+ import HomeworkAiSettings from "../components/homework/HomeworkAiSettings.vue";
+ import HomeworkGroupManager from "../components/homework/HomeworkGroupManager.vue";
+ import HomeworkCard from "../components/homework/HomeworkCard.vue";
+@@ -15,6 +16,7 @@
+   localDeadline,
+   utcDeadline,
+   type HomeworkData,
++  type HomeworkContext,
+   type Notice,
+   type Subject,
+ } from "../features/homework/api";
+@@ -22,15 +24,24 @@
+ const view = useHomeworkViewStore();
+ const auth = useAuthStore(),
+   ctx = useContextStore();
+-const classId = computed(
+-  () =>
+-    ctx.selectedClassId ||
+-    auth.currentUser?.classId ||
+-    ctx.classes.find((c) => c.active)?.id ||
+-    "",
+-);
++const assigned = ref<HomeworkContext['classes']>([]);
++const selectedClass = ref('');
++const assignedWeeks = ref<NonNullable<HomeworkContext['weeks']>>([]);
++const weekOptions = computed(() => auth.role === 'teacher' ? assignedWeeks.value.filter(w=>w.school_year_id===assigned.value.find(c=>c.id===selectedClass.value)?.school_year_id).map(w=>({id:w.id,number:w.week_number})) : ctx.weeks);
++const classId = computed(() => auth.role === 'teacher' ? selectedClass.value : auth.currentUser?.classId || ctx.selectedClassId || '');
++let contextRequest = 0;
++async function loadContext() {
++  if (auth.role !== 'teacher') return;
++  const request = ++contextRequest;
++  try {
++    const result = await homeworkRpc<HomeworkContext>('context', '');
++    if(request !== contextRequest || auth.role !== 'teacher') return;
++    assigned.value = result.classes; assignedWeeks.value=result.weeks||[];
++    if (!assigned.value.some(c => c.id === selectedClass.value)) selectedClass.value = assigned.value.find(c => c.id === ctx.selectedClassId)?.id || assigned.value[0]?.id || '';
++  } catch(e) { if(request === contextRequest) { assigned.value=[]; selectedClass.value=''; error.value=e instanceof Error?e.message:'Không tải được phân công lớp'; } }
++}
+ const role = computed(() => auth.role || "student"),
+-  manager = computed(() => ["teacher", "admin"].includes(role.value)),
++  manager = computed(() => role.value === "teacher"),
+   teacher = computed(() => role.value === "teacher"),
+   admin = computed(() => role.value === "admin");
+ const data = ref<HomeworkData | null>(null),
+@@ -46,9 +57,6 @@
+ const editing = ref(false),
+   deleteTarget = ref<Notice | null>(null),
+   deleteReason = ref(""),
+-  hardTarget = ref<Notice | null>(null),
+-  hardReason = ref(""),
+-  hardConfirmed = ref(false),
+   reviewReasons = reactive<Record<string, string>>({});
+ const form = reactive({
+   id: "",
+@@ -62,6 +70,7 @@
+ });
+ const subjectForm = reactive({
+   id: "",
++  catalog_subject_id: "",
+   name: "",
+   short_name: "",
+   icon: "📚",
+@@ -69,16 +78,16 @@
+   is_english: false,
+   is_active: true,
+ });
+-const seed = ref(3), alerts = ref("system");
+ const tabs = computed(() => homeworkTabs(role.value));
+ // A stale or unauthorized selection never becomes the rendered page/Owl context.
+ const tab = computed({
+   get: () => resolveHomeworkTab(role.value, view.selectedTab).id,
+   set: (value: string) => { view.selectedTab = value; },
+ });
+-watch(role, () => {
+-  view.selectedTab = tab.value; editing.value = false; deleteTarget.value = null; hardTarget.value = null;
+-  data.value = null; void load();
++watch([role, () => auth.currentUser?.id], () => {
++  contextRequest++; assigned.value=[]; selectedClass.value='';
++  view.selectedTab = tab.value; editing.value = false; deleteTarget.value = null;
++  data.value = null; void loadContext(); void load();
+ });
+ const selectedSubject = computed(() =>
+   data.value?.subjects.find((s) => s.id === form.subject_id),
+@@ -109,7 +118,7 @@
+     .sort((a, b) => a.heart_rank - b.heart_rank),
+ );
+ async function load() {
+-  if (!classId.value) return;
++  if (admin.value || !classId.value) return;
+   const id = ++loadId;
+   loading.value = true;
+   error.value = "";
+@@ -119,11 +128,10 @@
+     });
+     if (id !== loadId) return;
+     data.value = result;
+-    seed.value = result.settings.seed_threshold;
+-    alerts.value = result.alert_level || "system";
+   } catch (e) {
+     if (id === loadId)
+       error.value = e instanceof Error ? e.message : "Không tải được Báo bài.";
++    if (id === loadId && teacher.value) await loadContext();
+   } finally {
+     if (id === loadId) loading.value = false;
+   }
+@@ -141,6 +149,7 @@
+   } catch (e) {
+     error.value =
+       e instanceof Error ? e.message : "Không thực hiện được thao tác.";
++    await loadContext();
+   } finally {
+     busy.value = false;
+   }
+@@ -211,14 +220,6 @@
+   deleteTarget.value = n;
+   deleteReason.value = "";
+ }
+-function requestHardDelete(n: Notice) {
+-  hardTarget.value = n; hardReason.value = ""; hardConfirmed.value = false;
+-}
+-async function confirmHardDelete() {
+-  if (!admin.value || !hardTarget.value || !hardConfirmed.value || !hardReason.value.trim() || hardReason.value.trim().length > 500) return;
+-  await act("hard_delete", { id: hardTarget.value.id, confirm_irreversible: true, hard_delete_reason: hardReason.value.trim() });
+-  if (!error.value) hardTarget.value = null;
+-}
+ async function confirmDelete() {
+   await act("delete", {
+     id: deleteTarget.value?.id,
+@@ -231,6 +232,7 @@
+     subjectForm,
+     s || {
+       id: "",
++      catalog_subject_id: "",
+       name: "",
+       short_name: "",
+       icon: "📚",
+@@ -241,8 +243,12 @@
+   );
+ }
+ async function saveSubject() {
+-  await act("subject_save", { ...subjectForm, id: subjectForm.id || null });
++  await act("subject_save", { id: subjectForm.id || null, catalog_subject_id: subjectForm.catalog_subject_id, sort_order: subjectForm.sort_order, is_active: subjectForm.is_active });
+   if (!error.value) editSubject();
++}
++function managementBusy(value: boolean) {
++  busy.value = value;
++  if (!value && teacher.value) void loadContext();
+ }
+ function acceptManagementUpdate(fresh: HomeworkData) {
+   // A confirmed management reload supersedes any earlier page reload in flight.
+@@ -262,20 +268,26 @@
+     50,
+   );
+ }
++watch([classId,role], () => { if(!admin.value)view.scopeClassId=classId.value; },{immediate:true});
++watch(classId, () => { week.value=""; subject.value=""; editSubject(); deleteTarget.value=null; Object.keys(reviewReasons).forEach(k=>delete reviewReasons[k]); });
+ watch([classId, week], () => {
++  loadId++;
+   editing.value = false;
+   data.value = null;
+   void load();
+ });
+-onMounted(load);
++onMounted(async () => { await loadContext(); await load(); });
+ onUnmounted(() => {
++  view.scopeClassId=undefined;
++  contextRequest++;
+   view.selectedTab = null;
+   loadId++;
+   clearInterval(timer);
+ });
+ </script>
+ <template>
+-  <section class="homework-page">
++  <HomeworkAdminOversight v-if="admin" />
++  <section v-else class="homework-page">
+     <header class="homework-banner">
+       <PageBannerArt tone="sun" /><PageArtwork name="homework" tone="sun" />
+       <div>
+@@ -287,6 +299,9 @@
+         ↻ Làm mới
+       </button>
+     </header>
++    <label v-if="teacher && assigned.length > 1">Lớp đang thao tác
++      <select v-model="selectedClass" :disabled="busy"><option v-for="c in assigned" :key="c.id" :value="c.id">Khối {{ c.grade }} · {{ c.code }}</option></select>
++    </label>
+     <p v-if="!classId" class="empty">
+       Chưa có lớp hoạt động để sử dụng Báo bài.
+     </p>
+@@ -308,30 +323,6 @@
+     <p v-if="message" role="status" class="success">{{ message }}</p>
+     <p v-if="loading" role="status">Đang tải Báo bài…</p>
+     <template v-if="data">
+-      <section v-if="tab === 'overview'" class="panel">
+-        <h2>Tình trạng Báo bài</h2>
+-        <div class="metrics">
+-          <div>
+-            <strong>{{ data.health?.total || 0 }}</strong
+-            ><span>Bài trong hệ thống</span>
+-          </div>
+-          <div>
+-            <strong>{{ data.health?.pending || 0 }}</strong
+-            ><span>Đang chờ giáo viên</span>
+-          </div>
+-        </div>
+-        <p>
+-          Giáo viên phụ trách xử lý nội dung. Admin theo dõi lỗi và cảnh báo
+-          theo cấu hình đã chọn.
+-        </p>
+-        <ul class="notifications">
+-          <li v-for="n in data.notifications" :key="n.id">
+-            <strong>{{ n.title }}</strong>
+-            <p>{{ n.message }}</p>
+-            <small>{{ dateLabel(n.created_at) }}</small>
+-          </li>
+-        </ul>
+-      </section>
+       <template v-if="tab === 'board'">
+         <button
+           v-if="!admin"
+@@ -437,7 +428,7 @@
+           <label
+             >Thời gian<select v-model="week">
+               <option value="">Toàn năm học</option>
+-              <option v-for="w in ctx.weeks" :key="w.id" :value="w.id">
++              <option v-for="w in weekOptions" :key="w.id" :value="w.id">
+                 Tuần {{ w.number }}
+               </option>
+             </select></label
+@@ -593,26 +584,15 @@
+           </button>
+         </div>
+         <form class="form-grid" @submit.prevent="saveSubject">
+-          <label
+-            >Tên môn<input
+-              v-model="subjectForm.name"
+-              required
+-              maxlength="100" /></label
+-          ><label
+-            >Tên ngắn<input
+-              v-model="subjectForm.short_name"
+-              maxlength="30" /></label
+-          ><label
+-            >Biểu tượng<input
+-              v-model="subjectForm.icon"
+-              maxlength="12" /></label
++          <label>Môn trong danh mục khối<select v-model="subjectForm.catalog_subject_id" required :disabled="!!subjectForm.id">
++            <option value="">Chọn môn</option>
++            <option v-for="s in data.catalog || []" :key="s.id" :value="s.id">{{ s.icon }} {{ s.name }}</option>
++            <option v-if="subjectForm.id && !(data.catalog || []).some(c => c.id === subjectForm.catalog_subject_id)" :value="subjectForm.catalog_subject_id">{{ subjectForm.name }} · Catalog đã tắt</option>
++          </select></label
+           ><label
+             >Thứ tự<input
+               v-model.number="subjectForm.sort_order"
+               type="number" /></label
+-          ><label class="check"
+-            ><input v-model="subjectForm.is_english" type="checkbox" />Môn Tiếng
+-            Anh</label
+           ><label class="check"
+             ><input v-model="subjectForm.is_active" type="checkbox" />Hoạt
+             động</label
+@@ -624,11 +604,11 @@
+           </div>
+         </form>
+       </section>
+-      <HomeworkGroupManager v-if="tab === 'english' && teacher" :key="classId" :class-id="classId" :week-id="week" :role="role" :data="data" @updated="acceptManagementUpdate" @busy="busy = $event" />
++      <HomeworkGroupManager v-if="tab === 'english' && teacher" :key="classId" :class-id="classId" :week-id="week" :role="role" :data="data" @updated="acceptManagementUpdate" @busy="managementBusy" />
+       <section v-if="tab === 'trash' && manager">
+         <h2>Thùng rác Báo bài</h2>
+         <p>
+-          {{ admin ? "Chỉ xóa vĩnh viễn từng bài đã được xóa trước đó. Hành động không thể hoàn tác." : "Khôi phục bảo toàn lịch sử; bài có khả năng trùng mới sẽ chờ kiểm tra." }}
++          Khôi phục bảo toàn lịch sử; bài có khả năng trùng mới sẽ chờ kiểm tra.
+         </p>
+         <article v-for="n in data.trash" :key="n.id" class="panel">
+           <h3>{{ n.title }}</h3>
+@@ -636,7 +616,6 @@
+           <button v-if="teacher" :disabled="busy" @click="act('restore', { id: n.id })">
+             Khôi phục
+           </button>
+-          <button v-if="admin" :disabled="busy" @click="requestHardDelete(n)">Xóa vĩnh viễn</button>
+         </article>
+         <p v-if="!data.trash.length" class="empty">Thùng rác trống.</p>
+       </section>
+@@ -645,7 +624,6 @@
+         <article v-for="tombstone in data.tombstones" :key="tombstone.notice_id" class="panel">
+           <strong>Admin đã xóa vĩnh viễn notice</strong>
+           <p>{{ dateLabel(tombstone.hard_deleted_at) }}</p>
+-          <details v-if="admin"><summary>Metadata xóa vĩnh viễn</summary><pre>{{ JSON.stringify(tombstone, null, 2) }}</pre></details>
+         </article>
+         <p>300 sự kiện gần nhất.</p>
+         <details v-for="e in data.audit" :key="e.id">
+@@ -664,49 +642,8 @@
+           }}</pre>
+         </details>
+       </section>
+-      <HomeworkAiSettings v-if="teacher" v-show="tab === 'ai_settings'" :key="classId" :class-id="classId" :week-id="week" :role="role" :settings="data.ai_settings" @updated="acceptManagementUpdate" @busy="busy = $event" />
+-      <section v-if="tab === 'settings' && admin" class="panel">
+-        <h2>Cấu hình Báo bài</h2>
+-        <form
+-          class="form-grid"
+-          @submit.prevent="act('settings', { seed_threshold: seed })"
+-        >
+-          <label
+-            >Ngưỡng Mầm xanh<input
+-              v-model.number="seed"
+-              type="number"
+-              min="1"
+-              step="1"
+-              required /></label
+-          ><button :disabled="busy">Lưu ngưỡng danh hiệu</button>
+-        </form>
+-        <form
+-          class="form-grid"
+-          @submit.prevent="act('alert_settings', { alert_level: alerts })"
+-        >
+-          <label
+-            >Cảnh báo Admin<select v-model="alerts">
+-              <option value="system">Chỉ lỗi hệ thống</option>
+-              <option value="backlog">Lỗi hệ thống + tồn đọng</option>
+-              <option value="all">Tất cả cảnh báo</option>
+-            </select></label
+-          ><button :disabled="busy">Lưu cảnh báo</button>
+-        </form>
+-      </section>
++      <HomeworkAiSettings v-if="teacher" v-show="tab === 'ai_settings'" :key="classId" :class-id="classId" :week-id="week" :role="role" :settings="data.ai_settings" @updated="acceptManagementUpdate" @busy="managementBusy" />
+     </template>
+-    <div v-if="hardTarget && admin" class="modal-backdrop" @keydown.esc="!busy && (hardTarget = null)">
+-      <section role="dialog" aria-modal="true" aria-labelledby="hard-delete-title" class="modal">
+-        <h2 id="hard-delete-title">Xóa vĩnh viễn Báo bài</h2>
+-        <p>{{ hardTarget.title }}</p>
+-        <p>Nội dung, tim và lượt nhắc sẽ bị xóa; hành động không thể hoàn tác. Nhật ký xóa tối thiểu được giữ lại.</p>
+-        <form @submit.prevent="confirmHardDelete">
+-          <label>Lý do xóa vĩnh viễn<textarea v-model="hardReason" maxlength="500" required /></label>
+-          <label><input v-model="hardConfirmed" type="checkbox" required /> Tôi xác nhận xóa vĩnh viễn bài này.</label>
+-          <p v-if="error" role="alert">{{ error }}</p>
+-          <div class="actions"><button type="button" :disabled="busy" @click="hardTarget = null">Hủy</button><button :disabled="busy || !hardConfirmed || !hardReason.trim() || hardReason.trim().length > 500">Xóa vĩnh viễn</button></div>
+-        </form>
+-      </section>
+-    </div>
+     <div
+       v-if="editing && !admin"
+       class="modal-backdrop"
+--- a/supabase/functions/_shared/class-grade.ts
++++ b/supabase/functions/_shared/class-grade.ts
+@@ -0,0 +1,12 @@
++// FEAT-004 canonical grade input. Naming conventions are intentionally irrelevant.
++export function requireClassGrade(value: unknown): number {
++  if (typeof value !== "number" || !Number.isInteger(value) || value < 6 || value > 12) {
++    throw Object.assign(new Error("Chọn khối từ 6 đến 12"), {status: 400, code: "INVALID_GRADE"});
++  }
++  return value;
++}
++export function rejectGradeEdit(body: Record<string, unknown>): void {
++  if (Object.prototype.hasOwnProperty.call(body, "grade")) {
++    throw Object.assign(new Error("Đổi khối cần task riêng"), {status: 400, code: "GRADE_IMMUTABLE"});
++  }
++}
+--- a/supabase/functions/admin-manage-classes/index.ts
++++ b/supabase/functions/admin-manage-classes/index.ts
+@@ -1,3 +1,4 @@
++import {requireClassGrade,rejectGradeEdit} from "../_shared/class-grade.ts";
+ import {createAdminClient} from "../_shared/config.ts";
+ import {requireActor,requireRootAdmin} from "../_shared/auth.ts";
+ import {assertActiveClass} from "../_shared/permissions.ts";
+@@ -118,7 +119,7 @@
+ }
+ async function loadClass(admin:any,classId:string){
+   const {data,error}=await admin.from("classes")
+-    .select("id,school_year_id,code,name,active,created_at,updated_at")
++    .select("id,school_year_id,code,name,grade,active,created_at,updated_at")
+     .eq("id",classId).maybeSingle();
+   if(error)throw error;
+   if(!data)throw Object.assign(new Error("Không tìm thấy lớp"),{status:404,code:"CLASS_NOT_FOUND"});
+@@ -140,7 +141,7 @@
+ 
+     if(action==="list"){
+       const [classes,teachers,assignments,schoolYears,weeks,periods,timetableTemplates,timetableVersions,timetableAssignments]=await Promise.all([
+-        admin.from("classes").select("id,school_year_id,code,name,active,created_at,updated_at").order("code"),
++        admin.from("classes").select("id,school_year_id,code,name,grade,active,created_at,updated_at").order("code"),
+         admin.from("profiles").select("id,student_code,full_name,active").eq("role","teacher").order("full_name"),
+         admin.from("class_teachers").select("class_id,teacher_id,active,assigned_at"),
+         admin.from("school_years").select("id,name,start_date,end_date,is_active").order("start_date",{ascending:false}),
+@@ -267,6 +268,7 @@
+     }
+ 
+     if(action==="create_class"){
++      const grade=requireClassGrade(body?.grade);
+       const code=clean(body?.code,40).toUpperCase();
+       const name=clean(body?.name||code,120);
+       if(!code||!name)throw Object.assign(new Error("Tên/mã lớp không hợp lệ"),{status:400,code:"INVALID_CLASS"});
+@@ -280,7 +282,7 @@
+       assertUuid(schoolYearId,"schoolYearId");
+ 
+       const {data,error}=await admin.from("classes")
+-        .insert({school_year_id:schoolYearId,code,name,active:true,created_by:actor.id})
++        .insert({school_year_id:schoolYearId,code,name,grade,active:true,created_by:actor.id})
+         .select().single();
+       if(error)throw error;
+ 
+@@ -322,6 +324,7 @@
+     }
+ 
+     if(action==="update_class"){
++      rejectGradeEdit(body || {});
+       const classId=assertUuid(body?.classId,"classId");
+       const before=await loadClass(admin,classId);
+       const patch:any={updated_at:new Date().toISOString()};
+--- a/tests/bug-001/regression.test.ts
++++ b/tests/bug-001/regression.test.ts
+@@ -23,11 +23,17 @@
+ const legacy=()=>({currentWeekId:'w',weeks:[],periods:[],schedule:[],overrides:[],users:[user('student')],registrations:[{id:'r',weekId:'w',studentId:'u',status:'needs_revision'}]} as unknown as LegacyState)
+ const notice={id:'n',class_id:'c',subject_id:'s',author_id:'other',author_role:'student',author_name:'An',subject:'Toán',title:'Bài tập',content:'Nội dung',status:'published',due_at:'2026-09-12T00:00:00Z',created_at:'2026-09-09T00:00:00Z',hearts:0}
+ const data=()=>({subjects:[{id:'s',name:'Toán',is_active:true}],notices:[notice],history:[],queue:[],leaderboard:[],notifications:[],groups:[],members:[],learners:[],ai_settings:{semantic_duplicate_enabled:true,duplicate_review_threshold:70,duplicate_auto_threshold:90},audit:[],trash:[],settings:{seed_threshold:3,pending_threshold:70,reject_threshold:90}})
++function extra(action:string){
++ if(action==='context')return {grades:[7],classes:[{id:'c',grade:7,code:'7A9',active:true}]};
++ if(action==='catalog_list')return [];
++ if(action==='oversight')return {metrics:{},hearts:0,history:[],audit:[],catalog_audit:[],trash:[],people:[]};
++ return {};
++}
+ let app:any
+ beforeEach(()=>{
+  setActivePinia(createPinia());env.auth=reactive({ready:true,isAuthenticated:true,currentUser:user('admin'),role:'admin',legacyState:legacy(),bootstrap:vi.fn()})
+  env.ctx=reactive({selectedClassId:'c',selectedWeekId:'w',classes:[],weeks:[]});env.route=reactive({path:'/homework'})
+- env.rpc.mockReset().mockImplementation(async(action:string)=>action==='load'?data():{});env.submit.mockReset()
++ env.rpc.mockReset().mockImplementation(async(action:string)=>action==='load'?data():extra(action));env.submit.mockReset()
+  vi.stubGlobal('Document',class {});vi.stubGlobal('ShadowRoot',class {});
+  vi.stubGlobal('document',{activeElement:null});vi.stubGlobal('window',{addEventListener(){},removeEventListener(){}})
+ })
+@@ -45,7 +51,7 @@
+  it('preserves legacy revision urgency outside homework',()=>{for(const role of ['student','monitor'])expect(buildOwlContextMessages({state:legacy(),user:user(role),path:'/register'}).some(m=>m.urgent&&m.text.includes('chỉnh sửa'))).toBe(true)})
+ })
+ describe('BUG-001 actual Vue component interactions (virtual renderer)',()=>{
+- it('resets Owl context after every Admin tab click without path change',async()=>{const root=renderPair();await settle();for(const label of ['Tổng quan','Bảng Báo bài','Lịch sử đăng','🌟 Góc tuyên dương','Thùng rác','Nhật ký','Cấu hình']){await click(root,label);const owl=findAll(root,n=>n.props.class==='owl-button')[0];await owl.props.onClick();await settle();expect(speech(root)).toContain(label.replace('🌟 ',''));expect(speech(root)).not.toMatch(/Dashboard|đăng ký/);expect(env.route.path).toBe('/homework');}})
++ it('resets Owl context after every Admin tab click without path change',async()=>{const root=renderPair();await settle();for(const label of ['Tổng quan','Danh mục môn','Lịch sử đăng','🌟 Góc tuyên dương','Thùng rác','Nhật ký','Cấu hình']){await click(root,label);const owl=findAll(root,n=>n.props.class==='owl-button')[0];await owl.props.onClick();await settle();expect(speech(root)).toContain(label.replace('🌟 ',''));expect(speech(root)).not.toMatch(/Dashboard|đăng ký/);expect(env.route.path).toBe('/homework');}})
+  it('renders create/edit wording and dispatches the existing reminder action',async()=>{actor('teacher');const root=renderPair();await settle();const launch=findAll(root,n=>n.props.class==='composer-launch')[0];await launch.props.onClick();await settle();expect(findAll(root,n=>n.type==='h2').map(textOf)).toContain('✏️ Đăng Báo bài');await click(root,'Đóng');await click(root,'Sửa');expect(findAll(root,n=>n.type==='h2').map(textOf)).toContain('Sửa Báo bài');await click(root,'Đóng');await click(root,'🔔 Nhắc');expect(env.rpc).toHaveBeenCalledWith('remind','c',{id:'n'});expect(env.submit).not.toHaveBeenCalled()})
+  it('drops forbidden context immediately when Admin becomes Student',async()=>{const root=renderPair();await settle();await click(root,'Cấu hình');actor('student');await settle();expect(findAll(root,n=>n.type==='button').map(textOf)).not.toContain('Cấu hình');const owl=findAll(root,n=>n.props.class==='owl-button')[0];await owl.props.onClick();await settle();expect(speech(root)).toContain('Bảng Báo bài');expect(speech(root)).not.toContain('Cấu hình')})
+  it('clears old message during quick route changes and handles failed load',async()=>{actor('teacher');env.rpc.mockRejectedValue(new Error('offline'));const root=renderPair();await settle();const owl=findAll(root,n=>n.props.class==='owl-button')[0];await owl.props.onClick();await settle();expect(speech(root)).toContain('Báo bài');env.route.path='/review';await settle();await owl.props.onClick();await settle();expect(speech(root)).toMatch(/duyệt|đăng ký/);env.route.path='/homework';await settle();await owl.props.onClick();await settle();expect(speech(root)).toContain('Báo bài');expect(speech(root)).not.toContain('đăng ký')})
+@@ -115,7 +121,8 @@
+ 
+ describe('FEAT-002 actual role UI',()=>{
+  it('Admin board has no posting or notice operations and no AI/subject/group/queue tabs',async()=>{
+-  const root=renderPair();await settle();await click(root,'Bảng Báo bài');
++  const root=renderPair();await settle();
++  expect(findAll(root,n=>n.type==='button').map(textOf)).not.toContain('Bảng Báo bài');
+   const buttons=findAll(root,n=>n.type==='button').map(textOf).join('|');expect(buttons).not.toMatch(/Đăng Báo bài|Sửa|🔔 Nhắc|AI trùng|Cài đặt AI|Môn học|Tiếng Anh/);expect(findAll(root,n=>n.props.class==='composer-launch')).toHaveLength(0);
+  });
+  it('Teacher AI settings save only operational keys, without Admin achievement settings',async()=>{
+@@ -126,11 +133,11 @@
+   expect(env.rpc).toHaveBeenCalledWith('ai_settings','c',{semantic_duplicate_enabled:true,duplicate_review_threshold:65,duplicate_auto_threshold:90});
+  });
+  it('Admin hard delete has reason and explicit irreversible confirmation; no restore',async()=>{
+-  env.rpc.mockImplementation(async(action:string)=>action==='load'?{...data(),trash:[{...notice,status:'deleted',delete_reason:'mistake'}]}:{});
++  env.rpc.mockImplementation(async(action:string)=>action==='oversight'?{...extra(action),trash:[{...notice,status:'deleted',delete_reason:'mistake'}]}:action==='load'?data():extra(action));
+   const root=renderPair();await settle();await click(root,'Thùng rác');expect(findAll(root,n=>n.type==='button').map(textOf)).not.toContain('Khôi phục');
+   await click(root,'Xóa vĩnh viễn');expect(textOf(root)).toContain('không thể hoàn tác');
+   const dialog=findAll(root,n=>n.props.role==='dialog')[0];const textarea=findAll(dialog,n=>n.type==='textarea')[0];expect(textarea.props.maxlength).toBe('500');
+-  const submit=findAll(dialog,n=>n.type==='button'&&textOf(n)==='Xóa vĩnh viễn')[0];expect(submit.props.disabled).toBe(true);
++  const submit=findAll(dialog,n=>n.type==='button'&&textOf(n)==='Xác nhận xóa vĩnh viễn')[0];expect(submit.props.disabled).toBe(true);
+   textarea.props['onUpdate:modelValue']('  Wrong task  ');
+   findAll(dialog,n=>n.type==='input'&&n.props.type==='checkbox')[0].props['onUpdate:modelValue'](true);await settle();
+   expect(submit.props.disabled).toBe(false);
+--- a/tests/feat-002/database.test.mjs
++++ b/tests/feat-002/database.test.mjs
+@@ -7,13 +7,14 @@
+  try {await db.exec(await readFile(new URL('../../database/upgrade/'+file,import.meta.url),'utf8'));} catch(e){if(e.code!=='ENOENT')throw e;}
+ }
+ 
++if(process.env.FEAT004_UPGRADE)await db.exec(await readFile(new URL('../../database/upgrade/08-FEAT-004-MULTI-CLASS-CATALOG.sql',import.meta.url),'utf8'));
+ async function call(role,fn,action,p={}){
+  await db.exec(`reset role; select set_config('request.jwt.claim.sub','${role}',false); set role ${fn==='homework_api'?'authenticated':'service_role'};`);
+  try{return (await db.query(`select public.${fn}($1,$2::jsonb) result`,[action,JSON.stringify({class_id:ids.c,...p})])).rows[0].result;}finally{await db.exec('reset role');}
+ }
+ const rpc=(actor,action,p)=>call(actor,'homework_api',action,p);
+ const ai=(action,p)=>call(ids.a,'homework_ai',action,p);
+-const subject=await rpc(ids.t,'subject_save',{name:'KHTN'});
++const subject=process.env.FEAT004_UPGRADE?await rpc(ids.t,'subject_save',{catalog_subject_id:(await rpc(ids.a,'catalog_save',{grade:7,name:'KHTN'})).id}):await rpc(ids.t,'subject_save',{name:'KHTN'});
+ const payload={subject_id:subject.id,title:'Private title',content:'Private content',due_at:'2026-09-10T13:00:00Z'};
+ const make=(actor=ids.s,p={})=>rpc(actor,'submit',{...payload,request_id:crypto.randomUUID(),...p});
+ async function finish(n,score=0,candidate_id=null){const s=await ai('snapshot',{id:n.id});return ai('finish',{id:n.id,revision:s.notice.revision,fingerprint:s.fingerprint,score,candidate_id,reason:'SECRET_AI_REASON'});}
+--- a/tests/feat-003/ui.test.ts
++++ b/tests/feat-003/ui.test.ts
+@@ -14,6 +14,9 @@
+ beforeEach(()=>{
+  setActivePinia(createPinia());env.stored=initial();env.failIds=new Set();env.auth=reactive({currentUser:{id:'teacher',classId:'c'},role:'teacher'});env.ctx=reactive({selectedClassId:'c',selectedWeekId:null,classes:[],weeks:[]});env.directory.mockReset().mockResolvedValue({users});
+  env.rpc.mockReset().mockImplementation(async(action:string,_class:string,p:any)=>{
++  if(action==='oversight')return {metrics:{},hearts:0,history:[],audit:[],catalog_audit:[],trash:[],people:[]}
++  if(action==='catalog_list')return []
++  if(action==='context')return {grades:[7],classes:[{id:'c',grade:7,code:'7A9',active:true}]}
+   if(action==='load')return structuredClone(env.stored)
+   if(action==='ai_settings')env.stored.ai_settings={...p}
+   if(action==='group_assign'){if(env.failIds.has(p.student_id))throw Error('Nhóm không còn hoạt động');env.stored.members=env.stored.members.filter((m:any)=>m.student_id!==p.student_id).concat({student_id:p.student_id,english_group_id:p.english_group_id})}
+@@ -27,7 +30,7 @@
+ async function value(id:string,v:any){const f=field(id);if(f.props['onUpdate:modelValue'])f.props['onUpdate:modelValue'](v);else await f.props.onChange?.({target:{value:v,checked:v}});await settle()}
+ function rows(){return findAll(root,n=>n.props['data-student-id']).map(n=>n.props['data-student-id'])}
+ async function select(id:string){const f=field('select-'+id);f.props['onUpdate:modelValue']([...f._modelValue,id]);await settle()}
+-const mutations=()=>env.rpc.mock.calls.filter(c=>c[0]!=='load')
++const mutations=()=>env.rpc.mock.calls.filter(c=>!['load','context'].includes(c[0]))
+ it('AC-301/302 displays settings visualization and keeps valid edits local until save',async()=>{
+  await render('Cài đặt AI');expect(textOf(root)).toContain('Đăng bình thường');expect(textOf(root)).toContain('Chờ GV từ (%)');
+  await value('ai-lower',65);expect(textOf(root)).toContain('Chưa lưu thay đổi');expect(field('ai-scale').props['aria-label']).toContain('65');expect(mutations()).toHaveLength(0);
+--- a/tests/feat-004/class-grade.test.ts
++++ b/tests/feat-004/class-grade.test.ts
+@@ -0,0 +1,11 @@
++import {it,expect}from 'vitest';
++import{requireClassGrade,rejectGradeEdit}from '../../supabase/functions/_shared/class-grade';
++it('Edge grade validator rejects missing, coerced, fractional and out-of-canonical input',()=>{
++ for(const v of[undefined,null,'7','',true,5,13,7.5,NaN,Infinity,{},[]])expect(()=>requireClassGrade(v)).toThrow('Chọn khối');
++ for(const v of[6,7,8,9,10,11,12])expect(requireClassGrade(v)).toBe(v);
++});
++it('ordinary Edge edit rejects any supplied grade while code/name do not derive it',()=>{
++ expect(()=>rejectGradeEdit({code:'7A9',name:'Grade12'})).not.toThrow();
++ for(const grade of[7,8,null,'7',undefined])expect(()=>rejectGradeEdit({grade})).toThrow('task riêng');
++ expect(requireClassGrade(8)).toBe(8);
++});
+--- a/tests/feat-004/database.test.mjs
++++ b/tests/feat-004/database.test.mjs
+@@ -0,0 +1,48 @@
++import {test} from 'node:test';
++import assert from 'node:assert/strict';
++import {readFile}from'node:fs/promises';
++import {createFixture,ids}from'../homework/fixture.mjs';
++const c='4e0b25e4-ec47-4745-8b2b-ba91c1504254',c2='40000000-0000-0000-0000-000000000002';
++const migration=await readFile(new URL('../../database/upgrade/08-FEAT-004-MULTI-CLASS-CATALOG.sql',import.meta.url),'utf8');
++async function setup(map=true){const db=await createFixture();await db.exec(`alter table classes add column code text default '7A9';alter table classes add column name text default '7A9';`);
++ if(map)await db.exec(`alter table profiles drop constraint profiles_class_id_fkey;update classes set id='${c}';update profiles set class_id='${c}'where class_id='${ids.c}';update class_teachers set class_id='${c}';alter table profiles add foreign key(class_id)references classes(id);`);
++ for(const f of ['05-FEAT-001-BAO-BAI.sql','06-FEAT-001-AI-RECOVERY.sql','07-FEAT-002-PERMISSIONS-LIFECYCLE.sql'])await db.exec(await readFile(new URL('../../database/upgrade/'+f,import.meta.url),'utf8'));return db;}
++async function rpc(db,u,act,p={},cl=c){await db.exec(`set role authenticated;set request.jwt.claim.sub='${u}';`);try{return(await db.query('select public.homework_api($1,$2::jsonb) r',[act,JSON.stringify({class_id:cl,...p})])).rows[0].r;}finally{await db.exec('reset role');}}
++test('unknown inventory aborts before mutation',async()=>{const db=await setup(false);try{await db.exec(`insert into classes(id,school_year_id,active)values('${c}','${ids.y}',true)`);await assert.rejects(db.exec(migration),/explicit grade mapping required/);await db.exec('rollback');assert.equal((await db.query("select count(*)::int n from information_schema.columns where table_name='classes'and column_name='grade'")).rows[0].n,0);assert.equal((await db.query('select count(*)::int n from classes')).rows[0].n,2);}finally{await db.close();}});
++test('explicit mapping preserves subjects; grade mandatory/immutable/range, never inferred',async()=>{const db=await setup();try{const sub=await rpc(db,ids.t,'subject_save',{name:'Toán',icon:'🧮'});await db.exec(`update classes set code='NOT-A-GRADE',name='Khác'`);const before=(await db.query('select id,name from class_subjects')).rows;await db.exec(migration);assert.deepEqual((await db.query('select id,name from class_subjects')).rows,before);assert.equal((await db.query('select grade from classes')).rows[0].grade,7);assert.ok((await db.query('select catalog_subject_id from class_subjects where id=$1',[sub.id])).rows[0].catalog_subject_id);await assert.rejects(db.exec(`insert into classes(id,school_year_id,active)values('${c2}','${ids.y}',true)`),/null value/);await assert.rejects(db.exec('update classes set grade=8'),/flow riêng/);await assert.rejects(db.exec(`insert into classes(id,school_year_id,active,grade)values('${c2}','${ids.y}',true,5)`),/classes_grade_v1/);await db.exec(`insert into classes(id,school_year_id,active,grade,code)values('${c2}','${ids.y}',true,8,'7Z')`);}finally{await db.close();}});
++test('permissions, forged class/grade, catalog lifecycle and no old dispatcher bypass',async()=>{const db=await setup();try{await db.exec(migration);await db.exec(`insert into classes(id,school_year_id,active,grade)values('${c2}','${ids.y}',true,8)`);const cat=await rpc(db,ids.a,'catalog_save',{grade:7,name:'Toán'},'');const cat8=await rpc(db,ids.a,'catalog_save',{grade:8,name:'Toán'},'');
++ for(const u of[ids.t,ids.m,ids.s]){await assert.rejects(rpc(db,u,'subject_save',{catalog_subject_id:cat8.id},c2));await assert.rejects(rpc(db,u,'group_save',{name:'Forged'},c2));await assert.rejects(rpc(db,u,'submit',{subject_id:cat8.id,request_id:crypto.randomUUID()},c2));await assert.rejects(rpc(db,u,'catalog_save',{grade:7,name:'X'},''),/Chỉ Admin/);await assert.rejects(rpc(db,u,'load',{},c2));}
++ await assert.rejects(rpc(db,ids.t,'subject_save',{catalog_subject_id:cat8.id}),/khối lớp/);await assert.rejects(rpc(db,ids.t,'subject_save',{catalog_subject_id:cat.id,name:'forged'}),/Chỉ sửa/);
++ for(const u of[ids.a,ids.m,ids.s])await assert.rejects(rpc(db,u,'subject_save',{catalog_subject_id:cat.id}),/Chỉ Teacher/);
++ const cs=await rpc(db,ids.t,'subject_save',{catalog_subject_id:cat.id});await rpc(db,ids.a,'catalog_save',{id:cat.id,grade:7,name:'Toán',is_active:false},'');await rpc(db,ids.t,'subject_save',{id:cs.id,catalog_subject_id:cat.id,is_active:false});await assert.rejects(rpc(db,ids.t,'subject_save',{id:cs.id,catalog_subject_id:cat.id,is_active:true}),/ngừng hoạt động/);assert.equal((await rpc(db,ids.t,'load')).catalog.length,0);await assert.rejects(rpc(db,ids.a,'oversight',{grade:7},c2),/Khối/);
++ await db.exec(`set role authenticated;set request.jwt.claim.sub='${ids.t}';`);for(const sql of['select *from grade_subject_catalog','update class_subjects set is_active=true',"select homework_private.api_v3('subject_save','{}')"])await assert.rejects(db.exec(sql),/permission denied/);await db.exec('reset role');assert.equal((await rpc(db,ids.t,'context',{},'')).classes.length,1);await db.exec('update class_teachers set active=false');assert.equal((await rpc(db,ids.t,'context',{},'')).classes.length,0);await assert.rejects(rpc(db,ids.t,'load'));}finally{await db.close();}});
++async function server(db,action,p){await db.exec('set role service_role');try{return(await db.query('select homework_ai($1,$2::jsonb)r',[action,JSON.stringify(p)])).rows[0].r;}finally{await db.exec('reset role');}}
++async function publish(db,subject,who=ids.s,cl=c,title='Bài mới'){const n=await rpc(db,who,'submit',{subject_id:subject,title,content:'Nội dung '+title,due_at:'2026-10-05T12:00:00Z',request_id:crypto.randomUUID()},cl);const snap=await server(db,'snapshot',{id:n.id});await server(db,'finish',{id:n.id,revision:snap.notice.revision,fingerprint:snap.fingerprint,score:0,candidate_id:null,reason:'ok'});return n;}
++test('migration preserves populated class/profile/notices/reactions/audit/membership and rejects ambiguous catalogs atomically',async()=>{const db=await setup();try{const s=await rpc(db,ids.t,'subject_save',{name:'Toán'});const n=await publish(db,s.id);await rpc(db,ids.other,'heart',{id:n.id,liked:true});const group=await rpc(db,ids.t,'group_save',{name:'E1'});await rpc(db,ids.t,'group_assign',{student_id:ids.s,english_group_id:group.id});
++ const tables=['classes','profiles','class_teachers','homework_notices','homework_notice_reactions','homework_contribution_events','english_groups','english_group_members'];const before={};for(const t of tables)before[t]=(await db.query(`select to_jsonb(x)r from public.${t} x order by to_jsonb(x)::text`)).rows;
++ await db.exec(migration);for(const t of tables){const after=(await db.query(`select ${t==='classes'?"to_jsonb(x)-'grade'":"to_jsonb(x)"} r from public.${t} x order by ${t==='classes'?"(to_jsonb(x)-'grade')::text":"to_jsonb(x)::text"}`)).rows;assert.deepEqual(after,before[t],t);}
++ assert.equal((await rpc(db,ids.s,'load')).notices.length,1);
++ }finally{await db.close();}
++ const amb=await setup();try{await rpc(amb,ids.t,'subject_save',{name:'Toán',icon:'A'});await rpc(amb,ids.t,'subject_save',{name:'TOÁN',icon:'B'});await assert.rejects(amb.exec(migration),/ambiguous subject mapping/);await amb.exec('rollback');assert.equal((await amb.query('select count(*)::int n from class_subjects')).rows[0].n,2);assert.equal((await amb.query("select to_regclass('grade_subject_catalog') r")).rows[0].r,null);}finally{await amb.close();}});
++test('multi-class oversight filters, per-class rankings, tombstone redaction and unchanged hard delete',async()=>{const db=await setup();try{const math=await rpc(db,ids.t,'subject_save',{name:'Toán'});const n=await publish(db,math.id);await rpc(db,ids.other,'heart',{id:n.id,liked:true});await db.exec(migration);
++ await db.exec(`insert into classes(id,school_year_id,active,grade,code,name)values('${c2}','${ids.y}',true,8,'8A1','Lớp 8');insert into class_teachers values('${c2}','${ids.t}',true);`);
++ assert.equal((await rpc(db,ids.t,'context',{},'')).classes.length,2);
++ const cat=await rpc(db,ids.a,'catalog_save',{grade:8,name:'KHTN'},'');const sub=await rpc(db,ids.t,'subject_save',{catalog_subject_id:cat.id},c2);await publish(db,sub.id,ids.t,c2,'Lớp tám');
++ const all=await rpc(db,ids.a,'oversight',{},'');assert.equal(all.metrics.published,2);assert.equal(all.hearts,1);assert.equal(all.metrics.contributors,1);
++ const only=await rpc(db,ids.a,'oversight',{grade:7},'');assert.equal(only.metrics.published,1);assert.ok(only.history.every(x=>x.class_id===c));assert.ok(only.audit.every(x=>x.class_id===c));
++ assert.equal((await rpc(db,ids.a,'oversight',{actor_id:ids.t},c)).history.length,0);assert.equal((await rpc(db,ids.a,'oversight',{from:'2099-01-01'},c)).history.length,0);
++ const teacherData=await rpc(db,ids.t,'load');assert.equal(teacherData.history.length,1);assert.ok(teacherData.history.every(n=>n.class_id===c));const teacherAwards=teacherData.leaderboard;assert.deepEqual((await rpc(db,ids.a,'load')).leaderboard,teacherAwards);
++ for(const u of[ids.s,ids.m])for(const action of['load','oversight','context']){if(action==='context'){assert.deepEqual((await rpc(db,u,action,{},'')).classes.map(x=>x.id),[c]);}else await assert.rejects(rpc(db,u,action,{},c2));}
++ for(const action of['submit','delete','restore','remind','review','group_assign','group_save','ai_settings'])await assert.rejects(rpc(db,ids.a,action,{id:n.id}),{code:'42501'});
++ await rpc(db,ids.s,'delete',{id:n.id,reason:'Sai bài'});assert.equal((await rpc(db,ids.a,'oversight',{},c)).trash.length,1);assert.equal((await rpc(db,ids.a,'oversight',{},c2)).trash.length,0);
++ await rpc(db,ids.a,'hard_delete',{id:n.id,hard_delete_reason:'Test purge',confirm_irreversible:true});const redacted=await rpc(db,ids.a,'oversight',{status:'hard_deleted'},c);assert.equal(redacted.history.length,1);assert.equal(redacted.history[0].title,undefined);assert.equal(redacted.history[0].content,undefined);assert.equal(redacted.history[0].due_at,undefined);assert.ok(redacted.history[0].marker);
++ const audit=await rpc(db,ids.a,'oversight',{event_type:'hard_delete',actor_id:ids.a},c);assert.ok(audit.audit.length>0);assert.ok(audit.audit.every(e=>e.actor_id===ids.a&&e.event_type==='hard_delete'));assert.ok(!JSON.stringify(audit).includes('Nội dung Bài mới'));
++ await db.exec(`update classes set active=false where id='${c2}'`);await assert.rejects(rpc(db,ids.t,'load',{},c2));assert.equal((await rpc(db,ids.t,'context',{},'')).classes.length,1);assert.equal((await rpc(db,ids.a,'oversight',{},c2)).metrics.published,1);
++ }finally{await db.close();}});
++test('catalog canonical metadata, inactive historical notices and English group visibility survive migration',async()=>{const db=await setup();try{const eng=await rpc(db,ids.t,'subject_save',{name:'English',is_english:true});const g1=await rpc(db,ids.t,'group_save',{name:'E1'}),g2=await rpc(db,ids.t,'group_save',{name:'E2'});await rpc(db,ids.t,'group_assign',{student_id:ids.s,english_group_id:g1.id});await rpc(db,ids.t,'group_assign',{student_id:ids.other,english_group_id:g2.id});await db.exec(migration);
++ const subject=(await rpc(db,ids.t,'load')).subjects.find(x=>x.id===eng.id);
++ const n=await rpc(db,ids.s,'submit',{subject_id:eng.id,english_group_id:g1.id,title:'E1 work',content:'Reading',due_at:'2026-10-10T12:00:00Z',request_id:crypto.randomUUID()});const snap=await server(db,'snapshot',{id:n.id});await server(db,'finish',{id:n.id,revision:snap.notice.revision,fingerprint:snap.fingerprint,score:0,candidate_id:null});assert.equal((await rpc(db,ids.other,'load')).notices.length,0);assert.equal((await rpc(db,ids.s,'load')).notices.length,1);
++ await assert.rejects(rpc(db,ids.a,'catalog_save',{id:subject.catalog_subject_id,grade:7,name:'English',is_english:false},''),/lịch sử/);
++ await rpc(db,ids.a,'catalog_save',{id:subject.catalog_subject_id,grade:7,name:'Tiếng Anh',icon:'🔤',is_active:false},'');assert.equal((await rpc(db,ids.s,'load')).notices[0].subject,'Tiếng Anh');await rpc(db,ids.t,'subject_save',{id:eng.id,catalog_subject_id:subject.catalog_subject_id,is_active:false});assert.equal((await rpc(db,ids.s,'load')).history.length,1);
++ await assert.rejects(rpc(db,ids.s,'submit',{subject_id:eng.id,english_group_id:g1.id,title:'New',content:'No',due_at:'2026-10-10T12:00:00Z',request_id:crypto.randomUUID()}));
++ }finally{await db.close();}});
+--- a/tests/feat-004/ui.test.ts
++++ b/tests/feat-004/ui.test.ts
+@@ -0,0 +1,32 @@
++import {beforeEach,afterEach,it,expect,vi}from'vitest';
++import {reactive}from'vue';import{createPinia,setActivePinia}from'pinia';
++import{mount,settle,findAll,textOf,click}from'../bug-001/renderer';
++const env=vi.hoisted(()=>({auth:null as any,ctx:null as any,rpc:vi.fn()}));
++vi.mock('../../src/stores/auth',()=>({useAuthStore:()=>env.auth}));
++vi.mock('../../src/stores/context',()=>({useContextStore:()=>env.ctx}));
++vi.mock('../../src/services/legacy-supabase',()=>({legacyApi:{teacherListUsers:async()=>({users:[]})}}));
++vi.mock('../../src/features/homework/api',async original=>({...await original<any>(),homeworkRpc:env.rpc}));
++vi.mock('vue-router',()=>({useRouter:()=>({push:vi.fn()})}));
++import Inbox from '../../src/components/homework/HomeworkInbox.vue';
++import Page from'../../src/pages/HomeworkPage.vue';import{useHomeworkViewStore}from'../../src/features/homework/view-context';
++const context={grades:[6,7,8,9,10,11,12],classes:[{id:'a',code:'7A',grade:7,active:true,school_year_id:'y'},{id:'b',code:'8B',grade:8,active:true,school_year_id:'y2'}]};
++const data=(c:string)=>({settings:{seed_threshold:3},catalog:[{id:'cat'+c,grade:c==='a'?7:8,name:'Catalog '+c,is_active:true}],subjects:[],groups:[],members:[],learners:[],notices:[{id:c,title:'Notice '+c,author_id:'s',author_role:'student',author_name:'S',class_id:c,subject:'Toán',status:'published',due_at:'2099-01-01T00:00:00Z',created_at:'2026-09-01T00:00:00Z'}],history:[],queue:[],review_history:[],audit:[],trash:[],leaderboard:[],notifications:[],ai_settings:{semantic_duplicate_enabled:true,duplicate_review_threshold:70,duplicate_auto_threshold:90}});
++const oversight=(c:string)=>({metrics:{published:c==='a'?7:c==='b'?8:15},hearts:0,people:[],history:[],audit:[],catalog_audit:[],trash:[]});
++const response=(action:string,c:string)=>action==='context'?context:action==='load'?data(c):action==='catalog_list'?[]:action==='oversight'?oversight(c):{ok:true};
++let app:any,root:any;
++beforeEach(()=>{setActivePinia(createPinia());env.auth=reactive({role:'teacher',currentUser:{id:'t',classId:null}});env.ctx=reactive({selectedClassId:'a',selectedWeekId:null,weeks:[],classes:[]});env.rpc.mockReset().mockImplementation(async(a:string,c:string)=>response(a,c));vi.stubGlobal('Document',class{});vi.stubGlobal('ShadowRoot',class{});vi.stubGlobal('document',{activeElement:null});});
++afterEach(()=>{app?.unmount();vi.unstubAllGlobals();});
++async function render(){const m=mount(Page);app=m.app;root=m.root;await settle();await settle();}
++function labelControl(label:string,type='select'){const l=findAll(root,n=>n.type==='label'&&textOf(n).startsWith(label))[0];expect(l).toBeDefined();const f=findAll(l,n=>n.type===type)[0];expect(f).toBeDefined();return f;}
++async function change(label:string,value:any,type='select'){labelControl(label,type).props['onUpdate:modelValue'](value);await settle();await settle();}
++it('Teacher switches assigned classes, clears editor/state and inbox scope; stale response cannot replace current class',async()=>{await render();expect(textOf(root)).toContain('Notice a');const compose=findAll(root,n=>n.props.class==='composer-launch')[0];await compose.props.onClick();await settle();expect(textOf(root)).toContain('✏️ Đăng Báo bài');let resolve!:(v:any)=>void;env.rpc.mockImplementation((act,c)=>act==='load'&&c==='b'?new Promise(r=>resolve=r):Promise.resolve(response(act,c)));await change('Lớp đang thao tác','b');expect(textOf(root)).not.toContain('Notice a');expect(findAll(root,n=>n.props.role==='dialog')).toHaveLength(0);await change('Lớp đang thao tác','a');resolve(data('b'));await settle();expect(textOf(root)).toContain('Notice a');expect(textOf(root)).not.toContain('Notice b');expect(useHomeworkViewStore().scopeClassId).toBe('a');});
++it('Teacher with no assignment has no fallback class operation',async()=>{env.rpc.mockImplementation(async a=>a==='context'?{...context,classes:[]}:{});await render();expect(textOf(root)).toContain('Chưa có lớp');expect(env.rpc.mock.calls.some(c=>c[0]==='load')).toBe(false);});
++it('Teacher subject form sends only catalog reference and local metadata',async()=>{await render();await click(root,'Môn học');expect(textOf(root)).toContain('Catalog a');expect(textOf(root)).not.toContain('Tên ngắn');await change('Môn trong danh mục khối','cata');const form=findAll(root,n=>n.type==='form')[0];await form.props.onSubmit({preventDefault(){}});await settle();expect(env.rpc).toHaveBeenCalledWith('subject_save','a',{id:null,catalog_subject_id:'cata',sort_order:0,is_active:true});});
++it('Admin overview has catalog/oversight only, resets class on grade change and drops stale results',async()=>{env.auth.role='admin';await render();expect(textOf(root)).toContain('Giám sát học tập');expect(findAll(root,n=>n.type==='button').map(textOf).join('|')).not.toMatch(/Bảng Báo bài|Cài đặt AI|AI trùng/);await change('Lớp','a');expect(useHomeworkViewStore().scopeClassId).toBe('a');let resolve!:(v:any)=>void;env.rpc.mockImplementation((act,c)=>act==='oversight'&&c==='b'?new Promise(r=>resolve=r):Promise.resolve(response(act,c)));await change('Lớp','b');await change('Khối',7);resolve(oversight('b'));await settle();expect(useHomeworkViewStore().scopeClassId).toBe('');expect(env.rpc).toHaveBeenCalledWith('oversight','',expect.objectContaining({grade:7}));expect(findAll(root,n=>n.type==='option').map(textOf)).not.toContain('8B · Khối 8');expect(findAll(root,n=>n.type==='strong').map(textOf)).not.toContain('8');});
++it('Admin history filters pass author/status/date scope; awards require one class',async()=>{env.auth.role='admin';await render();await click(root,'Lịch sử đăng');await change('Trạng thái','hard_deleted');await change('Từ ngày','2026-09-01','input');expect(env.rpc).toHaveBeenCalledWith('oversight','',expect.objectContaining({status:'hard_deleted',from:'2026-09-01T00:00:00+07:00'}));await click(root,'🌟 Góc tuyên dương');expect(textOf(root)).toContain('Chọn một lớp');expect(env.rpc.mock.calls.filter(c=>c[0]==='load')).toHaveLength(0);});
++it('Admin catalog payload includes explicit grade and exposes save failure without false success',async()=>{env.auth.role='admin';await render();await click(root,'Danh mục môn');await change('Tên môn','Công nghệ','input');env.rpc.mockImplementation(async(a,c)=>{if(a==='catalog_save')throw Error('Catalog conflict');return response(a,c)});await findAll(root,n=>n.type==='form')[0].props.onSubmit({preventDefault(){}});await settle();expect(textOf(root)).toContain('Catalog conflict');expect(textOf(root)).not.toContain('Đã lưu thay đổi');expect(env.rpc).toHaveBeenCalledWith('catalog_save','',expect.objectContaining({grade:7,name:'Công nghệ'}));});
++
++it('Inbox follows the explicit homework class and clears old items on scope changes',async()=>{
++ const view=useHomeworkViewStore();view.scopeClassId='b';env.rpc.mockImplementation(async(action,c)=>action==='inbox'?[{id:c,title:'Inbox '+c,message:'M',is_read:false,created_at:'2026-09-01T00:00:00Z'}]:{});
++ const m=mount(Inbox);app=m.app;root=m.root;await settle();expect(env.rpc).toHaveBeenCalledWith('inbox','b');view.scopeClassId='';await settle();expect(textOf(root)).not.toContain('Inbox b');expect(env.rpc.mock.calls.filter(c=>c[0]==='inbox')).toHaveLength(1);
++});
+--- a/tests/feat-004/vitest.config.ts
++++ b/tests/feat-004/vitest.config.ts
+@@ -0,0 +1,11 @@
++import { defineConfig } from 'vitest/config'
++import vue from '@vitejs/plugin-vue'
++// Compile the real SFC client render functions for Vue's in-memory renderer.
++// No DOM/browser is claimed by this harness.
++const plugin = vue()
++const hook = plugin.transform!
++const transform = typeof hook === 'function' ? hook : hook.handler
++plugin.transform = function (code, id, options) {
++  return transform.call(this, code, id, { ...options, ssr: false })
++}
++export default defineConfig({ plugins: [plugin], test: { include: ['tests/feat-004/*.test.ts'] } })
+--- a/tests/homework/database.test.mjs
++++ b/tests/homework/database.test.mjs
+@@ -14,6 +14,7 @@
+   if (sql) await db.exec(sql);
+   if (process.env.FEAT002_UPGRADE) for (const file of ['06-FEAT-001-AI-RECOVERY.sql','07-FEAT-002-PERMISSIONS-LIFECYCLE.sql'])
+     await db.exec(await readFile(new URL('../../database/upgrade/'+file, import.meta.url),'utf8'));
++  if(process.env.FEAT004_UPGRADE)await db.exec(await readFile(new URL('../../database/upgrade/08-FEAT-004-MULTI-CLASS-CATALOG.sql',import.meta.url),'utf8'));
+   const r = await db.query(
+     "select to_regprocedure('public.homework_api(text,jsonb)')::text name",
+   );
+@@ -24,6 +25,10 @@
+   process.exitCode = 1;
+ } else {
+   async function rpc(actor, action, p = {}) {
++    if(process.env.FEAT004_UPGRADE && actor===ids.t && action==='subject_save' && p.name){
++      const cat=await rpc(ids.a,'catalog_save',{grade:7,...p});
++      return rpc(actor,action,{catalog_subject_id:cat.id});
++    }
+     await db.exec(
+       `reset role; select set_config('request.jwt.claim.sub','${actor}',false); set role authenticated;`,
+     );
+@@ -378,7 +383,7 @@
+     await assert.rejects(rpc(ids.s, "load"));
+     await db.exec(`update profiles set active=true where id='${ids.s}'`);
+     const c2 = crypto.randomUUID();
+-    await db.exec(`insert into classes values('${c2}','${ids.y}',true)`);
++    await db.exec(`insert into classes(id,school_year_id,active${process.env.FEAT004_UPGRADE?',grade':''}) values('${c2}','${ids.y}',true${process.env.FEAT004_UPGRADE?',8':''})`);
+     await assert.rejects(rpc(ids.s, "load", { class_id: c2 }));
+     const tables = await db.query(
+       "select relname,relrowsecurity from pg_class where relnamespace='public'::regnamespace and relkind='r' and (relname like 'homework_%' or relname in ('class_subjects','english_groups','english_group_members'))",
+--- a/tests/homework/fixture.mjs
++++ b/tests/homework/fixture.mjs
+@@ -1,5 +1,5 @@
+ export const ids = {
+-  c: "00000000-0000-0000-0000-000000000001",
++  c: process.env.FEAT004_UPGRADE ? "4e0b25e4-ec47-4745-8b2b-ba91c1504254" : "00000000-0000-0000-0000-000000000001",
+   y: "00000000-0000-0000-0000-000000000002",
+   s: "00000000-0000-0000-0000-000000000003",
+   m: "00000000-0000-0000-0000-000000000004",
+@@ -24,5 +24,6 @@
+ insert into profiles values('${ids.s}','student',true,'${ids.c}','Student',null),('${ids.m}','monitor',true,'${ids.c}','Monitor',null),('${ids.t}','teacher',true,null,'Teacher',null),('${ids.a}','admin',true,null,'Admin',null),('${ids.other}','student',true,'${ids.c}','Other',null);
+ insert into class_teachers values('${ids.c}','${ids.t}',true);`);
+ 
++if(process.env.FEAT004_UPGRADE)await db.exec("alter table classes add column code text default '7A9';alter table classes add column name text default '7A9';");
+ return db;
+ }

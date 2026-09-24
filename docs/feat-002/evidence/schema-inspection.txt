@@ -1,0 +1,5 @@
+2026-09-10 — read-only inspection
+public.homework_notices: exists
+public.homework_settings constraint: homework_settings_check
+Definition: pending_threshold >= 1 AND pending_threshold <= 99 AND reject_threshold > pending_threshold AND reject_threshold <= 100
+Matches migration 05/06 baseline. No remote DDL or test-data mutation.

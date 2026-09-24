@@ -1,0 +1,32 @@
+{
+  "created": [
+    "deploy/feat-006/rc1-monitor-read-fix.sql",
+    "docs/feat-006/RC2_FIX_REPORT.md",
+    "docs/feat-006/RC2_SOURCE_CHANGES.patch",
+    "docs/feat-006/SOL_INDEPENDENT_REVIEW_RC1.md",
+    "docs/feat-006/evidence/rc2-changed-files.json",
+    "docs/feat-006/evidence/rc2-p1-after.log",
+    "docs/feat-006/evidence/rc2-p1-before.log",
+    "tests/feat-006/fixtures/rc1-media-function.sql"
+  ],
+  "modified": [
+    "START-HERE-FEAT-006.md",
+    "database/upgrade/10-FEAT-006-HOMEWORK-MEDIA.sql",
+    "docs/feat-006/DEPLOYMENT.md",
+    "docs/feat-006/IMPLEMENTATION_REPORT.md",
+    "docs/feat-006/SOURCE_CHANGES.patch",
+    "docs/feat-006/evidence/build.log",
+    "docs/feat-006/evidence/changed-files.json",
+    "docs/feat-006/evidence/database.log",
+    "docs/feat-006/evidence/feat004-database.log",
+    "docs/feat-006/evidence/legacy-database.log",
+    "docs/feat-006/evidence/media-database.log",
+    "docs/feat-006/evidence/media-ui.log",
+    "docs/feat-006/evidence/static.log",
+    "docs/feat-006/evidence/typecheck.log",
+    "docs/feat-006/evidence/ui.log",
+    "docs/feat-006/evidence/verification-results.json",
+    "tests/feat-006/database.test.mjs"
+  ],
+  "deleted": []
+}

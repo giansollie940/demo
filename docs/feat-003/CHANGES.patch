@@ -1,0 +1,604 @@
+--- a/REVIEW_FEAT003.md
++++ b/REVIEW_FEAT003.md
+@@ -0,0 +1,19 @@
++# FEAT-003 — Review package
++
++Bản source/build FEAT-003 trên FEAT-002, không deploy production.
++
++Đọc `docs/feat-003/IMPLEMENTATION_REPORT.md`, `FINAL_SPEC.md`, `DECISIONS.txt`, `CHANGES.patch` và evidence đi kèm. 94/94 local tests PASS; build/typecheck PASS. Browser/mobile NOT RUN do ERR_BLOCKED_BY_CLIENT; AC-314/317/318/321 chưa đủ bằng chứng PASS.
++
++Reproduce (sau khi cài dependency theo package-lock):
++
++```sh
++npm ci
++npm run test:feat-003
++npm run test:feat-002
++npm run test:bug-001
++npm run test:homework:ui
++npm test
++npm run build
++```
++
++`tests/feat-003` và `tests/bug-001` dùng real Vue client render functions với in-memory renderer và mock network; không thay browser UAT. `test:feat-002` thực thi SQL bằng PGlite. `dist/` là frontend build; chưa publish. Không có migration mới cho FEAT-003. Xem `docs/feat-003/MANUAL_UAT.md` cho việc kiểm chứng còn thiếu.
+--- a/package.json
++++ b/package.json
+@@ -22,7 +22,8 @@
+     "test:homework": "node --test tests/homework/*.test.mjs",
+     "test:homework:ui": "vitest run tests/homework/warning.test.ts",
+     "test:bug-001": "vitest run --config tests/bug-001/vitest.config.ts",
+-    "test:feat-002": "FEAT002_UPGRADE=1 node --test tests/homework/*.test.mjs tests/feat-002/*.test.mjs"
++    "test:feat-002": "FEAT002_UPGRADE=1 node --test tests/homework/*.test.mjs tests/feat-002/*.test.mjs",
++    "test:feat-003": "vitest run --config tests/feat-003/vitest.config.ts"
+   },
+   "dependencies": {
+     "@tanstack/vue-query": "^5.0.0",
+--- a/src/components/homework/HomeworkAiSettings.vue
++++ b/src/components/homework/HomeworkAiSettings.vue
+@@ -0,0 +1,77 @@
++<script setup lang="ts">
++import { computed, onBeforeUnmount, reactive, ref, watch } from 'vue'
++import { Sparkles, Save, Check, Info } from 'lucide-vue-next'
++import AppCard from '../ui/AppCard.vue'
++import AppButton from '../ui/AppButton.vue'
++import { homeworkRpc, type HomeworkData } from '../../features/homework/api'
++import '../../features/homework/management.css'
++type Settings = NonNullable<HomeworkData['ai_settings']>
++const props = defineProps<{ classId: string; weekId?: string; role: string; settings?: Settings }>()
++const emit = defineEmits<{ updated: [data: HomeworkData]; busy: [value: boolean] }>()
++const baseline = ref<Settings | null>(props.settings ? { ...props.settings } : null)
++const form = reactive({ enabled: props.settings?.semantic_duplicate_enabled ?? true, lower: props.settings?.duplicate_review_threshold ?? 70 as number | string, upper: props.settings?.duplicate_auto_threshold ?? 90 as number | string })
++const saving = ref(false), error = ref('')
++let alive = true
++onBeforeUnmount(() => { alive = false; if (saving.value) emit('busy', false) })
++const valid = computed(() => typeof form.lower === 'number' && typeof form.upper === 'number' && Number.isInteger(form.lower) && Number.isInteger(form.upper) && form.lower >= 0 && form.lower < form.upper && form.upper <= 100)
++const payload = computed<Settings>(() => ({ semantic_duplicate_enabled: form.enabled, duplicate_review_threshold: Number(form.lower), duplicate_auto_threshold: Number(form.upper) }))
++const dirty = computed(() => !baseline.value || !valid.value || payload.value.semantic_duplicate_enabled !== baseline.value.semantic_duplicate_enabled || payload.value.duplicate_review_threshold !== baseline.value.duplicate_review_threshold || payload.value.duplicate_auto_threshold !== baseline.value.duplicate_auto_threshold)
++const preview = ref({ lower: Number(form.lower), upper: Number(form.upper) })
++watch(() => [form.lower, form.upper], () => { if (valid.value) preview.value = { lower: Number(form.lower), upper: Number(form.upper) } })
++function adopt(value: Settings) {
++  error.value = ''
++  baseline.value = { ...value }
++  Object.assign(form, { enabled: value.semantic_duplicate_enabled, lower: value.duplicate_review_threshold, upper: value.duplicate_auto_threshold })
++}
++watch(() => props.settings, value => { if (value && !saving.value && (!baseline.value || !dirty.value)) adopt(value) })
++const state = computed(() => saving.value ? 'saving' : error.value ? 'error' : dirty.value ? 'dirty' : 'saved')
++async function save() {
++  if (saving.value || !valid.value || !props.settings || props.role !== 'teacher') return
++  saving.value = true; error.value = ''; emit('busy', true)
++  const expectedClass = props.classId
++  try {
++    await homeworkRpc('ai_settings', expectedClass, { ...payload.value })
++    const fresh = await homeworkRpc<HomeworkData>('load', expectedClass, { week_id: props.weekId || null })
++    if (!alive || props.classId !== expectedClass || props.role !== 'teacher') return
++    if (!fresh.ai_settings) throw new Error('Đã gửi yêu cầu nhưng chưa tải lại được cài đặt AI. Hãy làm mới để kiểm tra.')
++    adopt(fresh.ai_settings); emit('updated', fresh)
++  } catch (e) {
++    if (alive) error.value = e instanceof Error ? e.message : 'Không lưu được cài đặt. Vui lòng thử lại.'
++  } finally { saving.value = false; if (alive) emit('busy', false) }
++}
++</script>
++<template>
++  <AppCard v-if="role === 'teacher'" class="hw3-card hw3-ai" padding="lg">
++    <form id="ai-settings-form" novalidate @submit.prevent="save">
++      <header class="hw3-heading">
++        <div class="hw3-title"><span class="hw3-icon"><Sparkles :size="24" aria-hidden="true" /></span><div><p class="hw3-eyebrow">HỖ TRỢ GIÁO VIÊN</p><h2>Cài đặt AI</h2><p>Điều chỉnh cách phát hiện các Báo bài có nội dung tương tự.</p></div></div>
++        <label class="hw3-toggle"><input v-model="form.enabled" type="checkbox" role="switch" :disabled="saving || !settings" /><span class="hw3-switch" aria-hidden="true"></span><span>Bật AI phát hiện trùng theo ngữ nghĩa</span></label>
++      </header>
++      <p v-if="!settings" role="alert" class="hw3-feedback is-error">Chưa tải được cài đặt AI. Hãy làm mới để thử lại.</p>
++      <div class="hw3-thresholds">
++        <label class="hw3-threshold" for="ai-lower"><span>Chờ GV từ (%)</span><div class="hw3-number"><input id="ai-lower" v-model.number="form.lower" inputmode="numeric" type="number" min="0" max="99" step="1" :disabled="saving" :aria-invalid="!valid" aria-describedby="ai-validation" /><span>%</span></div><small>Từ mốc này, bài nghi trùng cần giáo viên xem xét.</small></label>
++        <label class="hw3-threshold" for="ai-upper"><span>Xác định trùng từ (%)</span><div class="hw3-number"><input id="ai-upper" v-model.number="form.upper" inputmode="numeric" type="number" min="1" max="100" step="1" :disabled="saving" :aria-invalid="!valid" aria-describedby="ai-validation" /><span>%</span></div><small>Từ mốc này, bài được xác định là trùng nội dung.</small></label>
++      </div>
++      <p v-if="!valid" id="ai-validation" role="alert" class="hw3-validation">Nhập số nguyên thỏa mãn 0 ≤ ngưỡng chờ GV &lt; ngưỡng trùng ≤ 100.</p>
++      <div class="hw3-preview">
++        <div class="hw3-section-line"><h3>Cách xử lý theo mức độ tương đồng</h3><span>0–100%</span></div>
++        <div id="ai-scale" class="hw3-scale" role="img" :aria-label="`Đăng bình thường dưới ${preview.lower}%; chờ GV từ ${preview.lower} đến dưới ${preview.upper}%; xác định trùng từ ${preview.upper} đến 100%.`">
++          <span class="hw3-band is-normal" :style="{width: preview.lower + '%'}"></span><span class="hw3-band is-review" :style="{width: (preview.upper - preview.lower) + '%'}"></span><span class="hw3-band is-duplicate" :style="{width: (100 - preview.upper) + '%'}"></span>
++          <i class="hw3-boundary" :style="{left: preview.lower + '%'}"></i><i class="hw3-boundary" :style="{left: preview.upper + '%'}"></i>
++        </div>
++        <div class="hw3-legend">
++          <div><i class="is-normal"></i><strong>Đăng bình thường</strong><small>{{ preview.lower === 0 ? 'Không có vùng dưới ngưỡng' : `0 đến dưới ${preview.lower}%` }}</small></div>
++          <div><i class="is-review"></i><strong>Chờ GV</strong><small>{{ preview.lower }} đến dưới {{ preview.upper }}%</small></div>
++          <div><i class="is-duplicate"></i><strong>Xác định trùng</strong><small>{{ preview.upper }}–100%</small></div>
++        </div>
++      </div>
++      <p class="hw3-note"><Info :size="18" aria-hidden="true" /><span>{{ form.enabled ? 'Các ngưỡng áp dụng cho kết quả so sánh trùng. Kiểm tra trùng chính xác vẫn luôn hoạt động.' : 'AI ngữ nghĩa đang tắt. Kiểm tra trùng chính xác và chuẩn hóa vẫn hoạt động; các ngưỡng vẫn được giữ.' }}</span></p>
++      <footer class="hw3-save-footer">
++        <div id="ai-save-state" :data-state="state" role="status" aria-live="polite" class="hw3-save-state" :class="{'is-success': state === 'saved', 'is-error': state === 'error'}">
++          <span v-if="saving">Đang lưu…</span><span v-else-if="error">{{ error }}</span><span v-else-if="dirty">● Chưa lưu thay đổi</span><span v-else><Check :size="18" aria-hidden="true" /> Đã lưu</span>
++        </div>
++        <AppButton type="submit" :loading="saving" :disabled="!valid || !settings || (!dirty && !error)"><Save :size="18" aria-hidden="true" />{{ saving ? 'Đang lưu…' : 'Lưu cài đặt' }}</AppButton>
++      </footer>
++    </form>
++  </AppCard>
++</template>
+--- a/src/components/homework/HomeworkGroupManager.vue
++++ b/src/components/homework/HomeworkGroupManager.vue
+@@ -0,0 +1,136 @@
++<script setup lang="ts">
++import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
++import { Users, Search, ArrowRight, Plus, RefreshCw, ListFilter } from 'lucide-vue-next'
++import AppCard from '../ui/AppCard.vue'
++import AppButton from '../ui/AppButton.vue'
++import { homeworkRpc, type HomeworkData, type EnglishGroup } from '../../features/homework/api'
++import { legacyApi } from '../../services/legacy-supabase'
++import { directoryUsersFromResponse } from '../../features/students/student-directory'
++import type { DirectoryUser } from '../../types/legacy'
++import '../../features/homework/management.css'
++const props = defineProps<{ classId: string; weekId?: string; role: string; data: HomeworkData }>()
++const emit = defineEmits<{ updated: [data: HomeworkData]; busy: [value: boolean] }>()
++const directory = ref<DirectoryUser[]>([]), loading = ref(true), loadError = ref(''), stale = ref(false)
++const search = ref(''), sort = ref('code'), unassigned = ref(false), groupFilter = ref('')
++const selected = ref<string[]>([]), target = ref(''), working = ref(false)
++const feedback = ref(''), failures = ref<string[]>([]), hasError = ref(false)
++const editorOpen = ref(false), editor = reactive({ id: '', name: '', is_active: true })
++let alive = true, directoryRequest = 0
++onBeforeUnmount(() => { alive = false; directoryRequest++; if (working.value) emit('busy', false) })
++const collator = new Intl.Collator('vi', { numeric: true, sensitivity: 'base' })
++const groupMap = computed(() => new Map(props.data.groups.map(g => [g.id, g])))
++const membership = computed(() => new Map(props.data.members.map(m => [m.student_id, m.english_group_id])))
++const activeGroups = computed(() => props.data.groups.filter(g => g.is_active))
++const roster = computed(() => {
++  const codes = new Map(directory.value.filter(u => u.classId === props.classId && u.active && !u.deletedAt && ['student', 'monitor'].includes(u.role)).map(u => [u.id, u.code]))
++  return props.data.learners.map(s => ({ ...s, code: codes.get(s.id) || '', groupId: membership.value.get(s.id) || '', group: groupMap.value.get(membership.value.get(s.id) || '') }))
++})
++const visible = computed(() => {
++  const query = search.value.trim().toLocaleLowerCase('vi')
++  return roster.value.filter(s => (!groupFilter.value || s.groupId === groupFilter.value) && (!unassigned.value || !s.groupId) && (!query || `${s.code}\n${s.name}`.toLocaleLowerCase('vi').includes(query))).sort((a,b) => {
++    const left = sort.value === 'name' ? a.name : sort.value === 'group' ? a.group?.name || '' : a.code
++    const right = sort.value === 'name' ? b.name : sort.value === 'group' ? b.group?.name || '' : b.code
++    return (left ? right ? collator.compare(left,right) : -1 : right ? 1 : 0) || collator.compare(a.code,b.code) || collator.compare(a.name,b.name) || a.id.localeCompare(b.id)
++  })
++})
++const selectedVisible = computed(() => visible.value.filter(s => selected.value.includes(s.id)))
++const allVisible = computed(() => visible.value.length > 0 && selectedVisible.value.length === visible.value.length)
++const unavailable = computed(() => working.value || loading.value || !!loadError.value || stale.value)
++const missingCodes = computed(() => roster.value.filter(s => !s.code).length)
++watch([search, unassigned, groupFilter, () => visible.value.map(s => s.id).sort().join('|')], () => { selected.value = [] })
++watch(unassigned, enabled => { if (enabled) groupFilter.value = '' })
++function chooseGroup(id: string) { if (working.value) return; groupFilter.value = id; unassigned.value = false }
++function selectVisible(event: Event) { selected.value = (event.target as HTMLInputElement).checked ? visible.value.map(s => s.id) : [] }
++function countMembers(id: string) { return props.data.members.filter(m => m.english_group_id === id).length }
++function messageOf(e: unknown) { return e instanceof Error ? e.message : 'Không thực hiện được thao tác. Vui lòng thử lại.' }
++async function loadDirectory() {
++  const request = ++directoryRequest, expectedClass = props.classId
++  loading.value = true; loadError.value = ''
++  try {
++    const result = await legacyApi.teacherListUsers(expectedClass)
++    if (!alive || request !== directoryRequest || props.classId !== expectedClass || props.role !== 'teacher') return
++    if (!Array.isArray(result.users)) throw new Error('Chưa tải được danh sách mã đăng nhập. Vui lòng thử lại.')
++    directory.value = directoryUsersFromResponse(result)
++  } catch (e) { if (alive && request === directoryRequest) loadError.value = messageOf(e) }
++  finally { if (alive && request === directoryRequest) loading.value = false }
++}
++async function refreshData(expectedClass: string) {
++  const fresh = await homeworkRpc<HomeworkData>('load', expectedClass, { week_id: props.weekId || null })
++  if (alive && props.classId === expectedClass && props.role === 'teacher') { emit('updated', fresh); stale.value = false }
++}
++async function refresh() {
++  if (working.value || props.role !== 'teacher') return
++  working.value = true; emit('busy', true); selected.value = []
++  try { await refreshData(props.classId); await loadDirectory() }
++  catch (e) { stale.value = true; loadError.value = `Chưa tải lại được phân nhóm: ${messageOf(e)}` }
++  finally { working.value = false; if (alive) emit('busy', false) }
++}
++function editGroup(group?: EnglishGroup) {
++  Object.assign(editor, group || { id: '', name: '', is_active: true }); editorOpen.value = true
++  feedback.value = ''; failures.value = []
++}
++async function saveGroup() {
++  if (working.value || props.role !== 'teacher' || !editor.name.trim()) return
++  working.value = true; emit('busy', true); feedback.value = ''; failures.value = []; hasError.value = false
++  const expectedClass = props.classId
++  try {
++    await homeworkRpc('group_save', expectedClass, { ...editor, id: editor.id || null })
++    // A completed mutation must be confirmed against the server before showing success.
++    stale.value = true
++    await refreshData(expectedClass)
++    if (alive) { feedback.value = 'Đã lưu nhóm Tiếng Anh.'; editorOpen.value = false }
++  } catch (e) { if (alive) { hasError.value = true; feedback.value = messageOf(e) } }
++  finally { working.value = false; if (alive) emit('busy', false) }
++}
++async function assignGroup() {
++  if (unavailable.value || props.role !== 'teacher' || !selectedVisible.value.length || !activeGroups.value.some(g => g.id === target.value)) return
++  const students = [...selectedVisible.value], destination = target.value, expectedClass = props.classId
++  working.value = true; emit('busy', true); feedback.value = ''; failures.value = []; hasError.value = false
++  let succeeded = 0
++  for (const student of students) {
++    // Changing class/role or leaving this screen stops unsent requests; an in-flight request remains server-authorized.
++    if (!alive || props.classId !== expectedClass || props.role !== 'teacher') break
++    try {
++      await homeworkRpc('group_assign', expectedClass, { student_id: student.id, english_group_id: destination })
++      succeeded++
++    } catch (e) { failures.value.push(`${student.code || student.name} · ${student.name}: ${messageOf(e)}`) }
++  }
++  if (!alive) return
++  selected.value = []; target.value = ''; hasError.value = failures.value.length > 0
++  const result = failures.value.length ? `${succeeded} thành công · ${failures.value.length} thất bại. Xem chi tiết lỗi và phân nhóm được tải lại bên dưới.` : `Đã chuyển ${succeeded} học sinh.`
++  feedback.value = 'Đang tải lại phân nhóm…'
++  try { await refreshData(expectedClass); if (alive) feedback.value = result }
++  catch (e) { stale.value = true; hasError.value = true; feedback.value = `${succeeded} yêu cầu thành công · ${failures.value.length} yêu cầu thất bại. Chưa tải lại được phân nhóm: ${messageOf(e)}. Hãy làm mới trước khi thao tác tiếp.` }
++  finally { working.value = false; if (alive) emit('busy', false) }
++}
++onMounted(() => { if (props.role === 'teacher') void loadDirectory() })
++</script>
++<template>
++  <div v-if="role === 'teacher'" class="hw3-groups-layout">
++    <AppCard class="hw3-card" padding="lg">
++      <header class="hw3-heading"><div class="hw3-title"><span class="hw3-icon"><Users :size="24" aria-hidden="true" /></span><div><p class="hw3-eyebrow">QUẢN LÝ THÀNH VIÊN</p><h2>Nhóm Tiếng Anh</h2><p>Chọn một nhóm để xem thành viên. Dùng danh sách bên dưới để gán hoặc chuyển nhóm.</p></div></div><AppButton variant="secondary" :disabled="working" @click="editGroup()"><Plus :size="18" aria-hidden="true" />Thêm nhóm</AppButton></header>
++      <div class="hw3-group-grid" aria-label="Lọc học sinh theo nhóm">
++        <button id="group-all" type="button" class="hw3-group-chip" :aria-pressed="!groupFilter && !unassigned" :disabled="working" @click="chooseGroup('')"><strong>Tất cả học sinh</strong><span>{{ data.learners.length }} học sinh</span></button>
++        <button v-for="g in data.groups" :id="`group-${g.id}`" :key="g.id" type="button" class="hw3-group-chip" :aria-pressed="groupFilter === g.id" :disabled="working" @click="chooseGroup(g.id)"><strong>{{ g.name }}</strong><span>{{ countMembers(g.id) }} thành viên{{ g.is_active ? '' : ' · Tạm ngưng' }}</span></button>
++      </div>
++      <p v-if="!data.groups.length" class="hw3-empty">Chưa có nhóm Tiếng Anh. Thêm nhóm để bắt đầu phân nhóm.</p>
++      <div v-if="groupFilter" class="hw3-row-actions"><button class="hw3-ghost" :disabled="working" @click="editGroup(groupMap.get(groupFilter))">Chỉnh sửa nhóm đang chọn</button><button class="hw3-ghost" :disabled="working" @click="chooseGroup('')">Xem tất cả học sinh</button></div>
++      <form v-if="editorOpen" class="hw3-editor" @submit.prevent="saveGroup"><h3>{{ editor.id ? 'Chỉnh sửa nhóm' : 'Thêm nhóm Tiếng Anh' }}</h3><div class="hw3-editor-fields"><label class="hw3-field">Tên nhóm<input v-model="editor.name" maxlength="100" required :disabled="working" /></label><label class="hw3-check"><input v-model="editor.is_active" type="checkbox" :disabled="working" />Hoạt động</label></div><div class="hw3-row-actions"><AppButton type="submit" :loading="working" :disabled="!editor.name.trim()">Lưu nhóm</AppButton><button class="hw3-ghost" type="button" :disabled="working" @click="editorOpen = false">Hủy</button></div></form>
++    </AppCard>
++    <AppCard class="hw3-card" padding="lg">
++      <header class="hw3-heading"><div class="hw3-title"><span class="hw3-icon"><ListFilter :size="24" aria-hidden="true" /></span><div><h2>Danh sách học sinh</h2><p>Tìm theo mã đăng nhập hoặc họ tên, chọn học sinh rồi chuyển vào nhóm.</p></div></div><AppButton variant="secondary" :disabled="working || loading" @click="refresh"><RefreshCw :size="18" aria-hidden="true" />Làm mới danh sách</AppButton></header>
++      <div class="hw3-toolbar"><label class="hw3-field" for="student-search">Tìm học sinh<input id="student-search" v-model="search" type="search" placeholder="Mã đăng nhập hoặc họ tên…" :disabled="working" /></label><label class="hw3-field" for="student-sort">Sắp xếp theo<select id="student-sort" v-model="sort" :disabled="working"><option value="code">Mã đăng nhập — tăng dần</option><option value="name">Họ tên — tăng dần</option><option value="group">Nhóm hiện tại — tăng dần</option></select></label><label class="hw3-check"><input id="unassigned-only" v-model="unassigned" type="checkbox" :disabled="working" />Chưa có nhóm</label></div>
++      <p v-if="feedback" id="assignment-feedback" class="hw3-feedback" :class="hasError ? 'is-error' : 'is-success'" role="status" aria-live="polite">{{ feedback }}</p><ul v-if="failures.length" class="hw3-failures"><li v-for="failure in failures" :key="failure">{{ failure }}</li></ul>
++      <p v-if="loading" class="hw3-empty" role="status">Đang tải danh sách học sinh…</p>
++      <div v-else-if="loadError" role="alert" class="hw3-feedback is-error">{{ loadError }} <button class="hw3-ghost" :disabled="working" @click="refresh">Thử lại</button></div>
++      <template v-else>
++        <p v-if="stale" role="alert" class="hw3-feedback is-error">Phân nhóm chưa được xác nhận lại. Hãy làm mới danh sách trước khi chuyển nhóm.</p>
++        <p v-if="missingCodes" class="hw3-note">{{ missingCodes }} học sinh chưa tải được mã đăng nhập. Có thể làm mới danh sách để kiểm tra.</p>
++        <div class="hw3-selection-meta"><label class="hw3-check"><input id="select-visible" type="checkbox" :checked="allVisible" :indeterminate="selectedVisible.length > 0 && !allVisible" :disabled="unavailable || !visible.length" @change="selectVisible" />Chọn tất cả đang hiển thị ({{ visible.length }})</label><span v-if="!selectedVisible.length">Chưa chọn học sinh</span></div>
++        <section v-if="selectedVisible.length" id="assignment-bar" class="hw3-action-bar" aria-label="Thanh thao tác gán nhóm"><strong>Đã chọn {{ selectedVisible.length }} học sinh</strong><form id="assignment-form" @submit.prevent="assignGroup"><label class="hw3-field" for="assignment-target">Chuyển vào nhóm<select id="assignment-target" v-model="target" :disabled="unavailable" required><option value="">Chọn nhóm đích</option><option v-for="g in activeGroups" :key="g.id" :value="g.id">{{ g.name }}</option></select></label><AppButton type="submit" :loading="working" :disabled="unavailable || !activeGroups.some(g => g.id === target)"><ArrowRight :size="18" aria-hidden="true" />{{ working ? 'Đang chuyển…' : 'Chuyển vào nhóm' }}</AppButton><AppButton variant="secondary" :disabled="working" @click="selected = []">Bỏ chọn</AppButton></form></section>
++        <div v-if="visible.length" class="hw3-roster-container"><table class="hw3-roster"><thead><tr><th scope="col"><span class="sr-only">Chọn học sinh</span></th><th scope="col">Mã đăng nhập</th><th scope="col">Họ tên</th><th scope="col">Nhóm hiện tại</th></tr></thead><tbody><tr v-for="student in visible" :key="student.id" :data-student-id="student.id" :class="{'is-selected': selected.includes(student.id)}"><td><label class="hw3-select-box"><input :id="`select-${student.id}`" v-model="selected" type="checkbox" :value="student.id" :aria-label="`Chọn ${student.code} ${student.name}`" :disabled="unavailable" /></label></td><td data-label="Mã đăng nhập"><code>{{ student.code || 'Chưa có mã' }}</code></td><td data-label="Họ tên">{{ student.name }}</td><td data-label="Nhóm hiện tại"><span class="hw3-badge" :class="{'is-unassigned': !student.groupId}">{{ student.group?.name || (student.groupId ? 'Nhóm không còn khả dụng' : 'Chưa có nhóm') }}{{ student.group && !student.group.is_active ? ' · Tạm ngưng' : '' }}</span></td></tr></tbody></table></div>
++        <div v-else class="hw3-empty" role="status"><Search :size="28" aria-hidden="true" /><p>{{ search.trim() ? 'Không có kết quả tìm kiếm. Thử mã đăng nhập hoặc tên khác.' : unassigned ? 'Không có học sinh chưa gán nhóm.' : groupFilter ? 'Nhóm chưa có thành viên.' : 'Lớp chưa có học sinh để phân nhóm.' }}</p></div>
++      </template>
++    </AppCard>
++  </div>
++</template>
+--- a/src/features/homework/management.css
++++ b/src/features/homework/management.css
+@@ -0,0 +1,16 @@
++/* FEAT-003 uses V9 tokens and shared AppCard/AppButton; scoped by hw3 classes. */
++.hw3-card{min-width:0;border:1px solid var(--border);border-radius:var(--radius-xl,24px);background:var(--surface);box-shadow:var(--shadow-sm);overflow-wrap:anywhere}
++.hw3-card h2,.hw3-card h3,.hw3-card p{margin:0}.hw3-card h2{font-size:1.35rem;line-height:1.35}.hw3-card h3{font-size:1rem}.hw3-card small{line-height:1.5;color:var(--text-muted,var(--text-secondary))}
++.hw3-heading,.hw3-section-line,.hw3-save-footer{display:flex;align-items:center;justify-content:space-between;gap:var(--space-5,20px)}
++.hw3-heading{align-items:flex-start;flex-wrap:wrap;margin-bottom:24px}.hw3-title{display:flex;gap:14px;align-items:flex-start;min-width:0;flex:1 1 250px}.hw3-title>div{min-width:0}.hw3-title p:not(.hw3-eyebrow){margin-top:6px;color:var(--text-secondary);font-size:.9rem;line-height:1.6}
++.hw3-icon{display:grid;place-items:center;flex:0 0 48px;width:48px;height:48px;border-radius:var(--radius-md,14px);background:var(--wash-violet,#f2edff);color:var(--color-primary)}.hw3-eyebrow{font-size:.7rem;letter-spacing:.1em;font-weight:800;color:var(--color-primary);margin-bottom:5px!important}
++.hw3-toggle{position:relative;display:flex;align-items:center;gap:10px;max-width:320px;min-height:44px;font-size:.86rem;font-weight:600;cursor:pointer}.hw3-toggle input{position:absolute;opacity:0;width:44px;height:44px;left:0;margin:0}.hw3-switch{position:relative;flex-shrink:0;width:44px;height:26px;border-radius:20px;background:var(--text-muted,#718096);transition:background .18s}.hw3-switch:before{content:'';position:absolute;width:20px;height:20px;background:white;top:3px;left:3px;border-radius:50%;transition:transform .18s}.hw3-toggle input:checked+.hw3-switch{background:var(--color-primary)}.hw3-toggle input:checked+.hw3-switch:before{transform:translateX(18px)}.hw3-toggle input:focus-visible+.hw3-switch{outline:3px solid var(--color-primary);outline-offset:4px}.hw3-toggle input:disabled~span{opacity:.55}
++.hw3-thresholds{display:grid;grid-template-columns:1fr 1fr;gap:20px}.hw3-threshold{display:grid;gap:10px;padding:20px;border:1px solid var(--border);border-radius:var(--radius-lg,18px);background:var(--surface-raised,var(--surface));font-weight:700;min-width:0}.hw3-threshold small{font-weight:400}.hw3-number{position:relative}.hw3-number input{width:100%;padding:12px 42px 12px 14px;font-size:1.6rem;font-weight:800;color:var(--text);border:1px solid var(--border);border-radius:var(--radius-md,14px);background:var(--surface);min-height:56px;box-sizing:border-box}.hw3-number>span{position:absolute;right:15px;top:16px;color:var(--text-secondary)}
++.hw3-preview{margin-top:24px;padding:20px;border-radius:var(--radius-lg,18px);background:var(--surface-raised,var(--surface))}.hw3-section-line{font-size:.8rem;color:var(--text-secondary);flex-wrap:wrap}.hw3-section-line h3{color:var(--text)}.hw3-scale{position:relative;display:flex;height:16px;border-radius:8px;margin:18px 0;overflow:hidden;background:var(--border)}.hw3-band{height:100%;transition:width .15s}.hw3-boundary{position:absolute;width:2px;height:100%;background:var(--surface);transform:translateX(-1px)}.hw3-card .is-normal{background:#2b9873}.hw3-card .is-review{background:#e4b44f}.hw3-card .is-duplicate{background:#c8758d}.hw3-legend{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px}.hw3-legend>div{display:grid;grid-template-columns:9px 1fr;gap:5px 8px;align-items:center;min-width:0}.hw3-legend i{width:9px;height:9px;border-radius:50%}.hw3-legend strong{font-size:.84rem}.hw3-legend small{grid-column:2;font-size:.78rem}.hw3-note{display:flex;gap:9px;align-items:flex-start;font-size:.84rem;color:var(--text-secondary);line-height:1.6;padding:18px 0!important}.hw3-note svg{flex-shrink:0;margin-top:3px}
++.hw3-save-footer{padding-top:18px;border-top:1px solid var(--border)}.hw3-save-state{font-size:.87rem;min-width:0}.hw3-save-state span{display:flex;align-items:center;gap:7px}.hw3-save-state.is-success{color:var(--color-success)}.hw3-save-state.is-error,.hw3-validation{color:var(--color-danger)}.hw3-validation{font-size:.86rem;margin-top:12px!important}.hw3-card .app-button{white-space:normal;flex-shrink:0;min-height:44px}
++.hw3-groups-layout{display:grid;gap:24px;min-width:0}.hw3-group-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(145px,1fr));gap:12px}.hw3-group-chip{min-width:0;min-height:94px;display:grid;gap:7px;text-align:left;padding:16px;border:1px solid var(--border);border-radius:var(--radius-lg,18px);background:var(--surface);color:var(--text);cursor:pointer;transition:border-color .18s,box-shadow .18s,background .18s}.hw3-group-chip strong{font-size:1.1rem;overflow-wrap:anywhere}.hw3-group-chip span{font-size:.8rem;color:var(--text-secondary)}.hw3-group-chip[aria-pressed=true]{border-color:var(--color-primary);background:var(--wash-violet,#f2edff);box-shadow:inset 0 0 0 1px var(--color-primary)}.hw3-group-chip:hover:not(:disabled){border-color:var(--color-primary)}.hw3-group-chip:active:not(:disabled){transform:translateY(1px)}.hw3-card button:focus-visible,.hw3-card input:focus-visible,.hw3-card select:focus-visible{outline:3px solid var(--color-primary);outline-offset:2px}.hw3-card button:disabled{cursor:not-allowed;opacity:.55}
++.hw3-toolbar{display:grid;grid-template-columns:minmax(0,1.6fr) minmax(0,1fr) auto;gap:16px;align-items:end;margin:20px 0}.hw3-field{display:grid;gap:8px;min-width:0;font-size:.85rem;font-weight:650}.hw3-field input,.hw3-field select{box-sizing:border-box;min-width:0;width:100%;min-height:46px;background:var(--surface);color:var(--text);border:1px solid var(--border);border-radius:var(--radius-md,14px);padding:10px 12px;font:inherit}.hw3-check{display:flex;gap:9px;align-items:center;min-height:46px;font-size:.85rem;cursor:pointer}.hw3-check input,.hw3-select-box input{accent-color:var(--color-primary);width:18px;height:18px;flex-shrink:0;cursor:pointer}.hw3-check input:disabled{cursor:not-allowed}.hw3-select-box{display:grid;place-items:center;min-width:44px;min-height:44px;cursor:pointer}
++.hw3-roster{width:100%;table-layout:fixed;border-collapse:separate;border-spacing:0;font-size:.9rem}.hw3-roster th{text-align:left;position:sticky;top:0;background:var(--surface-raised,var(--surface));color:var(--text-secondary);font-size:.78rem;z-index:1;border-bottom:1px solid var(--border)}.hw3-roster td{border-bottom:1px solid var(--border);padding:12px 10px;overflow-wrap:anywhere}.hw3-roster th{padding:10px}.hw3-roster th:first-child{width:44px;padding:0}.hw3-roster th:nth-child(2){width:24%}.hw3-roster th:nth-child(4){width:24%}.hw3-roster td:first-child{padding:0}.hw3-roster tr.is-selected td{background:var(--wash-violet,#f2edff)}.hw3-roster code{font-family:inherit;font-variant-numeric:tabular-nums;font-weight:700;color:var(--color-primary)}.hw3-roster-container{max-height:580px;overflow:auto;min-width:0}.hw3-badge{display:inline-block;max-width:100%;box-sizing:border-box;border-radius:9px;padding:5px 9px;font-size:.78rem;background:var(--wash-violet,#f2edff);color:var(--text);overflow-wrap:anywhere}.hw3-badge.is-unassigned{background:var(--surface-raised);color:var(--text-muted)}.hw3-selection-meta{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;padding-bottom:12px;font-size:.85rem;color:var(--text-secondary)}
++.hw3-action-bar{border:1px solid color-mix(in srgb,var(--color-primary) 30%,var(--border));border-radius:var(--radius-lg,18px);background:var(--wash-violet,#f2edff);padding:16px;margin-bottom:16px}.hw3-action-bar form{display:flex;align-items:end;gap:12px;flex-wrap:wrap}.hw3-action-bar .hw3-field{flex:1 1 170px}.hw3-action-bar strong{display:block;margin-bottom:12px;font-size:.9rem}.hw3-ghost{min-height:44px;padding:10px 12px;border:0;background:transparent;color:var(--color-primary);font-weight:700;cursor:pointer;border-radius:var(--radius-md,14px)}.hw3-ghost:hover:not(:disabled){background:var(--surface-raised)}.hw3-feedback{padding:14px 16px;border-radius:var(--radius-md,14px);margin:14px 0!important;font-size:.9rem;line-height:1.6;border:1px solid var(--border)}.hw3-feedback.is-error{color:var(--color-danger);background:var(--surface-raised)}.hw3-feedback.is-success{color:var(--color-success);background:var(--surface-raised)}.hw3-empty{text-align:center;padding:32px 16px;line-height:1.7;color:var(--text-secondary);background:var(--surface-raised);border-radius:var(--radius-lg,18px)}.hw3-empty svg{margin-bottom:8px;color:var(--color-primary)}.hw3-editor{margin-top:20px;padding:20px;border:1px solid var(--border);border-radius:var(--radius-lg,18px)}.hw3-editor-fields{display:flex;align-items:end;gap:16px;flex-wrap:wrap;margin:16px 0}.hw3-editor-fields>.hw3-field{flex:1 1 220px}.hw3-row-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap}.hw3-failures{margin:8px 0;padding-left:20px;font-size:.85rem;line-height:1.6}
++@media(max-width:700px){.hw3-card.pad-lg{padding:18px}.hw3-heading{gap:16px}.hw3-thresholds{grid-template-columns:1fr}.hw3-threshold{padding:16px}.hw3-preview{padding:16px}.hw3-legend{grid-template-columns:1fr;gap:12px}.hw3-toggle{max-width:100%}.hw3-save-footer{align-items:stretch;flex-direction:column}.hw3-save-footer .app-button{width:100%}.hw3-toolbar{grid-template-columns:1fr}.hw3-roster,.hw3-roster tbody{display:block}.hw3-roster thead{display:none}.hw3-roster tr{display:grid;grid-template-columns:44px minmax(0,1fr);padding:12px 0;border-bottom:1px solid var(--border);border-radius:var(--radius-md,14px)}.hw3-roster tr.is-selected{background:var(--wash-violet,#f2edff)}.hw3-roster td{display:block;padding:5px 8px;border:0;min-width:0}.hw3-roster td:first-child{grid-column:1;grid-row:1 / span 3;align-self:start}.hw3-roster td:not(:first-child){grid-column:2}.hw3-roster td[data-label]:before{content:attr(data-label);display:block;font-size:.7rem;color:var(--text-muted);margin-bottom:4px}.hw3-action-bar form{align-items:stretch}.hw3-action-bar .hw3-field{flex-basis:100%}.hw3-action-bar .app-button{flex:1 1 auto}.hw3-group-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.hw3-roster-container{max-height:none;overflow:visible}}
++@media(prefers-reduced-motion:reduce){.hw3-band,.hw3-switch,.hw3-switch:before,.hw3-group-chip{transition:none}}
+--- a/src/pages/HomeworkPage.vue
++++ b/src/pages/HomeworkPage.vue
+@@ -4,6 +4,8 @@
+ import { useContextStore } from "../stores/context";
+ import PageArtwork from "../components/ui/PageArtwork.vue";
+ import PageBannerArt from "../components/ui/PageBannerArt.vue";
++import HomeworkAiSettings from "../components/homework/HomeworkAiSettings.vue";
++import HomeworkGroupManager from "../components/homework/HomeworkGroupManager.vue";
+ import HomeworkCard from "../components/homework/HomeworkCard.vue";
+ import HomeworkDuplicateWarning from "../components/homework/HomeworkDuplicateWarning.vue";
+ import {
+@@ -15,7 +17,6 @@
+   type HomeworkData,
+   type Notice,
+   type Subject,
+-  type EnglishGroup,
+ } from "../features/homework/api";
+ import { homeworkTabs, resolveHomeworkTab, useHomeworkViewStore } from "../features/homework/view-context";
+ const view = useHomeworkViewStore();
+@@ -68,13 +69,7 @@
+   is_english: false,
+   is_active: true,
+ });
+-const groupForm = reactive({ id: "", name: "", is_active: true }),
+-  assign = reactive({ student_id: "", english_group_id: "" });
+-const seed = ref(3),
+-  semanticEnabled = ref(true),
+-  pending = ref(70),
+-  reject = ref(90),
+-  alerts = ref("system");
++const seed = ref(3), alerts = ref("system");
+ const tabs = computed(() => homeworkTabs(role.value));
+ // A stale or unauthorized selection never becomes the rendered page/Owl context.
+ const tab = computed({
+@@ -125,9 +120,6 @@
+     if (id !== loadId) return;
+     data.value = result;
+     seed.value = result.settings.seed_threshold;
+-    pending.value = result.ai_settings?.duplicate_review_threshold ?? 70;
+-    reject.value = result.ai_settings?.duplicate_auto_threshold ?? 90;
+-    semanticEnabled.value = result.ai_settings?.semantic_duplicate_enabled ?? true;
+     alerts.value = result.alert_level || "system";
+   } catch (e) {
+     if (id === loadId)
+@@ -248,16 +240,16 @@
+     },
+   );
+ }
+-function editGroup(g?: EnglishGroup) {
+-  Object.assign(groupForm, g || { id: "", name: "", is_active: true });
+-}
+ async function saveSubject() {
+   await act("subject_save", { ...subjectForm, id: subjectForm.id || null });
+   if (!error.value) editSubject();
+ }
+-async function saveGroup() {
+-  await act("group_save", { ...groupForm, id: groupForm.id || null });
+-  if (!error.value) editGroup();
++function acceptManagementUpdate(fresh: HomeworkData) {
++  // A confirmed management reload supersedes any earlier page reload in flight.
++  loadId++;
++  loading.value = false;
++  data.value = fresh;
++  view.refreshVersion++;
+ }
+ function jump(id: string) {
+   tab.value = "board";
+@@ -302,6 +294,7 @@
+       <button
+         v-for="t in tabs"
+         :key="t.id"
++        :disabled="busy"
+         :aria-current="tab === t.id ? 'page' : undefined"
+         @click="tab = t.id"
+       >
+@@ -631,68 +624,7 @@
+           </div>
+         </form>
+       </section>
+-      <section v-if="tab === 'english' && teacher" class="panel">
+-        <h2>Nhóm Tiếng Anh</h2>
+-        <div class="config-list">
+-          <button v-for="g in data.groups" :key="g.id" @click="editGroup(g)">
+-            {{ g.name }} · {{ g.is_active ? "Hoạt động" : "Tạm ngưng" }}
+-          </button>
+-        </div>
+-        <form class="form-grid" @submit.prevent="saveGroup">
+-          <label
+-            >Tên nhóm<input
+-              v-model="groupForm.name"
+-              required
+-              maxlength="100" /></label
+-          ><label class="check"
+-            ><input v-model="groupForm.is_active" type="checkbox" />Hoạt
+-            động</label
+-          >
+-          <div class="actions">
+-            <button :disabled="busy">
+-              {{ groupForm.id ? "Lưu nhóm" : "Thêm nhóm" }}</button
+-            ><button type="button" @click="editGroup()">Nhập mới</button>
+-          </div>
+-        </form>
+-        <h3>Gán hoặc chuyển nhóm</h3>
+-        <form
+-          class="form-grid"
+-          @submit.prevent="act('group_assign', { ...assign })"
+-        >
+-          <label
+-            >Học sinh<select v-model="assign.student_id" required>
+-              <option value="">Chọn học sinh</option>
+-              <option v-for="s in data.learners" :key="s.id" :value="s.id">
+-                {{ s.name }}
+-              </option>
+-            </select></label
+-          ><label
+-            >Nhóm mới<select v-model="assign.english_group_id" required>
+-              <option value="">Chọn nhóm</option>
+-              <option
+-                v-for="g in data.groups.filter((x) => x.is_active)"
+-                :key="g.id"
+-                :value="g.id"
+-              >
+-                {{ g.name }}
+-              </option>
+-            </select></label
+-          ><button :disabled="busy">Lưu phân nhóm</button>
+-        </form>
+-        <ul>
+-          <li v-for="s in data.learners" :key="s.id">
+-            {{ s.name }} —
+-            {{
+-              data.groups.find(
+-                (g) =>
+-                  g.id ===
+-                  data?.members.find((m) => m.student_id === s.id)
+-                    ?.english_group_id,
+-              )?.name || "Chưa có nhóm"
+-            }}
+-          </li>
+-        </ul>
+-      </section>
++      <HomeworkGroupManager v-if="tab === 'english' && teacher" :key="classId" :class-id="classId" :week-id="week" :role="role" :data="data" @updated="acceptManagementUpdate" @busy="busy = $event" />
+       <section v-if="tab === 'trash' && manager">
+         <h2>Thùng rác Báo bài</h2>
+         <p>
+@@ -732,39 +664,7 @@
+           }}</pre>
+         </details>
+       </section>
+-      <section v-if="tab === 'ai_settings' && teacher" class="panel">
+-        <h2>Cài đặt AI Báo bài</h2>
+-        <p>Tắt semantic vẫn giữ kiểm tra nội dung trùng chính xác và chuẩn hóa.</p>
+-        <form
+-          class="form-grid"
+-          @submit.prevent="
+-            act('ai_settings', {
+-              semantic_duplicate_enabled: semanticEnabled,
+-              duplicate_review_threshold: pending,
+-              duplicate_auto_threshold: reject,
+-            })
+-          "
+-        >
+-          <label><input v-model="semanticEnabled" type="checkbox" /> Bật kiểm tra trùng semantic</label>
+-          <label
+-            >Ngưỡng chờ GV (%)<input
+-              v-model.number="pending"
+-              type="number"
+-              step="1"
+-              min="0"
+-              max="99"
+-              required /></label
+-          ><label
+-            >Ngưỡng trùng (%)<input
+-              v-model.number="reject"
+-              type="number"
+-              step="1"
+-              :min="pending + 1"
+-              max="100"
+-              required /></label
+-          ><button :disabled="busy || !Number.isInteger(pending) || !Number.isInteger(reject) || pending >= reject">Lưu cài đặt AI</button>
+-        </form>
+-      </section>
++      <HomeworkAiSettings v-if="teacher" v-show="tab === 'ai_settings'" :key="classId" :class-id="classId" :week-id="week" :role="role" :settings="data.ai_settings" @updated="acceptManagementUpdate" @busy="busy = $event" />
+       <section v-if="tab === 'settings' && admin" class="panel">
+         <h2>Cấu hình Báo bài</h2>
+         <form
+--- a/tests/bug-001/regression.test.ts
++++ b/tests/bug-001/regression.test.ts
+@@ -5,6 +5,7 @@
+ import type { LegacyState, CurrentUser } from '../../src/types/legacy'
+ 
+ const env=vi.hoisted(()=>({auth:null as any,ctx:null as any,route:null as any,rpc:vi.fn(),submit:vi.fn()}))
++vi.mock('../../src/services/legacy-supabase',()=>({legacyApi:{teacherListUsers:async()=>({users:[]})}}))
+ vi.mock('../../src/stores/auth',()=>({useAuthStore:()=>env.auth}))
+ vi.mock('../../src/stores/context',()=>({useContextStore:()=>env.ctx}))
+ vi.mock('../../src/stores/preferences',()=>({usePreferencesStore:()=>({owlEnabled:true,owlQuotesEnabled:false,owlAutoOpenUrgent:true,owlFollowPointer:false,owlHeadTilt:false})}))
+@@ -21,7 +22,7 @@
+ const user=(role:string)=>({id:'u',role,code:'TEST',name:'Test',active:true,classId:'c'} as CurrentUser)
+ const legacy=()=>({currentWeekId:'w',weeks:[],periods:[],schedule:[],overrides:[],users:[user('student')],registrations:[{id:'r',weekId:'w',studentId:'u',status:'needs_revision'}]} as unknown as LegacyState)
+ const notice={id:'n',class_id:'c',subject_id:'s',author_id:'other',author_role:'student',author_name:'An',subject:'Toán',title:'Bài tập',content:'Nội dung',status:'published',due_at:'2026-09-12T00:00:00Z',created_at:'2026-09-09T00:00:00Z',hearts:0}
+-const data=()=>({subjects:[{id:'s',name:'Toán',is_active:true}],notices:[notice],history:[],queue:[],leaderboard:[],notifications:[],groups:[],members:[],audit:[],trash:[],settings:{seed_threshold:3,pending_threshold:70,reject_threshold:90}})
++const data=()=>({subjects:[{id:'s',name:'Toán',is_active:true}],notices:[notice],history:[],queue:[],leaderboard:[],notifications:[],groups:[],members:[],learners:[],ai_settings:{semantic_duplicate_enabled:true,duplicate_review_threshold:70,duplicate_auto_threshold:90},audit:[],trash:[],settings:{seed_threshold:3,pending_threshold:70,reject_threshold:90}})
+ let app:any
+ beforeEach(()=>{
+  setActivePinia(createPinia());env.auth=reactive({ready:true,isAuthenticated:true,currentUser:user('admin'),role:'admin',legacyState:legacy(),bootstrap:vi.fn()})
+@@ -120,8 +121,9 @@
+  it('Teacher AI settings save only operational keys, without Admin achievement settings',async()=>{
+   actor('teacher');const root=renderPair();await settle();await click(root,'Cài đặt AI');
+   expect(textOf(root)).not.toMatch(/GROQ_API_KEY|service_role|Lưu ngưỡng danh hiệu/);
+-  const form=findAll(root,n=>n.type==='form')[0];await form.props.onSubmit({preventDefault(){}});await settle();
+-  expect(env.rpc).toHaveBeenCalledWith('ai_settings','c',{semantic_duplicate_enabled:true,duplicate_review_threshold:70,duplicate_auto_threshold:90});
++  findAll(root,n=>n.props.id==='ai-lower')[0].props['onUpdate:modelValue'](65);await settle();
++  const form=findAll(root,n=>n.props.id==='ai-settings-form')[0];await form.props.onSubmit({preventDefault(){}});await settle();
++  expect(env.rpc).toHaveBeenCalledWith('ai_settings','c',{semantic_duplicate_enabled:true,duplicate_review_threshold:65,duplicate_auto_threshold:90});
+  });
+  it('Admin hard delete has reason and explicit irreversible confirmation; no restore',async()=>{
+   env.rpc.mockImplementation(async(action:string)=>action==='load'?{...data(),trash:[{...notice,status:'deleted',delete_reason:'mistake'}]}:{});
+--- a/tests/feat-003/ui.test.ts
++++ b/tests/feat-003/ui.test.ts
+@@ -0,0 +1,98 @@
++import {beforeEach,afterEach,it,expect,vi} from 'vitest'
++import {reactive} from 'vue'
++import {createPinia,setActivePinia} from 'pinia'
++import {mount,click,textOf,findAll,settle} from '../bug-001/renderer'
++const env=vi.hoisted(()=>({auth:null as any,ctx:null as any,rpc:vi.fn(),directory:vi.fn(),stored:null as any,failIds:new Set<string>()}))
++vi.mock('../../src/stores/auth',()=>({useAuthStore:()=>env.auth}))
++vi.mock('../../src/stores/context',()=>({useContextStore:()=>env.ctx}))
++vi.mock('../../src/services/legacy-supabase',()=>({legacyApi:{teacherListUsers:env.directory}}))
++vi.mock('../../src/features/homework/api',async original=>({...await original<any>(),homeworkRpc:env.rpc}))
++import HomeworkPage from '../../src/pages/HomeworkPage.vue'
++const users=[{id:'a',code:'230003',fullName:'Bình',classId:'c',active:true,role:'student'}, {id:'b',code:'230001',fullName:'Chi',classId:'c',active:true,role:'student'}, {id:'c',code:'230002',fullName:'An',classId:'c',active:true,role:'monitor'}]
++const initial=()=>({subjects:[],groups:[{id:'g1',name:'E1',is_active:true},{id:'g3',name:'E3',is_active:true}],members:[{student_id:'a',english_group_id:'g1'},{student_id:'b',english_group_id:'g3'}],learners:users.map(u=>({id:u.id,name:u.fullName})),notices:[],history:[],queue:[],trash:[],audit:[],notifications:[],leaderboard:[],settings:{seed_threshold:3},ai_settings:{semantic_duplicate_enabled:true,duplicate_review_threshold:70,duplicate_auto_threshold:90}})
++let app:any,root:any
++beforeEach(()=>{
++ setActivePinia(createPinia());env.stored=initial();env.failIds=new Set();env.auth=reactive({currentUser:{id:'teacher',classId:'c'},role:'teacher'});env.ctx=reactive({selectedClassId:'c',selectedWeekId:null,classes:[],weeks:[]});env.directory.mockReset().mockResolvedValue({users});
++ env.rpc.mockReset().mockImplementation(async(action:string,_class:string,p:any)=>{
++  if(action==='load')return structuredClone(env.stored)
++  if(action==='ai_settings')env.stored.ai_settings={...p}
++  if(action==='group_assign'){if(env.failIds.has(p.student_id))throw Error('Nhóm không còn hoạt động');env.stored.members=env.stored.members.filter((m:any)=>m.student_id!==p.student_id).concat({student_id:p.student_id,english_group_id:p.english_group_id})}
++  return {ok:true}
++ });
++ vi.stubGlobal('Document',class{});vi.stubGlobal('ShadowRoot',class{});vi.stubGlobal('document',{activeElement:null});
++})
++afterEach(()=>{app?.unmount();app=null;vi.unstubAllGlobals()})
++async function render(tab:string){const x=mount(HomeworkPage);app=x.app;root=x.root;await settle();await click(root,tab);await settle();return root}
++function field(id:string){const n=findAll(root,n=>n.props.id===id)[0];expect(n,`field ${id}`).toBeDefined();return n}
++async function value(id:string,v:any){const f=field(id);if(f.props['onUpdate:modelValue'])f.props['onUpdate:modelValue'](v);else await f.props.onChange?.({target:{value:v,checked:v}});await settle()}
++function rows(){return findAll(root,n=>n.props['data-student-id']).map(n=>n.props['data-student-id'])}
++async function select(id:string){const f=field('select-'+id);f.props['onUpdate:modelValue']([...f._modelValue,id]);await settle()}
++const mutations=()=>env.rpc.mock.calls.filter(c=>c[0]!=='load')
++it('AC-301/302 displays settings visualization and keeps valid edits local until save',async()=>{
++ await render('Cài đặt AI');expect(textOf(root)).toContain('Đăng bình thường');expect(textOf(root)).toContain('Chờ GV từ (%)');
++ await value('ai-lower',65);expect(textOf(root)).toContain('Chưa lưu thay đổi');expect(field('ai-scale').props['aria-label']).toContain('65');expect(mutations()).toHaveLength(0);
++})
++it('AC-303 rejects empty, equal, reversed, fractional and out-of-range thresholds without request',async()=>{
++ await render('Cài đặt AI');for(const [lower,upper] of [['',90],[90,90],[95,80],[-1,90],[70,101],[70.5,90]]){await value('ai-lower',lower);await value('ai-upper',upper);await field('ai-settings-form').props.onSubmit({preventDefault(){}});await settle();expect(findAll(root,n=>n.props.id==='ai-validation').map(textOf).join('')).toContain('số nguyên');expect(mutations()).toHaveLength(0);}
++})
++it('AC-304/305 save confirms reloaded values; provider save failure retains dirty form',async()=>{
++ await render('Cài đặt AI');await value('ai-lower',60);await field('ai-settings-form').props.onSubmit({preventDefault(){}});await settle();await settle();expect(textOf(root)).toContain('Đã lưu');expect(env.stored.ai_settings.duplicate_review_threshold).toBe(60);
++ await value('ai-upper',95);env.rpc.mockRejectedValueOnce(Error('Mất kết nối'));await field('ai-settings-form').props.onSubmit({preventDefault(){}});await settle();expect(textOf(root)).toContain('Mất kết nối');expect(field('ai-save-state').props['data-state']).toBe('error');
++})
++it('EC-303 unsaved settings survive tab navigation without false saved state',async()=>{
++ await render('Cài đặt AI');await value('ai-lower',64);await click(root,'Bảng Báo bài');await click(root,'Cài đặt AI');expect(textOf(field('ai-save-state'))).toContain('Chưa lưu thay đổi');expect(field('ai-lower').props.value ?? field('ai-lower')._value).not.toBe(70);expect(mutations()).toHaveLength(0);
++})
++it('AC-306/307 cards count current memberships; default code sort; card selection is read-only',async()=>{
++ await render('Tiếng Anh');expect(rows()).toEqual(['b','c','a']);expect(textOf(field('group-g1'))).toContain('1 thành viên');await field('group-g1').props.onClick();await settle();expect(rows()).toEqual(['a']);expect(mutations()).toHaveLength(0);
++})
++it('AC-308/309/310 search matches trimmed code/name, sorts and unassigned filter',async()=>{
++ await render('Tiếng Anh');await value('student-search','  bÌNH  ');expect(rows()).toEqual(['a']);await value('student-search','230001');expect(rows()).toEqual(['b']);await value('student-search','');await value('student-sort','name');expect(rows()).toEqual(['c','a','b']);await value('student-sort','group');expect(rows()).toEqual(['a','b','c']);await value('unassigned-only',true);expect(rows()).toEqual(['c']);
++})
++it('AC-311/319 checkbox batch assigns exactly visible selection and reloads membership',async()=>{
++ await render('Tiếng Anh');await select('a');await select('c');expect(textOf(field('assignment-bar'))).toContain('2 học sinh');await value('assignment-target','g3');await field('assignment-form').props.onSubmit({preventDefault(){}});await settle();await settle();expect(env.stored.members.filter((m:any)=>m.english_group_id==='g3')).toHaveLength(3);expect(textOf(root)).toContain('Đã chuyển 2 học sinh');expect(mutations().filter(x=>x[0]==='group_assign').map(x=>x[2].student_id).sort()).toEqual(['a','c']);
++})
++it('AC-312 partial failure reports correct counts and updates from server',async()=>{
++ env.failIds.add('a');await render('Tiếng Anh');await select('a');await select('b');await value('assignment-target','g1');await field('assignment-form').props.onSubmit({preventDefault(){}});await settle();await settle();expect(textOf(root)).toContain('1 thành công');expect(textOf(root)).toContain('1 thất bại');expect(textOf(root)).toContain('Nhóm không còn hoạt động');expect(env.stored.members.find((m:any)=>m.student_id==='b').english_group_id).toBe('g1');
++})
++it('AC-313 search/filter clears hidden selections; select-all only selects visible rows',async()=>{
++ await render('Tiếng Anh');await select('a');await value('student-search','230001');expect(findAll(root,n=>n.props.id==='assignment-bar')).toHaveLength(0);await value('select-visible',true);await value('assignment-target','g1');await field('assignment-form').props.onSubmit({preventDefault(){}});await settle();await settle();expect(mutations().filter(x=>x[0]==='group_assign').map(x=>x[2].student_id)).toEqual(['b']);
++})
++it('AC-320 directory failure is a load error, not an empty roster',async()=>{
++ env.directory.mockRejectedValue(Error('Không tải được mã học sinh'));await render('Tiếng Anh');expect(textOf(root)).toContain('Không tải được mã học sinh');expect(textOf(root)).not.toContain('Không có kết quả tìm kiếm');
++})
++it('AC-315 non-Teacher actors never load management directory or get management controls',async()=>{
++ for(const role of ['student','monitor','admin']){env.auth.role=role;const x=mount(HomeworkPage);app=x.app;root=x.root;await settle();expect(findAll(root,n=>n.type==='button').map(textOf)).not.toContain('Cài đặt AI');expect(findAll(root,n=>n.type==='button').map(textOf)).not.toContain('Tiếng Anh');app.unmount();app=null;}expect(env.directory).not.toHaveBeenCalled();
++})
++it('AI saved state compares values independently of JSON property order',async()=>{
++ env.stored.ai_settings={duplicate_auto_threshold:90,duplicate_review_threshold:70,semantic_duplicate_enabled:true};await render('Cài đặt AI');expect(field('ai-save-state').props['data-state']).toBe('saved');
++})
++it('AI readback failure never becomes saved just by editing back to the old value',async()=>{
++ await render('Cài đặt AI');await value('ai-lower',60);env.rpc.mockResolvedValueOnce({ok:true}).mockRejectedValueOnce(Error('Chưa tải lại được cài đặt'));await field('ai-settings-form').props.onSubmit({preventDefault(){}});await settle();expect(field('ai-save-state').props['data-state']).toBe('error');await value('ai-lower',65);await value('ai-lower',70);expect(field('ai-save-state').props['data-state']).toBe('error');
++})
++it('AI boundary 0/100 is valid and save blocks double submission while in flight',async()=>{
++ await render('Cài đặt AI');await value('ai-lower',0);await value('ai-upper',100);let resolve!: (v:any)=>void;env.rpc.mockImplementationOnce(()=>new Promise(r=>resolve=r));const first=field('ai-settings-form').props.onSubmit({preventDefault(){}});await settle();expect(field('ai-save-state').props['data-state']).toBe('saving');await field('ai-settings-form').props.onSubmit({preventDefault(){}});expect(mutations()).toHaveLength(1);resolve({ok:true});await first;await settle();
++})
++it('Batch reload failure is explicit, clears selection and blocks a second assignment until refresh',async()=>{
++ await render('Tiếng Anh');await select('a');await value('assignment-target','g3');env.rpc.mockResolvedValueOnce({ok:true}).mockRejectedValueOnce(Error('Mất kết nối khi tải lại'));await field('assignment-form').props.onSubmit({preventDefault(){}});await settle();expect(textOf(root)).toContain('Chưa tải lại được phân nhóm');expect(textOf(root)).not.toContain('Đã chuyển 1 học sinh');expect(field('select-a').props.disabled).toBe(true);expect(findAll(root,n=>n.props.id==='assignment-bar')).toHaveLength(0);
++})
++it('Inactive group keeps current members; unassigned means no current membership',async()=>{
++ env.stored.groups[0].is_active=false;await render('Tiếng Anh');expect(textOf(field('group-g1'))).toContain('1 thành viên · Tạm ngưng');await value('unassigned-only',true);expect(rows()).toEqual(['c']);
++})
++it('Filter changes clear selection and selection never relies on sort order',async()=>{
++ await render('Tiếng Anh');await select('a');await value('student-sort','name');expect(textOf(field('assignment-bar'))).toContain('1 học sinh');await value('unassigned-only',true);expect(findAll(root,n=>n.props.id==='assignment-bar')).toHaveLength(0);
++})
++it('Directory join never presents codes belonging to another class',async()=>{
++ env.directory.mockResolvedValue({users:users.map(u=>({...u,classId:'elsewhere',code:'OTHER_CLASS_CODE'}))});await render('Tiếng Anh');expect(textOf(root)).not.toContain('OTHER_CLASS_CODE');expect(textOf(root)).toContain('Chưa có mã');
++})
++it('Empty group and no-result search are distinct from loading errors',async()=>{
++ env.stored.groups.push({id:'empty',name:'E9',is_active:true});await render('Tiếng Anh');await field('group-empty').props.onClick();await settle();expect(textOf(root)).toContain('Nhóm chưa có thành viên');await value('student-search','absent');expect(textOf(root)).toContain('Không có kết quả tìm kiếm');
++})
++it('An older page reload cannot overwrite settings confirmed by a later save',async()=>{
++ await render('Cài đặt AI');const old=structuredClone(env.stored);let resolve!: (v:any)=>void;env.rpc.mockImplementationOnce(()=>new Promise(r=>resolve=r));const refresh=findAll(root,n=>n.type==='button'&&textOf(n).includes('↻ Làm mới'))[0].props.onClick();await value('ai-lower',60);await field('ai-settings-form').props.onSubmit({preventDefault(){}});await settle();resolve(old);await refresh;await settle();expect(field('ai-lower').value).toBe(60);
++})
++it('Directory loading, zero selection and unassigned-empty states are explicit',async()=>{
++ let resolve!: (v:any)=>void;env.directory.mockImplementationOnce(()=>new Promise(r=>resolve=r));await render('Tiếng Anh');expect(textOf(root)).toContain('Đang tải danh sách học sinh');expect(findAll(root,n=>n.props.id==='assignment-form')).toHaveLength(0);resolve({users});await settle();await settle();expect(textOf(root)).toContain('Chưa chọn học sinh');env.stored.members.push({student_id:'c',english_group_id:'g1'});await click(root,'↻ Làm mới');await value('unassigned-only',true);expect(textOf(root)).toContain('Không có học sinh chưa gán nhóm');
++})
++it('Batch blocks double submit and stops remaining requests on role change',async()=>{
++ await render('Tiếng Anh');await select('a');await select('b');await value('assignment-target','g3');let resolve!: (v:any)=>void;env.rpc.mockImplementationOnce(()=>new Promise(r=>resolve=r));const first=field('assignment-form').props.onSubmit({preventDefault(){}});await settle();await field('assignment-form').props.onSubmit({preventDefault(){}});expect(mutations()).toHaveLength(1);env.auth.role='student';await settle();resolve({ok:true});await first;await settle();expect(mutations()).toHaveLength(1);expect(findAll(root,n=>n.props.id==='assignment-bar')).toHaveLength(0);
++})
+--- a/tests/feat-003/vitest.config.ts
++++ b/tests/feat-003/vitest.config.ts
+@@ -0,0 +1,11 @@
++import { defineConfig } from 'vitest/config'
++import vue from '@vitejs/plugin-vue'
++// Compile the real SFC client render functions for Vue's in-memory renderer.
++// No DOM/browser is claimed by this harness.
++const plugin = vue()
++const hook = plugin.transform!
++const transform = typeof hook === 'function' ? hook : hook.handler
++plugin.transform = function (code, id, options) {
++  return transform.call(this, code, id, { ...options, ssr: false })
++}
++export default defineConfig({ plugins: [plugin], test: { include: ['tests/feat-003/*.test.ts'] } })

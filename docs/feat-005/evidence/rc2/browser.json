@@ -1,0 +1,16 @@
+{
+  "checks": [
+    "R-002: focus entry, Tab/Shift+Tab wrapping, Escape and Close return to trigger",
+    "R-001: old/new subject and group visible, desktop/mobile no overflow, approval publishes checked revision"
+  ],
+  "errors": [],
+  "status": "PASS",
+  "focusAfterSave": {
+    "tag": "SELECT",
+    "text": "Chọn môn📚 Tiếng Anh kiểm chứng📚 Toán",
+    "open": true,
+    "modal": true,
+    "inside": true
+  },
+  "executed_at": "2026-09-15T13:02:16.814Z"
+}

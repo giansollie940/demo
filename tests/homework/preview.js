@@ -1,0 +1,14 @@
+import '../../src/styles/tokens.css';
+import '../../src/styles/themes.css';
+import '../../src/styles/base.css';
+import {createApp,h} from 'vue';
+import {createPinia} from 'pinia';
+import {useAuthStore} from '../../src/stores/auth';
+import {useContextStore} from '../../src/stores/context';
+import HomeworkPage from '../../src/pages/HomeworkPage.vue';
+const role=new URLSearchParams(location.search).get('role')||'student';
+const actor='00000000-0000-0000-0000-00000000000'+({student:3,monitor:4,teacher:5,admin:6}[role]);
+const classId='00000000-0000-0000-0000-000000000001';
+window.SupabaseService={init:async()=>({rpc:async(_,p)=>fetch('/__homework_fixture',{method:'POST',body:JSON.stringify({actor,action:p.p_action,data:p.p_data})}).then(r=>r.json()),functions:{invoke:async(_,p)=>({data:{ok:true,notice:(await fetch('/__homework_fixture',{method:'POST',body:JSON.stringify({actor,action:'submit',data:p.body})}).then(r=>r.json())).data},error:null})}})};
+const app=createApp({render:()=>h(HomeworkPage)});app.use(createPinia());
+useAuthStore().currentUser={id:actor,role,classId,fullName:role};useContextStore().selectedClassId=classId;app.mount('#app');

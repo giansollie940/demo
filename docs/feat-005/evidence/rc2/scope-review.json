@@ -1,0 +1,10 @@
+{
+  "status": "PASS",
+  "application_changes_from_rc1": [
+    "src/components/homework/HomeworkCorrectionPanel.vue",
+    "src/pages/HomeworkPage.vue"
+  ],
+  "database_and_edge_unchanged": true,
+  "global_ui_unchanged": true,
+  "rc1_archive_sha256": "d925fe20899148f3da208552a6979998b09fc6b0d0493018fe8d82809195c7fe"
+}

@@ -1,0 +1,35 @@
+npm warn Unknown env config "http-proxy". This will stop working in the next major version of npm.
+
+> so-tu-hoc-vue@8.8.0 test:homework
+> node --test tests/homework/*.test.mjs
+
+✔ exact duplicate bypasses semantic call; candidate scope is already server-filtered (1.363525ms)
+✔ semantic result cannot invent a candidate or coerce an invalid score (0.681352ms)
+✔ empty candidates publish without an AI call (0.192248ms)
+✔ minor edits retain the prior publication; a 24h deadline change must compare candidates (1.174592ms)
+✔ migration supplies the authenticated homework API (59.370614ms)
+✔ student cannot configure subjects or impersonate author (9.392166ms)
+✔ student cannot publish through direct API or call AI finalizer (5.004636ms)
+✔ AI accepts a checked snapshot, publishes and prevents own heart (21.780146ms)
+✔ duplicate stays private; monitor never receives AI score or reason (39.856947ms)
+✔ keep both requires a reason; both count; teacher cannot configure achievement (23.078864ms)
+✔ reminder is shared across actors and rejected events are not recorded (14.195681ms)
+✔ soft deletion removes public eligibility; restore preserves history (26.684177ms)
+✔ candidate deadline window includes 24h and excludes 24h plus one second (14.364824ms)
+✔ 24h deadline edits require a fresh check and invalidate in-flight snapshots (18.922169ms)
+✔ English group scopes feed, posting, duplicate candidates and notifications (55.372137ms)
+✔ rolling reminder quotas enforce 6h spacing, two per notice and ten per actor (21.112415ms)
+✔ backlog only reaches opted-in admin, throttles and re-arms after resolution (37.577399ms)
+✔ inactive actors and cross-class requests cannot use the API; all new tables have RLS (11.25491ms)
+✔ Admin all-alert opt-in receives normal events, and deactivation prevents late publication (26.233304ms)
+✔ required deadline, AI thresholds, teacher decisions and current-validity rankings (112.9182ms)
+✔ R-002: AI failure stays pending; no publication decision can bypass missing comparison (37.146842ms)
+✔ R-004: monitor receives exactly the allow-listed comparison fields (24.835939ms)
+ℹ tests 22
+ℹ suites 0
+ℹ pass 22
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 2131.786149

@@ -1,0 +1,95 @@
+{
+  "test_invocations": 415,
+  "checks": [
+    {
+      "name": "device-database",
+      "test_invocations": 72,
+      "status": "PASS"
+    },
+    {
+      "name": "device-ui",
+      "test_invocations": 22,
+      "status": "PASS"
+    },
+    {
+      "name": "archive-database",
+      "test_invocations": 54,
+      "status": "PASS"
+    },
+    {
+      "name": "archive-ui",
+      "test_invocations": 33,
+      "status": "PASS"
+    },
+    {
+      "name": "storage-database",
+      "test_invocations": 20,
+      "status": "PASS"
+    },
+    {
+      "name": "storage-database-on-12",
+      "test_invocations": 20,
+      "status": "PASS"
+    },
+    {
+      "name": "storage-ui",
+      "test_invocations": 9,
+      "status": "PASS"
+    },
+    {
+      "name": "media-database",
+      "test_invocations": 13,
+      "status": "PASS"
+    },
+    {
+      "name": "media-database-on-12",
+      "test_invocations": 13,
+      "status": "PASS"
+    },
+    {
+      "name": "database-on-12",
+      "test_invocations": 13,
+      "status": "PASS"
+    },
+    {
+      "name": "media-ui",
+      "test_invocations": 10,
+      "status": "PASS"
+    },
+    {
+      "name": "database",
+      "test_invocations": 13,
+      "status": "PASS"
+    },
+    {
+      "name": "legacy-database",
+      "test_invocations": 43,
+      "status": "PASS"
+    },
+    {
+      "name": "feat004-database",
+      "test_invocations": 6,
+      "status": "PASS"
+    },
+    {
+      "name": "static",
+      "test_invocations": 10,
+      "status": "PASS"
+    },
+    {
+      "name": "ui",
+      "test_invocations": 64,
+      "status": "PASS"
+    },
+    {
+      "name": "typecheck",
+      "test_invocations": 0,
+      "status": "PASS"
+    },
+    {
+      "name": "build",
+      "test_invocations": 0,
+      "status": "PASS"
+    }
+  ]
+}

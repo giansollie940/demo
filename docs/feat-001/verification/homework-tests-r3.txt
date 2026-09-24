@@ -1,0 +1,39 @@
+npm warn Unknown env config "http-proxy". This will stop working in the next major version of npm.
+
+> so-tu-hoc-vue@8.8.0 test:homework
+> node --test tests/homework/*.test.mjs
+
+✔ exact duplicate bypasses semantic call; candidate scope is already server-filtered (1.373ms)
+✔ semantic result cannot invent a candidate or coerce an invalid score (0.703836ms)
+✔ empty candidates publish without an AI call (0.221322ms)
+✔ minor edits retain the prior publication; a 24h deadline change must compare candidates (1.079239ms)
+✔ migration supplies the authenticated homework API (65.283813ms)
+✔ student cannot configure subjects or impersonate author (12.025921ms)
+✔ student cannot publish through direct API or call AI finalizer (6.242134ms)
+✔ AI accepts a checked snapshot, publishes and prevents own heart (23.775787ms)
+✔ duplicate stays private; monitor never receives AI score or reason (28.716137ms)
+✔ keep both requires a reason; both count; teacher cannot configure achievement (25.813924ms)
+✔ reminder is shared across actors and rejected events are not recorded (9.891849ms)
+✔ soft deletion removes public eligibility; restore preserves history (22.887644ms)
+✔ candidate deadline window includes 24h and excludes 24h plus one second (13.121383ms)
+✔ 24h deadline edits require a fresh check and invalidate in-flight snapshots (22.969296ms)
+✔ English group scopes feed, posting, duplicate candidates and notifications (45.101407ms)
+✔ rolling reminder quotas enforce 6h spacing, two per notice and ten per actor (15.695144ms)
+✔ backlog only reaches opted-in admin, throttles and re-arms after resolution (31.393183ms)
+✔ inactive actors and cross-class requests cannot use the API; all new tables have RLS (9.370538ms)
+✔ Admin all-alert opt-in receives normal events, and deactivation prevents late publication (18.584779ms)
+✔ required deadline, AI thresholds, teacher decisions and current-validity rankings (120.355807ms)
+✔ R-005 error attempts do not finalize the revision; successful retry publishes once (91.424267ms)
+✔ R-005 retry permissions match existing notice management; no bypass and stale result rejected (42.217465ms)
+✔ R-005 legacy R2 error rows recover; a completed duplicate result cannot be overwritten (29.698907ms)
+✔ R-005 upgrade from actual R2 SQL preserves data and recovers the original error revision (1079.388504ms)
+✔ R-002: AI failure stays pending; no publication decision can bypass missing comparison (53.640377ms)
+✔ R-004: monitor receives exactly the allow-listed comparison fields (23.905912ms)
+ℹ tests 26
+ℹ suites 0
+ℹ pass 26
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 2935.544534

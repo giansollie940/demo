@@ -1,0 +1,29 @@
+{
+  "baseline": "BUG-001-BAO-BAI-FRONTEND-REVIEW.zip",
+  "baseline_sha256": "d24521960db386302c766b33b421b0ff4cb71b3147ba3365589f8af9d33b6660",
+  "source_and_tests": [
+    "README-FEAT-002.md",
+    "database/upgrade/07-FEAT-002-PERMISSIONS-LIFECYCLE.sql",
+    "package.json",
+    "src/components/homework/HomeworkCard.vue",
+    "src/components/homework/HomeworkInbox.vue",
+    "src/features/homework/api.ts",
+    "src/features/homework/view-context.ts",
+    "src/features/owl/owl-model.ts",
+    "src/pages/HomeworkPage.vue",
+    "supabase/functions/homework-review/logic.js",
+    "tests/bug-001/regression.test.ts",
+    "tests/bug-001/renderer.ts",
+    "tests/feat-002/ai.test.mjs",
+    "tests/feat-002/database.test.mjs",
+    "tests/feat-002/upgrade.test.mjs",
+    "tests/homework/database.test.mjs",
+    "tests/homework/recovery.test.mjs",
+    "tests/homework/review.test.mjs"
+  ],
+  "generated": [
+    "dist/",
+    "docs/feat-002/"
+  ],
+  "dependencies_changed": false
+}

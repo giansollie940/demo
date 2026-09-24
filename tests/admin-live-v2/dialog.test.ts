@@ -1,0 +1,22 @@
+import {h} from 'vue';
+import {test,expect,vi,beforeEach,afterEach} from 'vitest';
+import {mount,settle,findAll,textOf} from '../bug-001/renderer';
+import Dialog from '../../src/components/homework/HomeworkHardDeleteDialog.vue';
+beforeEach(()=>{vi.stubGlobal('Document',class{});vi.stubGlobal('ShadowRoot',class{});vi.stubGlobal('document',{activeElement:null});});
+afterEach(()=>vi.unstubAllGlobals());
+test('hard-delete modal identifies one notice and requires reason plus irreversible confirmation',async()=>{
+ const confirm=vi.fn();
+ const v=mount({render:()=>h(Dialog,{notice:{id:'n1',title:'Bài toán cần xóa',author_name:'Học sinh A',author_id:'a',class_id:'c',created_at:'2026-09-23T00:00:00Z'} as any,classLabel:'7A9',busy:false,error:'',onConfirm:confirm})});
+ await settle();
+ expect(findAll(v.root,n=>n.type==='dialog')[0].props['aria-modal']).toBe('true');
+ expect(textOf(v.root)).toContain('7A9');expect(textOf(v.root)).toContain('Học sinh A');expect(textOf(v.root)).toContain('Bài toán cần xóa');
+ const form=findAll(v.root,n=>n.type==='form')[0];
+ await form.props.onSubmit({preventDefault(){}});
+ expect(confirm).not.toHaveBeenCalled();
+ findAll(v.root,n=>n.type==='textarea')[0].props['onUpdate:modelValue']('  Xóa nhầm nội dung  ');
+ await settle();await form.props.onSubmit({preventDefault(){}});
+ expect(confirm).not.toHaveBeenCalled();
+ findAll(v.root,n=>n.type==='input')[0].props['onUpdate:modelValue'](true);
+ await settle();await form.props.onSubmit({preventDefault(){}});
+ expect(confirm).toHaveBeenCalledWith('Xóa nhầm nội dung');v.app.unmount();
+});

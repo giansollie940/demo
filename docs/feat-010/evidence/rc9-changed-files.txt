@@ -1,0 +1,15 @@
+MODIFIED RELEASE.json -> RELEASE.json differ
+MODIFIED START-HERE-FEAT-010.md -> START-HERE-FEAT-010.md differ
+ADDED_DIR database/upgrade: 14-FEAT-010-RC9-CASCADE-FREEZE-FIX.sql
+MODIFIED docs/feat-010/DEPLOYMENT.md -> docs/feat-010/DEPLOYMENT.md differ
+MODIFIED docs/feat-010/FEAT-010_DECISIONS_UPDATE.md -> docs/feat-010/FEAT-010_DECISIONS_UPDATE.md differ
+MODIFIED docs/feat-010/IMPLEMENTATION_REPORT.md -> docs/feat-010/IMPLEMENTATION_REPORT.md differ
+ADDED_DIR docs/feat-010: RC9_FIX_REPORT.md
+MODIFIED docs/feat-010/TEST_MATRIX.md -> docs/feat-010/TEST_MATRIX.md differ
+ADDED_DIR docs/feat-010/evidence: rc9-changed-files.txt
+ADDED_DIR docs/feat-010/evidence: rc9-integration-static.log
+ADDED_DIR docs/feat-010/evidence: rc9-verification-status.json
+ADDED_DIR tests/feat-010: RC9-R009-REGRESSION-SPEC.md
+MODIFIED tests/feat-010/database.test.mjs -> tests/feat-010/database.test.mjs differ
+MODIFIED tests/feat-010/fixture.mjs -> tests/feat-010/fixture.mjs differ
+MODIFIED tests/feat-010/mutations.mjs -> tests/feat-010/mutations.mjs differ

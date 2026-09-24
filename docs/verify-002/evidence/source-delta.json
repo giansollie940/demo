@@ -1,0 +1,17 @@
+[
+  "scripts/mutate-feat010.mjs",
+  "scripts/mutation-runner.mjs",
+  "tests/feat-010/mutations.mjs",
+  "tests/feat-010/mutation-runner.test.mjs",
+  "tests/feat-010/database.test.mjs",
+  "tests/feat-010/fixture.mjs",
+  "tests/verify-002/device-policy-icon.test.mjs",
+  "tests/verify-002/source-safety.test.mjs",
+  "database/upgrade/16-VERIFY-002-DEVICE-SLOT-KEY-SEARCH-PATH.sql",
+  "database/upgrade/15-VERIFY-002-DEVICE-POLICY-REALTIME.sql",
+  "src/pages/DevicePolicyPage.vue",
+  "src/components/icons/DevicePolicyIcon.vue",
+  "src/components/admin/AdminDevicePolicy.vue",
+  "src/components/layout/SidebarNav.vue",
+  "src/features/navigation/navigation.ts"
+]

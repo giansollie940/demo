@@ -1,0 +1,17 @@
+{
+  "status": "BLOCKED_PENDING_PRODUCT_DECISION",
+  "scenario": "A has open correction; Teacher resolves duplicate B with replace_existing targeting A; timeout runs after A deadline.",
+  "observed": {
+    "notice_status": "replaced",
+    "correction_status": "awaiting_author",
+    "closed_at": null
+  },
+  "expected_contract": "Correction finite; no timer on a notice that cannot accept revisions; duplicate replacement behavior unchanged unless explicitly authorized.",
+  "conflicting_requirements": [
+    "RB-509",
+    "RB-513",
+    "BR-505",
+    "Must Not Break FEAT-001 duplicate detection/review"
+  ],
+  "note": "No invented terminal outcome or new duplicate restriction has been implemented."
+}

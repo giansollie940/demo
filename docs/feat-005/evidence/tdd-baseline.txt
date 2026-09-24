@@ -1,0 +1,7 @@
+Command: FEAT005_BASELINE=1 node --test tests/feat-005/ownership.test.mjs (PowerShell environment assignment)
+Executed against isolated PGlite baseline migrations 05–08, before migration 09 existed.
+Exit: 1
+Tests: 1; pass: 0; fail: 1.
+AC-501/509: Teacher and Monitor cannot edit another author through the real RPC
+AssertionError: Missing expected rejection.
+First Teacher mutation was accepted by the baseline RPC, reproducing the ownership gap.

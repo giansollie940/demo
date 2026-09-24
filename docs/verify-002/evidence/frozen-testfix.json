@@ -1,0 +1,32 @@
+[
+  {
+    "path": "scripts/mutate-feat010.mjs",
+    "sha256": "e2ffbd528bd09448ab12ba567ad08ca89676ea8c9365b745ebbb4baa95562434",
+    "unchanged": true
+  },
+  {
+    "path": "scripts/mutation-runner.mjs",
+    "sha256": "f1b8d48a3af0ce9fb9d44e2a82aa5a867be92c4945358efa68813d7f4305e443",
+    "unchanged": true
+  },
+  {
+    "path": "tests/feat-010/database.test.mjs",
+    "sha256": "42fdea0d3d90dc53a73151e3521b61c55c85b47d3938e33d0879106677fb6ede",
+    "unchanged": true
+  },
+  {
+    "path": "tests/feat-010/fixture.mjs",
+    "sha256": "33b3e6e6e7abce2d370a6b9e2513be6bea2450312ce163bd5a55090d2db88972",
+    "unchanged": true
+  },
+  {
+    "path": "tests/feat-010/mutations.mjs",
+    "sha256": "c0103e77ec76479e9c43201aaaf9c861494c0c9a63ac37092ae10b02d25fb446",
+    "unchanged": true
+  },
+  {
+    "path": "tests/feat-010/mutation-runner.test.mjs",
+    "sha256": "3fd8ae90646fe1a1400644d14b3ee66df102a0c566d20190bfc99a6764343b6c",
+    "unchanged": true
+  }
+]

@@ -1,0 +1,188 @@
+[
+  {
+    "path": "database/upgrade/09-FEAT-005-OWNERSHIP-CORRECTION.sql",
+    "change": "created",
+    "before_sha256": null,
+    "after_sha256": "9f4e1ea3343eab4265f4c8d2e7a635964837001182a38d4f13b7f86f02d3e152"
+  },
+  {
+    "path": "scripts/feat005_manifest.py",
+    "change": "created",
+    "before_sha256": null,
+    "after_sha256": "85d36d00a425b1d16b3846865368012670b989410ddadeed5984f7df75cae8b5"
+  },
+  {
+    "path": "scripts/inspect-feat005-baseline.mjs",
+    "change": "created",
+    "before_sha256": null,
+    "after_sha256": "8876aa89f95024076de66ba030f95326034673a8d933b7d29a0bf76507796489"
+  },
+  {
+    "path": "scripts/reproduce-feat005-replacement.mjs",
+    "change": "created",
+    "before_sha256": null,
+    "after_sha256": "42ea1480fed2881d1717bb1206e26f8ef719e87e7dfd995eca468fd32ce03d96"
+  },
+  {
+    "path": "scripts/verify-feat005.mjs",
+    "change": "created",
+    "before_sha256": null,
+    "after_sha256": "c1800a22c9d6080aeb6651b6aced179d32e4e4d2524e0ae5ef65edf29e84e181"
+  },
+  {
+    "path": "src/components/homework/HomeworkAdminOversight.vue",
+    "change": "modified",
+    "before_sha256": "585ba95ff6c02f20769a79971a192579e5cb16da5faf8411b04fa57cea2fb8dc",
+    "after_sha256": "f65bfbfbb1d45d9baee4d27bfa0401fba8bb3d11a19ce3f165b5b1268dc149e6"
+  },
+  {
+    "path": "src/components/homework/HomeworkCard.vue",
+    "change": "modified",
+    "before_sha256": "a01caad14f3860b767a622ad761a012e091c4bd07f706d66075b55ea146be89b",
+    "after_sha256": "961254da1b5f7a83c8774150bb3f9efed453f44679a1fa5e3b392f3ba5f21fb2"
+  },
+  {
+    "path": "src/components/homework/HomeworkCorrectionPanel.vue",
+    "change": "created",
+    "before_sha256": null,
+    "after_sha256": "ed3a824a91c6732c57666d56b6f508a6251da60e2fd11c7670b19819cadcbb8a"
+  },
+  {
+    "path": "src/components/homework/HomeworkModerationDialog.vue",
+    "change": "created",
+    "before_sha256": null,
+    "after_sha256": "9ac2078fe17530917e078e1d66301becb33d2d42da2fe1b180149af02234edba"
+  },
+  {
+    "path": "src/components/homework/HomeworkReports.vue",
+    "change": "created",
+    "before_sha256": null,
+    "after_sha256": "92a7c11a58fd4fbe211314ba010a6639fffd678d16103a99565b08c7733e8f40"
+  },
+  {
+    "path": "src/features/homework/api.ts",
+    "change": "modified",
+    "before_sha256": "4048a466fb533fa9421caeb465d7de36b651c33b1fdc22f6930149b4a8cf0ee7",
+    "after_sha256": "0799318bf51721402783acad85a7fb311d90520aa2ed3d93d44c5ce37f26c728"
+  },
+  {
+    "path": "src/features/homework/moderation.ts",
+    "change": "created",
+    "before_sha256": null,
+    "after_sha256": "92c48b5956f06a3c726eb311d132b7fe5ea7b6acb3b3395a0740c3b5e052ac73"
+  },
+  {
+    "path": "src/features/homework/view-context.ts",
+    "change": "modified",
+    "before_sha256": "5d7375e120b5d2e6176b9b76bd5ad9927e01731e7fab8654c3ebef9078b2add6",
+    "after_sha256": "8b2b866fb7be6ab9a073ec94a79a1393be3b058550a55cb3432518583c44202b"
+  },
+  {
+    "path": "src/features/owl/owl-model.ts",
+    "change": "modified",
+    "before_sha256": "35150d8777dbce66f071c136c5067cc4c76c7ae8886d44092d4554d33ce40e6c",
+    "after_sha256": "d08ca9bdac8610b995e12d345e74428ea6db88bad30c6f0e374f7fe360fcb383"
+  },
+  {
+    "path": "src/pages/HomeworkPage.vue",
+    "change": "modified",
+    "before_sha256": "a417a91b60aca79a864f5e4ede31e261d4eaeeb7fc8c0a731e3a51042e098c57",
+    "after_sha256": "c0a820bfcfb67fd208499441607371db0c5d099bd4dfd4466652054dd79cfdce"
+  },
+  {
+    "path": "supabase/functions/homework-review/index.ts",
+    "change": "modified",
+    "before_sha256": "3ed5d5dde6ec4ed9cca855f2bb76ef13c1a6c21b18eaf416dc041a2219f68a7f",
+    "after_sha256": "d6b80b253154d48491c8b04ca76384a80442c6d514fd6762dc9ea85a08fbc0d7"
+  },
+  {
+    "path": "tests/bug-001/regression.test.ts",
+    "change": "modified",
+    "before_sha256": "05cd5dfdf5750d758486eea5c905ceb67c3b080a677c51e73ea0644b98608bd4",
+    "after_sha256": "4eccd5e6b135971f7c5e1a273f74f9b978da5dcd8f8c3e540faec8e645770603"
+  },
+  {
+    "path": "tests/feat-005/ai-regression.test.mjs",
+    "change": "created",
+    "before_sha256": null,
+    "after_sha256": "a78c406e907b18ee61ad1adfab3af07fc0535268fbf024d75a6202eb067536e9"
+  },
+  {
+    "path": "tests/feat-005/browser.mjs",
+    "change": "created",
+    "before_sha256": null,
+    "after_sha256": "c0a2b311365d3da2b4d8ecfa184230d8520aa4689f4be64f26502bf7a5a34285"
+  },
+  {
+    "path": "tests/feat-005/fixture.mjs",
+    "change": "created",
+    "before_sha256": null,
+    "after_sha256": "e2f58291f95b0da7f716788e1a148ed306b7d7402c60ad5663f84e1844cbd254"
+  },
+  {
+    "path": "tests/feat-005/ownership.test.mjs",
+    "change": "created",
+    "before_sha256": null,
+    "after_sha256": "4cebc76046b18ec0d7beedf63fde3971852f1ef604aa6419663d9f82904814c1"
+  },
+  {
+    "path": "tests/feat-005/page.test.ts",
+    "change": "created",
+    "before_sha256": null,
+    "after_sha256": "ae081e3b31a2de68c023c04ae84763c8d5c150c4bb2234198ea30e520077b91e"
+  },
+  {
+    "path": "tests/feat-005/preview-server.mjs",
+    "change": "created",
+    "before_sha256": null,
+    "after_sha256": "9a45ce6fd433fe1f0def49fed9f02f7ad8cd14ed494c30b35f2cbff751fa6484"
+  },
+  {
+    "path": "tests/feat-005/preview.html",
+    "change": "created",
+    "before_sha256": null,
+    "after_sha256": "0fadbe8c01b321576e8427b2af44676ed14cdc43ffc9c598a7a1b9fe533dad3a"
+  },
+  {
+    "path": "tests/feat-005/preview.js",
+    "change": "created",
+    "before_sha256": null,
+    "after_sha256": "deee935a58747457716e0762447c77e76d54a8657660c7c39cdbb7f14d963c5c"
+  },
+  {
+    "path": "tests/feat-005/rc2-browser.mjs",
+    "change": "created",
+    "before_sha256": null,
+    "after_sha256": "56150336362e2069a611988acb9f5223cce6679e6be034b4f1d3c4369543cdc8"
+  },
+  {
+    "path": "tests/feat-005/regression.config.ts",
+    "change": "created",
+    "before_sha256": null,
+    "after_sha256": "b22694efc5f1dff158d525bb26837752b5a320fc50e43cc08957dc748a544272"
+  },
+  {
+    "path": "tests/feat-005/replacement.test.mjs",
+    "change": "created",
+    "before_sha256": null,
+    "after_sha256": "0309df460fd2b4ac1ad4231dfe5025a18e508eec49afef5c2e21f710df2d6e32"
+  },
+  {
+    "path": "tests/feat-005/ui.test.ts",
+    "change": "created",
+    "before_sha256": null,
+    "after_sha256": "a1b72263b1d33538a02b476a27e8521dcdf80c346f13a945fc40085be98312cb"
+  },
+  {
+    "path": "tests/feat-005/vitest.config.ts",
+    "change": "created",
+    "before_sha256": null,
+    "after_sha256": "a8c7edc95420ee0d043c373c1ec8040dc711188ba23a8d7a26fe4fae66b06aae"
+  },
+  {
+    "path": "tests/feat-005/workflow.test.mjs",
+    "change": "created",
+    "before_sha256": null,
+    "after_sha256": "a0231b44790223dad5ba18ebf42af309c1bcb6b74ee4af394132b35c2a9fbb9b"
+  }
+]

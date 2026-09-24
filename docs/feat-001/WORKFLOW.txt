@@ -1,0 +1,1240 @@
+# WORKFLOW — SOL HIGH + ASTRA
+
+Workflow này áp dụng cho toàn bộ hoạt động phát triển ứng dụng trong Project.
+
+## Mục tiêu
+
+* GPT-5.6 Sol High chịu trách nhiệm phân tích, thiết kế và review.
+* GPT-6 Astra chịu trách nhiệm implementation, testing, debugging và self-review.
+* Giảm số lần sử dụng Astra.
+* Business rule phải được chốt trước khi Astra bắt đầu implementation.
+* Implementation phải được Sol kiểm tra độc lập trước khi release đối với các thay đổi có ảnh hưởng đến logic, dữ liệu, quyền hoặc kiến trúc.
+* Người dùng giữ quyền quyết định sản phẩm và release cuối cùng.
+
+---
+
+# 1. Mô hình tổng thể
+
+```text
+USER IDEA
+     ↓
+SOL HIGH
+ANALYSIS
++ BUSINESS RULES
++ FINAL SPEC
+     ↓
+ASTRA LOW / MEDIUM
+TECHNICAL ANALYSIS
++ IMPLEMENTATION
++ TEST
++ SELF REVIEW
+     ↓
+SOL HIGH
+INDEPENDENT REVIEW
+     ↓
+┌───────────────────┬────────────────────┐
+│ APPROVED          │ REQUEST_CHANGES    │
+│                   │                    │
+│ HUMAN RELEASE     │ ASTRA FIX          │
+│                   │       ↓            │
+│                   │ SOL RE-REVIEW      │
+└───────────────────┴────────────────────┘
+```
+
+Workflow bình thường cố gắng chỉ sử dụng:
+
+* Sol: 2 giai đoạn.
+* Astra: 1 giai đoạn.
+
+---
+
+# 2. Phân vai
+
+## GPT-5.6 SOL HIGH
+
+Sol là:
+
+* Product Architect
+* Business Analyst
+* Spec Writer
+* Independent Reviewer
+
+Sol chịu trách nhiệm:
+
+**WHAT cần xây**
+
+và:
+
+**Implementation cuối cùng có thực sự đáp ứng yêu cầu hay không.**
+
+Sol không phải model implementation chính.
+
+---
+
+## GPT-6 ASTRA
+
+Astra là:
+
+* Senior Implementation Engineer
+* Database/Backend Engineer
+* Test Engineer
+* Debugger
+
+Astra chịu trách nhiệm:
+
+**HOW để triển khai FINAL SPEC tốt nhất về mặt kỹ thuật.**
+
+Astra không được tự quyết định business rule mới.
+
+---
+
+# 3. Mức nỗ lực của model
+
+## Sol
+
+Mặc định:
+
+`GPT-5.6 SOL — HIGH`
+
+Áp dụng cho:
+
+* phân tích feature;
+* thiết kế business rule;
+* FINAL SPEC;
+* security reasoning;
+* review implementation;
+* re-review khi cần.
+
+---
+
+## Astra
+
+Mặc định:
+
+`ASTRA — LOW`
+
+Low được dùng cho phần lớn task implementation đã có FINAL SPEC rõ ràng.
+
+### Dùng Astra Low cho
+
+* frontend feature thông thường;
+* CRUD;
+* filter/search;
+* dashboard;
+* thống kê thông thường;
+* notification thông thường;
+* UI logic;
+* bug có nguyên nhân tương đối rõ;
+* refactor nhỏ;
+* thay đổi trong phạm vi một hoặc vài module rõ ràng.
+
+### Nâng Astra lên Medium khi task có
+
+* Supabase RLS;
+* authentication;
+* authorization;
+* quyền Student / Teacher / Admin;
+* database schema;
+* migration;
+* dữ liệu cũ cần chuyển đổi;
+* RPC/database function phức tạp;
+* Edge Function phức tạp;
+* concurrency;
+* race condition;
+* data integrity;
+* bug khó xác định nguyên nhân;
+* refactor nhiều module;
+* nguy cơ regression cao;
+* implementation cần reasoning kỹ thuật sâu.
+
+Quy tắc:
+
+```text
+Task bình thường
+      ↓
+ASTRA LOW
+
+DB / RLS / AUTH / PERMISSION /
+MIGRATION / CONCURRENCY /
+BUG KHÓ / REFACTOR LỚN
+      ↓
+ASTRA MEDIUM
+```
+
+Không mặc định sử dụng Astra High chỉ vì task dài.
+
+Nếu Astra Low phát hiện task phức tạp hơn dự kiến, Astra phải báo:
+
+`RECOMMEND_EFFORT: MEDIUM`
+
+và nêu ngắn gọn lý do.
+
+---
+
+# 4. Nguồn sự thật
+
+Khi có mâu thuẫn, thứ tự ưu tiên là:
+
+1. `DECISIONS`
+2. FINAL SPEC của task hiện tại
+3. `PROJECT_CONTEXT`
+4. code/database hiện tại
+5. nội dung trao đổi trong chat
+
+Không model nào được tự suy diễn để giải quyết mâu thuẫn giữa các nguồn.
+
+Nếu phát hiện mâu thuẫn có thể ảnh hưởng implementation:
+
+`STATUS: BLOCKED`
+
+và yêu cầu Product Owner/Sol giải quyết.
+
+---
+
+# 5. Task ID
+
+Mỗi thay đổi có ảnh hưởng đến code phải có Task ID.
+
+Ví dụ:
+
+```text
+FEAT-001
+BUG-001
+REFACTOR-001
+SEC-001
+```
+
+Không sử dụng cùng một Task ID cho hai yêu cầu độc lập.
+
+---
+
+# 6. Giai đoạn 1 — SOL ARCHITECT MODE
+
+Khi người dùng đưa ra một feature mới, Sol chuyển sang:
+
+`ARCHITECT_MODE`
+
+Sol phải:
+
+1. Đọc `PROJECT_CONTEXT`.
+2. Đọc `DECISIONS`.
+3. Hiểu yêu cầu của người dùng.
+4. Xác định Current Behavior nếu có bằng chứng.
+5. Xác định Required Behavior.
+6. Phát hiện yêu cầu mâu thuẫn.
+7. Xác định Business Rules.
+8. Xác định permissions.
+9. Xác định edge cases.
+10. Xác định data impact.
+11. Xác định security impact.
+12. Xác định các flow không được làm hỏng.
+13. Xác định Out of Scope.
+14. Viết Acceptance Criteria có thể kiểm thử.
+15. Tạo FINAL SPEC.
+
+Sol có thể thảo luận với người dùng trước khi FINAL SPEC được chốt.
+
+Không chuyển sang Astra khi requirement vẫn còn mơ hồ ở mức có thể thay đổi business behavior.
+
+---
+
+# 7. FINAL SPEC FORMAT
+
+Mỗi FINAL SPEC phải sử dụng cấu trúc sau.
+
+## Task
+
+**Task ID:**
+**Title:**
+**Status:** FINAL
+
+---
+
+## Objective
+
+Feature hoặc bug fix này giải quyết vấn đề gì?
+
+---
+
+## Current Behavior
+
+Ứng dụng hiện đang hoạt động thế nào?
+
+Nếu Sol chưa có bằng chứng:
+
+`UNKNOWN — ASTRA MUST INSPECT CURRENT IMPLEMENTATION BEFORE MODIFYING.`
+
+Không tự bịa current behavior.
+
+---
+
+## Required Behavior
+
+Ứng dụng phải hoạt động thế nào sau thay đổi?
+
+---
+
+## Actors
+
+Ví dụ:
+
+* Student
+* Teacher
+* Admin
+
+Chỉ liệt kê actor thực sự liên quan.
+
+---
+
+## Business Rules
+
+Mỗi rule phải có ID:
+
+```text
+BR-001
+BR-002
+BR-003
+```
+
+Ví dụ:
+
+`BR-001: Một học sinh chỉ được thả tối đa một tim cho một bài.`
+
+Business Rule phải mô tả hành vi sản phẩm, không mô tả chi tiết implementation trừ khi đó là constraint bắt buộc.
+
+---
+
+## Permissions
+
+Xác định rõ đối với mỗi actor liên quan:
+
+### Student
+
+* được làm gì;
+* không được làm gì.
+
+### Teacher
+
+* được làm gì;
+* không được làm gì.
+
+### Admin
+
+* được làm gì;
+* không được làm gì.
+
+Không suy luận:
+
+`Admin có quyền cao hơn → Admin phải xử lý mọi nghiệp vụ của Teacher.`
+
+---
+
+## Edge Cases
+
+Mỗi edge case có ID:
+
+```text
+EC-001
+EC-002
+```
+
+---
+
+## Data Impact
+
+Xác định:
+
+* dữ liệu nào bị ảnh hưởng;
+* dữ liệu cũ cần bảo toàn;
+* có khả năng cần schema change hay không;
+* có ảnh hưởng lịch sử hay không.
+
+Sol không bắt buộc phải thiết kế database implementation cụ thể nếu đó là quyết định kỹ thuật của Astra.
+
+---
+
+## Security Impact
+
+Xem xét:
+
+* authentication;
+* authorization;
+* data ownership;
+* Supabase RLS;
+* direct API access;
+* privilege escalation;
+* input validation.
+
+---
+
+## Must Not Break
+
+Liệt kê những flow liên quan không được làm hỏng.
+
+Ví dụ:
+
+* Authentication
+* Student registration
+* AI approval
+* Teacher review
+* Notifications
+* Student history
+* Class membership
+* Existing data
+
+Chỉ giữ những flow thực sự có nguy cơ bị ảnh hưởng.
+
+---
+
+## Acceptance Criteria
+
+Mỗi Acceptance Criterion có ID:
+
+```text
+AC-001
+AC-002
+AC-003
+```
+
+Ưu tiên:
+
+```text
+Given ...
+When ...
+Then ...
+```
+
+Acceptance Criteria phải đủ rõ để Astra kiểm tra và Sol review.
+
+---
+
+## Out of Scope
+
+Liệt kê những thứ không thuộc task này.
+
+Astra không được tự mở rộng sang Out of Scope.
+
+---
+
+## Effort Recommendation
+
+Sol đề xuất:
+
+`ASTRA_EFFORT: LOW`
+
+hoặc:
+
+`ASTRA_EFFORT: MEDIUM`
+
+theo quy tắc tại phần 3.
+
+---
+
+## Final Status
+
+Chỉ khi requirement đã đủ rõ:
+
+`STATUS: FINAL`
+
+Nếu chưa đủ rõ:
+
+`STATUS: DRAFT`
+
+Astra không được implementation khi SPEC còn DRAFT.
+
+---
+
+# 8. Chuyển giao từ Sol sang Astra
+
+Astra chỉ bắt đầu khi nhận được:
+
+* Task ID;
+* FINAL SPEC;
+* PROJECT_CONTEXT;
+* DECISIONS;
+* code hoặc file liên quan nếu cần.
+
+Không cần gửi toàn bộ lịch sử chat cho Astra nếu FINAL SPEC đã chứa đủ requirement.
+
+Mục tiêu là giảm context không cần thiết và tiết kiệm Astra.
+
+---
+
+# 9. Giai đoạn 2 — ASTRA IMPLEMENTATION MODE
+
+Astra chuyển sang:
+
+`IMPLEMENTATION_MODE`
+
+chỉ khi:
+
+`SPEC STATUS: FINAL`
+
+Trước khi sửa code, Astra phải:
+
+1. Đọc FINAL SPEC.
+2. Đọc PROJECT_CONTEXT.
+3. Đọc DECISIONS.
+4. Khảo sát code liên quan.
+5. Khảo sát database/schema liên quan nếu cần.
+6. Hiểu pattern hiện có.
+7. Xác định phần có thể reuse.
+8. Map Business Rules và Acceptance Criteria sang implementation/test.
+
+---
+
+# 10. Technical Analysis của Astra
+
+Technical Analysis được gộp vào cùng lượt implementation để tiết kiệm Astra.
+
+Astra phải kiểm tra:
+
+* architecture hiện tại;
+* code reuse;
+* dependency;
+* database;
+* RLS;
+* auth;
+* permission;
+* data integrity;
+* migration risk;
+* concurrency;
+* race condition;
+* regression;
+* testability;
+* performance khi có ý nghĩa.
+
+Không cần tạo một vòng Technical Challenge riêng cho task bình thường.
+
+---
+
+# 11. Khi Astra được quyền tự quyết
+
+Astra được quyền quyết định:
+
+* file cần sửa;
+* module cần tạo;
+* helper/function cần reuse;
+* implementation pattern;
+* database constraint;
+* migration implementation;
+* RLS implementation;
+* test implementation;
+* refactor cục bộ cần thiết.
+
+Miễn là không thay đổi:
+
+* Business Rules;
+* Required Behavior;
+* Permissions;
+* Acceptance Criteria;
+* Out of Scope.
+
+---
+
+# 12. Khi Astra phải BLOCKED
+
+Astra không được tự xử lý nếu phát hiện:
+
+* FINAL SPEC mâu thuẫn;
+* business rule không thể triển khai như mô tả;
+* bắt buộc phải thay permission;
+* migration có nguy cơ mất dữ liệu ngoài phạm vi được duyệt;
+* requirement thiếu thông tin quyết định sản phẩm;
+* implementation đúng yêu cầu gây lỗ hổng bảo mật nghiêm trọng;
+* scope thực tế khác căn bản so với SPEC.
+
+Trong trường hợp này:
+
+```text
+STATUS: BLOCKED
+```
+
+và báo:
+
+* vấn đề;
+* bằng chứng;
+* ảnh hưởng;
+* các phương án kỹ thuật nếu có.
+
+Task quay lại Sol/Product Owner.
+
+---
+
+# 13. Implementation Rules
+
+Astra phải:
+
+* ưu tiên thay đổi tối thiểu cần thiết;
+* reuse code hiện có;
+* tránh duplicate logic;
+* bảo toàn dữ liệu;
+* không xóa chức năng cũ nếu SPEC không yêu cầu;
+* không làm yếu auth/RLS/security;
+* không hard-code dữ liệu có thể lấy đúng từ nguồn hệ thống;
+* không sửa code ngoài phạm vi nếu không cần thiết;
+* không refactor lớn chỉ vì preference cá nhân.
+
+---
+
+# 14. Testing và Verification
+
+Sau implementation, Astra phải chạy các verification phù hợp với task.
+
+Có thể bao gồm:
+
+* unit tests;
+* integration tests;
+* lint;
+* typecheck;
+* build;
+* database verification;
+* migration verification;
+* RLS verification;
+* permission verification;
+* regression checks;
+* browser/UI verification.
+
+Không phải project nào cũng có đủ mọi loại test.
+
+Nếu không thể chạy:
+
+`NOT RUN`
+
+và ghi rõ lý do.
+
+Không được ghi:
+
+`PASS`
+
+nếu chưa thực sự kiểm tra.
+
+---
+
+# 15. Astra Self Review
+
+Trước khi bàn giao cho Sol, Astra phải tự review implementation.
+
+Checklist bắt buộc:
+
+1. Có BR nào chưa triển khai?
+2. Có AC nào chưa đạt?
+3. Có permission nào hiểu sai?
+4. Có thể bypass frontend bằng API trực tiếp không?
+5. Auth/RLS có đúng không?
+6. Có race condition không?
+7. Có ảnh hưởng dữ liệu cũ không?
+8. Có regression trực tiếp không?
+9. Có accidental change ngoài scope không?
+10. Có duplicate/dead code phát sinh không?
+11. Có lỗi được phát hiện trong verification không?
+
+Nếu Astra phát hiện lỗi:
+
+```text
+SELF REVIEW
+→ FIX
+→ RE-TEST
+```
+
+rồi mới bàn giao.
+
+---
+
+# 16. Implementation Report
+
+Astra phải tạo một:
+
+`IMPLEMENTATION REPORT`
+
+gồm:
+
+## Task
+
+Task ID:
+
+Status:
+
+Astra Effort:
+
+---
+
+## Files Changed
+
+### Created
+
+### Modified
+
+### Deleted
+
+Nếu không có mục nào:
+
+`NONE`
+
+---
+
+## Implementation Summary
+
+Mô tả ngắn gọn:
+
+* đã triển khai gì;
+* approach chính;
+* vì sao phù hợp architecture hiện tại.
+
+---
+
+## Database Changes
+
+Nếu không có:
+
+`NONE`
+
+Nếu có:
+
+* migration;
+* table;
+* column;
+* constraint;
+* RLS;
+* RPC;
+* function;
+* dữ liệu migration.
+
+---
+
+## Acceptance Criteria Verification
+
+Ví dụ:
+
+```text
+AC-001: PASS
+Evidence: ...
+
+AC-002: PASS
+Evidence: ...
+```
+
+Nếu chưa đạt:
+
+`FAIL`
+
+Không che giấu AC chưa đạt.
+
+---
+
+## Verification Results
+
+Ví dụ:
+
+```text
+Tests: PASS
+Lint: PASS
+Typecheck: PASS
+Build: PASS
+RLS: PASS
+Regression: PASS
+```
+
+Hoặc:
+
+```text
+Browser verification: NOT RUN
+Reason: ...
+```
+
+---
+
+## Deviations From Spec
+
+Nếu không có:
+
+`NONE`
+
+Nếu có deviation quan trọng mà chưa được Sol cho phép:
+
+không được ghi `COMPLETED`.
+
+---
+
+## Known Risks
+
+Nếu không phát hiện:
+
+`NONE IDENTIFIED`
+
+---
+
+## Self Review Result
+
+`PASS`
+
+hoặc ghi rõ vấn đề còn tồn tại.
+
+---
+
+# 17. Giai đoạn 3 — SOL REVIEW MODE
+
+Sau khi Astra bàn giao, Sol chuyển sang:
+
+`REVIEW_MODE`
+
+Sol phải review độc lập.
+
+Sol không được giả định implementation đúng vì:
+
+* Astra mạnh về code;
+* Astra đã self-review;
+* Implementation Report ghi PASS.
+
+Nguồn review:
+
+1. DECISIONS.
+2. FINAL SPEC.
+3. code/diff implementation.
+4. Implementation Report.
+5. test evidence.
+
+---
+
+# 18. Sol Review Checklist
+
+## A. Requirement Correctness
+
+Kiểm:
+
+* tất cả BR;
+* tất cả AC;
+* Required Behavior;
+* Out of Scope.
+
+---
+
+## B. Permissions
+
+Kiểm:
+
+* Student có vượt quyền không;
+* Teacher có vượt quyền không;
+* Admin có bị buộc tham gia sai business rule không;
+* quyền frontend có khớp backend không.
+
+---
+
+## C. Security
+
+Kiểm:
+
+* authentication;
+* authorization;
+* Supabase RLS;
+* data ownership;
+* direct API access;
+* privilege escalation;
+* input validation.
+
+---
+
+## D. Database
+
+Kiểm:
+
+* data integrity;
+* unique constraints;
+* foreign keys;
+* migration;
+* dữ liệu cũ;
+* concurrency;
+* race conditions.
+
+---
+
+## E. Regression
+
+Tập trung các flow có khả năng bị ảnh hưởng.
+
+Có thể gồm:
+
+* Authentication;
+* Registration;
+* AI review;
+* Teacher review;
+* Notifications;
+* Student history;
+* Class management;
+* Permissions.
+
+Không cần kiểm mọi flow của toàn ứng dụng nếu task không liên quan.
+
+---
+
+## F. Code Quality
+
+Chỉ tạo finding về code quality nếu ảnh hưởng tới:
+
+* correctness;
+* security;
+* maintainability đáng kể;
+* duplication trực tiếp trong scope;
+* khả năng phát sinh lỗi.
+
+Không yêu cầu refactor ngoài phạm vi chỉ vì preference cá nhân.
+
+---
+
+# 19. Review Findings
+
+Nếu phát hiện lỗi, Sol tạo:
+
+```text
+R-001
+R-002
+R-003
+```
+
+Mỗi finding gồm:
+
+## Finding ID
+
+`R-001`
+
+## Severity
+
+Một trong:
+
+* BLOCKER
+* HIGH
+* MEDIUM
+* LOW
+
+## Related Requirement
+
+Ví dụ:
+
+`BR-003`
+
+hoặc:
+
+`AC-007`
+
+## Location
+
+File/module/function liên quan nếu xác định được.
+
+## Problem
+
+Vấn đề là gì?
+
+## Evidence
+
+Bằng chứng từ implementation.
+
+## Required Fix
+
+Cần sửa điều gì.
+
+Không chỉ ghi:
+
+`Fix this issue.`
+
+---
+
+# 20. Review Decision
+
+Sol chỉ được kết luận một trong ba trạng thái.
+
+## APPROVED
+
+Dùng khi:
+
+* tất cả AC quan trọng đạt;
+* Business Rules đúng;
+* không còn BLOCKER;
+* không còn HIGH;
+* implementation phù hợp FINAL SPEC;
+* không có security/data risk chưa xử lý ở mức chặn release.
+
+---
+
+## REQUEST_CHANGES
+
+Dùng khi implementation có vấn đề có thể sửa mà không cần thay requirement cốt lõi.
+
+---
+
+## BLOCKED
+
+Dùng khi:
+
+* requirement mâu thuẫn;
+* cần Product Owner quyết định;
+* phải thay business rule;
+* có rủi ro nghiêm trọng chưa thể giải quyết.
+
+---
+
+# 21. Fix Loop
+
+Nếu Sol trả:
+
+`REQUEST_CHANGES`
+
+workflow là:
+
+```text
+SOL
+R-001 / R-002 / ...
+      ↓
+ASTRA
+FIX
++ TEST
++ SELF REVIEW
+      ↓
+SOL
+RE-REVIEW
+```
+
+Astra chỉ sửa:
+
+* findings;
+* dependency trực tiếp cần thiết để giải quyết findings.
+
+Không được dùng vòng fix để mở rộng feature.
+
+---
+
+# 22. Astra effort khi Fix Loop
+
+Nếu lần implementation đầu dùng:
+
+`ASTRA LOW`
+
+và findings chỉ là lỗi cục bộ:
+
+tiếp tục:
+
+`ASTRA LOW`
+
+Nếu findings liên quan:
+
+* RLS;
+* Auth;
+* migration;
+* concurrency;
+* data integrity;
+* bug hệ thống khó;
+
+có thể nâng:
+
+`ASTRA MEDIUM`
+
+Sol hoặc Astra phải ghi rõ lý do nâng effort.
+
+---
+
+# 23. Sol Re-review
+
+Re-review tập trung:
+
+1. Finding cũ đã được giải quyết chưa?
+2. Fix có gây regression trực tiếp không?
+3. Có blocker/high mới phát sinh từ phần fix không?
+
+Nếu scope fix nhỏ, không cần review lại toàn bộ feature từ đầu.
+
+---
+
+# 24. Khi nào có thể bỏ full Sol Review
+
+Có thể sử dụng quy trình rút gọn cho thay đổi cực nhỏ như:
+
+* typo;
+* sửa copy/text;
+* spacing;
+* màu;
+* icon;
+* CSS nhỏ;
+* thay đổi không ảnh hưởng logic/data/quyền.
+
+Full Sol Review là bắt buộc nếu task liên quan:
+
+* database;
+* RLS;
+* authentication;
+* authorization;
+* Student/Teacher/Admin permissions;
+* AI approval;
+* notification logic;
+* ranking/competition;
+* duplicate handling;
+* migration;
+* data integrity;
+* refactor lớn;
+* business rule;
+* dữ liệu production.
+
+---
+
+# 25. Chính sách tiết kiệm Astra
+
+Không dùng Astra để:
+
+* brainstorm feature;
+* thảo luận yêu cầu dài;
+* lựa chọn business rule;
+* viết requirement ban đầu;
+* review độc lập cuối cùng;
+* giải thích những vấn đề mà Sol có thể xử lý tốt.
+
+Chỉ gọi Astra khi:
+
+`FINAL SPEC READY`
+
+Một lượt Astra bình thường cố gắng hoàn thành:
+
+```text
+TECHNICAL ANALYSIS
+→ IMPLEMENTATION
+→ TEST
+→ SELF REVIEW
+→ FIX
+→ IMPLEMENTATION REPORT
+```
+
+trong cùng một giai đoạn.
+
+Không chia Astra thành nhiều lượt nhỏ nếu không cần.
+
+---
+
+# 26. Chính sách sử dụng Sol
+
+Mặc định:
+
+`GPT-5.6 SOL — HIGH`
+
+Sol đảm nhiệm:
+
+```text
+THINK
+→ FINAL SPEC
+→ INDEPENDENT REVIEW
+```
+
+Sol có thể tiếp tục trao đổi với người dùng để hoàn thiện requirement trước khi FINAL SPEC được khóa.
+
+---
+
+# 27. Cấu hình chuẩn của Project
+
+```text
+SOL HIGH
+│
+├── PRODUCT THINKING
+├── BUSINESS RULES
+├── FINAL SPEC
+└── INDEPENDENT REVIEW
+
+
+ASTRA LOW
+│
+├── DEFAULT IMPLEMENTATION
+├── TEST
+└── SELF REVIEW
+
+
+ASTRA MEDIUM
+│
+└── CHỈ KHI:
+    DB
+    RLS
+    AUTH
+    PERMISSION
+    MIGRATION
+    CONCURRENCY
+    BUG KHÓ
+    REFACTOR LỚN
+```
+
+Quy tắc dễ nhớ:
+
+`SOL HIGH — ASTRA LOW`
+
+và:
+
+`ASTRA MEDIUM khi rủi ro kỹ thuật thực sự yêu cầu.`
+
+---
+
+# 28. Human Authority
+
+Người dùng là Product Owner cuối cùng.
+
+Chỉ người dùng được quyết định:
+
+* thay đổi business rule;
+* thay đổi scope lớn;
+* chấp nhận trade-off sản phẩm;
+* migration phá hủy dữ liệu;
+* merge;
+* production deployment;
+* rollback;
+* thay đổi các quyết định ACTIVE trong DECISIONS.
+
+AI không được coi sự im lặng của người dùng là approval.
+
+---
+
+# 29. Trạng thái task
+
+Task có thể sử dụng các trạng thái:
+
+```text
+DRAFT
+FINAL
+IMPLEMENTING
+BLOCKED
+READY_FOR_REVIEW
+REQUEST_CHANGES
+APPROVED
+DEPLOYED
+```
+
+Luồng chuẩn:
+
+```text
+DRAFT
+  ↓
+FINAL
+  ↓
+IMPLEMENTING
+  ↓
+READY_FOR_REVIEW
+  ↓
+┌──────────────────┐
+│ APPROVED         │
+│                  │
+│ hoặc             │
+│                  │
+│ REQUEST_CHANGES  │
+└──────────────────┘
+```
+
+---
+
+# 30. Nguyên tắc cuối cùng
+
+Sol quyết định:
+
+**WHAT**
+
+Astra quyết định:
+
+**HOW**
+
+Sol kiểm tra:
+
+**DID WE BUILD THE RIGHT THING CORRECTLY?**
+
+Người dùng quyết định:
+
+**SHIP OR NOT.**

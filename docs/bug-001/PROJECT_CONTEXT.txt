@@ -1,0 +1,274 @@
+# PROJECT CONTEXT
+
+## 1. Product
+
+**Tên dự án:** Quản lý tự học
+
+**Mục tiêu:**
+Ứng dụng hỗ trợ quản lý hoạt động tự học của học sinh, bao gồm đăng ký tự học, theo dõi tiến độ, phản hồi của giáo viên, AI hỗ trợ duyệt và các chức năng hỗ trợ quản lý lớp.
+
+---
+
+## 2. Users
+
+Hệ thống có ba nhóm người dùng:
+
+### Student
+
+Học sinh sử dụng ứng dụng để:
+
+* đăng ký hoạt động tự học;
+* xem trạng thái đăng ký;
+* chỉnh sửa nội dung khi được yêu cầu;
+* xem phản hồi;
+* sử dụng các chức năng học sinh được cấp quyền.
+
+### Teacher
+
+Giáo viên sử dụng ứng dụng để:
+
+* theo dõi học sinh;
+* xem và xử lý các đăng ký cần giáo viên xem xét;
+* phản hồi;
+* theo dõi hoạt động lớp;
+* sử dụng các công cụ quản lý học tập.
+
+### Admin
+
+Admin chịu trách nhiệm:
+
+* quản trị hệ thống;
+* cấu hình;
+* quản lý các quyền đặc biệt;
+* xử lý các tác vụ quản trị khi cần.
+
+Admin không mặc nhiên phải tham gia xử lý mọi công việc thuộc trách nhiệm giáo viên.
+
+---
+
+## 3. Current Technical Stack
+
+### Frontend
+
+Ứng dụng web.
+
+Frontend hiện có các module/chức năng liên quan đến:
+
+* đăng nhập;
+* quản lý lớp;
+* đăng ký tự học;
+* phản hồi;
+* AI review;
+* thông báo;
+* thống kê;
+* giao diện dành cho Student / Teacher / Admin.
+
+### Backend
+
+Supabase.
+
+### Database
+
+PostgreSQL thông qua Supabase.
+
+### Authentication
+
+Supabase Auth.
+
+### Backend Logic
+
+Có sử dụng:
+
+* Supabase database;
+* RLS;
+* RPC/database functions khi phù hợp;
+* Supabase Edge Functions.
+
+### Deployment
+
+Frontend được triển khai lên môi trường web.
+
+---
+
+## 4. Core Existing Flows
+
+Các flow quan trọng hiện có gồm:
+
+### Registration Flow
+
+Học sinh tạo hoặc chỉnh sửa đăng ký tự học.
+
+### AI Review Flow
+
+AI có thể đọc:
+
+* nội dung đăng ký mới;
+* phản hồi trước đó của giáo viên;
+* context liên quan;
+
+sau đó hỗ trợ xác định đăng ký có thể tự động duyệt, cần trả lại học sinh hoặc cần giáo viên xử lý.
+
+### Teacher Review Flow
+
+Những trường hợp AI không đủ chắc chắn hoặc thuộc phạm vi cần giáo viên quyết định được chuyển đến giáo viên.
+
+### Notification Flow
+
+Hệ thống tạo và hiển thị các thông báo liên quan tới hoạt động của học sinh và giáo viên.
+
+### Student History
+
+Lưu lịch sử hoạt động liên quan tới học sinh.
+
+### Class Management
+
+Ứng dụng hiện được thiết kế chủ yếu cho mô hình một lớp hoạt động.
+
+---
+
+## 5. Roles and Permission Principles
+
+### Student
+
+Không được:
+
+* giả mạo user khác;
+* sửa dữ liệu của học sinh khác;
+* tự nâng quyền;
+* bypass các rule chỉ bằng cách gọi API trực tiếp.
+
+### Teacher
+
+Chỉ được thực hiện các tác vụ thuộc quyền giáo viên.
+
+### Admin
+
+Có quyền quản trị cao hơn nhưng:
+
+* không mặc nhiên thay thế teacher;
+* không bị bắt buộc xử lý mọi notification của giáo viên nếu business rule không yêu cầu.
+
+---
+
+## 6. Security Principles
+
+Mọi feature mới phải kiểm tra cả frontend và backend.
+
+Không được dựa vào việc ẩn nút trên giao diện để đảm bảo quyền.
+
+Phải xem xét:
+
+* authentication;
+* authorization;
+* Supabase RLS;
+* database constraints;
+* input validation;
+* privilege escalation;
+* direct API calls;
+* race conditions.
+
+---
+
+## 7. Database Principles
+
+* Không sửa trực tiếp production database nếu thay đổi có thể được thực hiện bằng migration.
+* Schema change phải có migration rõ ràng.
+* Không xóa dữ liệu hiện có nếu SPEC không yêu cầu.
+* Phải bảo toàn dữ liệu cũ khi triển khai feature mới.
+* Ưu tiên constraint ở database cho các rule cần tính toàn vẹn dữ liệu.
+* Tránh tạo dữ liệu tổng hợp dư thừa nếu có thể tính an toàn từ nguồn dữ liệu gốc.
+
+---
+
+## 8. AI Principles
+
+AI không được tự quyết định business rule mới.
+
+AI implementation chỉ được triển khai theo FINAL SPEC.
+
+Nếu implementation phát hiện yêu cầu:
+
+* mâu thuẫn;
+* không khả thi;
+* gây mất dữ liệu;
+* buộc phải thay business rule;
+
+phải trả trạng thái BLOCKED thay vì tự thay đổi yêu cầu.
+
+---
+
+## 9. Development Principles
+
+### Scope
+
+Chỉ sửa những gì cần thiết cho task hiện tại.
+
+### Reuse
+
+Ưu tiên tái sử dụng:
+
+* component;
+* helper;
+* database function;
+* pattern;
+* service;
+
+đã có trong codebase.
+
+### Refactoring
+
+Chỉ refactor khi:
+
+* cần để triển khai feature an toàn;
+* giảm duplicate trực tiếp liên quan;
+* giải quyết vấn đề kỹ thuật ảnh hưởng task.
+
+Không thực hiện refactor lớn ngoài phạm vi chỉ vì code có thể đẹp hơn.
+
+---
+
+## 10. Verification Principles
+
+Mỗi implementation phải xem xét các bước phù hợp sau:
+
+* test;
+* lint;
+* typecheck;
+* build;
+* database verification;
+* RLS/permission verification;
+* regression verification;
+* browser/UI verification nếu thay đổi giao diện.
+
+Không được tuyên bố hoàn tất nếu chưa kiểm tra kết quả thực tế trong phạm vi có thể kiểm tra.
+
+---
+
+## 11. Critical Must-Not-Break Areas
+
+Feature mới không được vô tình làm hỏng:
+
+1. Authentication.
+2. Student registration.
+3. AI review/approval flow.
+4. Teacher review.
+5. Existing notifications.
+6. Student history.
+7. Class membership.
+8. Role and permission handling.
+9. Existing stored registrations.
+10. Existing production data.
+
+---
+
+## 12. Source-of-Truth Priority
+
+Khi có mâu thuẫn thông tin, sử dụng thứ tự:
+
+1. `DECISIONS`
+2. FINAL SPEC của task hiện tại
+3. `PROJECT_CONTEXT`
+4. code/database hiện tại
+5. trao đổi trong chat
+
+Không tự suy diễn để giải quyết mâu thuẫn giữa các nguồn.

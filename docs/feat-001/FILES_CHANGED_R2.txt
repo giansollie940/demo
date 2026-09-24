@@ -1,0 +1,14 @@
+MODIFIED database/upgrade/05-FEAT-001-BAO-BAI.sql
+MODIFIED docs/feat-001/DEPLOYMENT.md
+ADDED docs/feat-001/FIX_REPORT_R2.md
+MODIFIED docs/feat-001/IMPLEMENTATION_REPORT.md
+ADDED docs/feat-001/SOL_INDEPENDENT_REVIEW.md
+ADDED docs/feat-001/verification/homework-tests.txt
+MODIFIED package.json
+ADDED src/components/homework/HomeworkDuplicateWarning.vue
+MODIFIED src/pages/HomeworkPage.vue
+MODIFIED tests/homework/database.test.mjs
+ADDED tests/homework/review.test.mjs
+ADDED tests/homework/warning.test.ts
+GENERATED dist/
+DELETED NONE

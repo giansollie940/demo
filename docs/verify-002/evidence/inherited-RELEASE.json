@@ -1,0 +1,46 @@
+{
+  "package": "SO-TU-HOC-FEAT-010-RC9-FULL",
+  "status": "RUNTIME_VERIFICATION_PENDING",
+  "application_package_version": "8.8.0",
+  "packaged_at": "2026-09-21T00:00:00+00:00",
+  "production_deployed": false,
+  "production_migration_run": false,
+  "runtime_config_included": false,
+  "baseline_rc8_verification": {
+    "checks": "18/18 PASS",
+    "tests_passed": 404,
+    "mutations_caught": "50/50",
+    "typecheck": "PASS",
+    "production_build": "PASS"
+  },
+  "rc9": {
+    "source_fix": "R-009 cascade-safe DELETE + R-010 two-sided UPDATE freeze",
+    "upgrade_migration": "database/upgrade/14-FEAT-010-RC9-CASCADE-FREEZE-FIX.sql",
+    "runtime_tests_integrated": 7,
+    "mutations_added": [
+      "M51",
+      "M52"
+    ],
+    "local_js_syntax": "PASS",
+    "full_runtime_suite": "PENDING"
+  },
+  "review_gate": "SOL PATCH-R2 source review: R-010 RESOLVED IN SOURCE; R-009 SOURCE DIRECTION ACCEPTABLE. Full RC9 runtime evidence still required before approval.",
+  "decisions": {
+    "DEC-114": "RATIFIED",
+    "DEC-115": "RATIFIED",
+    "DEC-116": "ACCEPTED_IN_CONCEPT"
+  },
+  "release_gates_remaining": [
+    "true 2-connection PostgreSQL Lock vs registration write",
+    "true 2-connection policy vs archive_begin",
+    "realtime two-browser check",
+    "add device_use_policy_signals to supabase_realtime",
+    "FEAT-007 RC6 must be applied to production before FEAT-010"
+  ],
+  "previous": {
+    "package": "SO-TU-HOC-FEAT-010-RC8",
+    "status": "REQUEST_CHANGES",
+    "tests_passed": 404,
+    "mutations_caught": "50/50"
+  }
+}
