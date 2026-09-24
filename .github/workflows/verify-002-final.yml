@@ -1,0 +1,145 @@
+name: VERIFY-002 Final Runtime Gates
+
+on:
+  push:
+    branches:
+      - verify/002-final-runtime
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: '.nvmrc'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Full FEAT-010 integrated verifier
+        run: node scripts/verify-feat010.mjs
+
+      - name: Full FEAT-010 mutation gate
+        env:
+          FEAT010_MUTATION_WORKERS: '4'
+        run: node scripts/mutate-feat010.mjs
+
+      - name: Quality gate
+        run: npm run verify:quality
+
+      - name: Generate browser Supabase config
+        env:
+          SUPABASE_PROJECT_URL: ${{ secrets.SUPABASE_PROJECT_URL }}
+          SUPABASE_PUBLISHABLE_KEY: ${{ secrets.SUPABASE_PUBLISHABLE_KEY }}
+          LOGIN_DOMAIN: ${{ vars.LOGIN_DOMAIN }}
+        run: |
+          node <<'NODE'
+          const fs = require('node:fs')
+          const projectUrl = String(process.env.SUPABASE_PROJECT_URL || '').trim()
+          const publishableKey = String(process.env.SUPABASE_PUBLISHABLE_KEY || '').trim()
+          const loginDomain = String(process.env.LOGIN_DOMAIN || 'users.example.com').trim()
+          if (!projectUrl || !publishableKey) throw new Error('Missing browser Supabase config')
+          fs.writeFileSync(
+            'public/config.js',
+            'window.APP_CONFIG = ' + JSON.stringify({
+              mode: 'supabase',
+              projectUrl: projectUrl.replace(/\/$/, ''),
+              publishableKey,
+              loginDomain: loginDomain || 'users.example.com',
+              fallbackRefreshSeconds: 180,
+            }, null, 2) + ';\n'
+          )
+          NODE
+
+      - name: Production Pages build
+        env:
+          VITE_OWL_MASCOT_V2_ENABLED: 'true'
+        run: npm run build:pages
+
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Start production build server
+        run: |
+          python3 -m http.server 4173 -d dist > /tmp/verify002-http.log 2>&1 &
+          for i in {1..30}; do
+            if curl -fsS http://127.0.0.1:4173/ >/dev/null; then exit 0; fi
+            sleep 1
+          done
+          cat /tmp/verify002-http.log
+          exit 1
+
+      - name: Chromium smoke local production build
+        run: |
+          cat > .verify002-smoke.mjs <<'NODE'
+          import { chromium } from '@playwright/test'
+          const browser = await chromium.launch({ headless: true })
+          const page = await browser.newPage()
+          const pageErrors = []
+          const failedRequests = []
+          page.on('pageerror', e => pageErrors.push(String(e?.stack || e)))
+          page.on('requestfailed', r => failedRequests.push({ url:r.url(), error:r.failure()?.errorText || 'unknown' }))
+          const response = await page.goto('http://127.0.0.1:4173/', { waitUntil:'domcontentloaded', timeout:30000 })
+          await page.waitForTimeout(2500)
+          const appHtmlLength = (await page.locator('#app').innerHTML()).length
+          const loginVisible = await page.locator('.login-shell').count() > 0
+          const result = { status:response?.status() ?? null, appHtmlLength, loginVisible, pageErrors, failedRequests }
+          console.log(JSON.stringify(result,null,2))
+          await page.screenshot({ path:'verify002-local-smoke.png', fullPage:true })
+          await browser.close()
+          if (!response || response.status() >= 400 || appHtmlLength === 0 || !loginVisible || pageErrors.length || failedRequests.length) process.exit(1)
+          NODE
+          node .verify002-smoke.mjs
+          rm -f .verify002-smoke.mjs
+
+      - name: Chromium smoke deployed site
+        run: |
+          cat > .verify002-prod-smoke.mjs <<'NODE'
+          import { chromium } from '@playwright/test'
+          const browser = await chromium.launch({ headless: true })
+          const page = await browser.newPage()
+          const pageErrors = []
+          const failedRequests = []
+          page.on('pageerror', e => pageErrors.push(String(e?.stack || e)))
+          page.on('requestfailed', r => failedRequests.push({ url:r.url(), error:r.failure()?.errorText || 'unknown' }))
+          const response = await page.goto('https://giansollie940.github.io/demo/', { waitUntil:'domcontentloaded', timeout:30000 })
+          await page.waitForTimeout(3500)
+          const appHtmlLength = await page.locator('#app').innerHTML().then(x=>x.length).catch(()=>0)
+          const loginVisible = await page.locator('.login-shell').count() > 0
+          const result = { status:response?.status() ?? null, appHtmlLength, loginVisible, pageErrors, failedRequests }
+          console.log(JSON.stringify(result,null,2))
+          await page.screenshot({ path:'verify002-production-smoke.png', fullPage:true })
+          await browser.close()
+          if (!response || response.status() >= 400 || appHtmlLength === 0 || !loginVisible || pageErrors.length || failedRequests.length) process.exit(1)
+          NODE
+          node .verify002-prod-smoke.mjs
+          rm -f .verify002-prod-smoke.mjs
+
+      - name: Upload verification evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: verify-002-final-evidence
+          path: |
+            docs/feat-010/evidence/*.json
+            docs/feat-010/evidence/*.log
+            verify002-local-smoke.png
+            verify002-production-smoke.png
+            /tmp/verify002-http.log
+          if-no-files-found: ignore
+
+      - name: Ensure generated runtime config is not committed
+        if: always()
+        run: |
+          rm -f public/config.js
+          git diff --exit-code -- public/config.js
