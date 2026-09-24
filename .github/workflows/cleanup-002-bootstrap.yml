@@ -186,7 +186,7 @@ jobs:
       - name: Chromium blank-page smoke
         shell: bash
         run: |
-          cat > /tmp/cleanup002-smoke.mjs <<'NODE'
+          cat > .cleanup002-smoke.mjs <<'NODE'
           import { chromium } from '@playwright/test'
           const browser = await chromium.launch({headless:true})
           const page = await browser.newPage()
@@ -204,13 +204,13 @@ jobs:
           await browser.close()
           if (!response || response.status() >= 400 || !appHtml.trim() || !loginVisible || pageErrors.length) process.exit(1)
           NODE
-          node /tmp/cleanup002-smoke.mjs
+          node .cleanup002-smoke.mjs
 
       - name: Remove generated/build-only files
         if: always()
         shell: bash
         run: |
-          rm -f public/config.js
+          rm -f public/config.js .cleanup002-smoke.mjs
           rm -rf dist
 
       - name: Verify final source diff scope
@@ -219,6 +219,7 @@ jobs:
           set -euo pipefail
           git diff --exit-code HEAD --             src public index.html vite.config.ts package.json package-lock.json             .github/workflows/deploy-pages.yml
           test ! -e public/config.js
+          test ! -e .cleanup002-smoke.mjs
           test ! -e dist
 
       - name: Commit restored source
