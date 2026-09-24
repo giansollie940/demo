@@ -53,3 +53,47 @@ describe('Device Policy context in the existing owl', () => {
     expect(messages.find(message => message.kind === 'page')?.text).not.toContain('0 tiết')
   })
 })
+
+
+describe('BUG-003 Admin Owl role isolation', () => {
+  const state = {
+    currentWeekId: 'w',
+    weeks: [{ id: 'w', number: 5, startDate: '2026-09-28', endDate: '2026-10-04' }],
+    periods: [{ n: 1, start: '08:00', end: '08:45' }],
+    registrations: [{
+      id: 'r1',
+      studentId: 's1',
+      weekId: 'w',
+      dow: 0,
+      period: 1,
+      content: 'Ôn bài',
+      status: 'submitted',
+    }],
+    schedule: [],
+    users: [{ id: 's1', role: 'student', active: true }],
+  } as unknown as LegacyState
+  const nowMs = new Date('2026-09-24T10:00:00+07:00').getTime()
+
+  it('does not expose Teacher queue workload or urgent state to Admin', () => {
+    const admin = { id: 'a', role: 'admin' } as CurrentUser
+    const messages = buildOwlContextMessages({ state, user: admin, path: '/admin', weekId: 'w', nowMs })
+    expect(messages.some(message => message.text.includes('cần giáo viên xử lý'))).toBe(false)
+    expect(messages.some(message => message.urgent)).toBe(false)
+    expect(messages.some(message => message.text.includes('Quản trị lớp, giáo viên và phân quyền'))).toBe(true)
+  })
+
+  it('preserves the Teacher queue reminder for the same state', () => {
+    const teacher = { id: 't', role: 'teacher' } as CurrentUser
+    const messages = buildOwlContextMessages({ state, user: teacher, path: '/review', weekId: 'w', nowMs })
+    expect(messages.some(message => message.text.includes('còn 1 đăng ký cần giáo viên xử lý'))).toBe(true)
+    expect(messages.some(message => message.urgent)).toBe(true)
+  })
+
+  it('keeps Admin device guidance read-only without Teacher workload', () => {
+    const admin = { id: 'a', role: 'admin' } as CurrentUser
+    const messages = buildOwlContextMessages({ state, user: admin, path: '/admin', weekId: 'w', nowMs, deviceTab: true })
+    expect(messages.some(message => message.text.includes('Admin chỉ có quyền xem'))).toBe(true)
+    expect(messages.some(message => message.text.includes('cần giáo viên xử lý'))).toBe(false)
+    expect(messages.some(message => message.urgent)).toBe(false)
+  })
+})

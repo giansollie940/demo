@@ -183,9 +183,11 @@ export function buildOwlContextMessages({ state, user, path, weekId = state?.cur
   if (!state) return []
   const week = state.weeks.find(item => item.id === weekId) ?? state.weeks.find(item => item.id === state.currentWeekId)
   const weekLabel = week ? `Tuần ${week.number}` : 'tuần đang xem'
-  const manager = ['teacher','admin'].includes(user.role)
   const messages: OwlMessage[] = []
-  if (manager) {
+  if (user.role === 'admin') {
+    if (route === 'admin' && deviceTab) messages.push({ kind:'page', text:'Thiết bị điện tử: chọn lớp và tuần để xem trạng thái từng tiết cùng lịch sử; Admin chỉ có quyền xem.' })
+    else messages.push({ kind:'page', text:`Quản trị lớp, giáo viên và phân quyền vẫn dùng các Edge Function hiện có.` })
+  } else if (user.role === 'teacher') {
     const current = weekRegistrations(state, weekId)
     const unresolved = current.filter(row => pendingForTeacher(row, state, nowMs))
     const waiting = unresolved.length
@@ -207,8 +209,6 @@ export function buildOwlContextMessages({ state, user, path, weekId = state?.cur
     }
     else if (route === 'schedule') messages.push({ kind:'page', text:`Thời khóa biểu hiện có ${state.schedule.length} tiết mặc định; tuần có lịch riêng sẽ dùng override.` })
     else if (route === 'statistics') messages.push({ kind:'page', text:`Thống kê đang so sánh đăng ký hợp lệ, cần xử lý và chưa đăng ký theo tuần.` })
-    else if (route === 'admin' && user.role === 'admin' && deviceTab) messages.push({ kind:'page', text:'Thiết bị điện tử: chọn lớp và tuần để xem trạng thái từng tiết cùng lịch sử; Admin chỉ có quyền xem.' })
-    else if (route === 'admin' && user.role === 'admin') messages.push({ kind:'page', text:`Quản trị lớp, giáo viên và phân quyền vẫn dùng các Edge Function hiện có.` })
     else if (route === 'settings') messages.push({ kind:'page', text:`Cài đặt chỉ được lưu khi bạn bấm “Lưu cài đặt”.` })
     else messages.push({ kind:'page', text:`Dashboard ${weekLabel}: ${learnerCount(state)} học sinh/cán sự hoạt động.` })
   } else {
