@@ -1,0 +1,88 @@
+name: DB-HISTORY-12-13-14 Generate Canonical Migrations
+
+on:
+  push:
+    branches:
+      - db/history-12-13-14
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  generate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout branch
+        uses: actions/checkout@v4
+        with:
+          ref: db/history-12-13-14
+
+      - name: Stop if migrations already exist
+        id: guard
+        shell: bash
+        run: |
+          set -euo pipefail
+          if compgen -G "supabase/migrations/*_feat_007_archive_purge_history.sql" >/dev/null ||
+             compgen -G "supabase/migrations/*_feat_010_device_use_lock_history.sql" >/dev/null ||
+             compgen -G "supabase/migrations/*_feat_010_rc9_cascade_freeze_fix_history.sql" >/dev/null; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Generate three migration filenames with Supabase CLI
+        if: steps.guard.outputs.exists == 'false'
+        shell: bash
+        run: |
+          set -euo pipefail
+          npx --yes supabase@latest --version
+          npx --yes supabase@latest migration new feat_007_archive_purge_history
+          sleep 2
+          npx --yes supabase@latest migration new feat_010_device_use_lock_history
+          sleep 2
+          npx --yes supabase@latest migration new feat_010_rc9_cascade_freeze_fix_history
+
+      - name: Populate canonical migration SQL
+        if: steps.guard.outputs.exists == 'false'
+        shell: bash
+        run: |
+          set -euo pipefail
+          A="$(find supabase/migrations -maxdepth 1 -type f -name '*_feat_007_archive_purge_history.sql' | sort | tail -n 1)"
+          B="$(find supabase/migrations -maxdepth 1 -type f -name '*_feat_010_device_use_lock_history.sql' | sort | tail -n 1)"
+          C="$(find supabase/migrations -maxdepth 1 -type f -name '*_feat_010_rc9_cascade_freeze_fix_history.sql' | sort | tail -n 1)"
+          test -n "$A" && test -n "$B" && test -n "$C"
+
+          cp database/upgrade/12-FEAT-007-ARCHIVE-PURGE.sql "$A"
+          cp database/upgrade/13-FEAT-010-DEVICE-USE-LOCK.sql "$B"
+          cp database/upgrade/14-FEAT-010-RC9-CASCADE-FREEZE-FIX.sql "$C"
+
+          echo "Migration A: $A"
+          echo "Migration B: $B"
+          echo "Migration C: $C"
+
+      - name: Validate canonical source mapping
+        if: steps.guard.outputs.exists == 'false'
+        shell: bash
+        run: |
+          set -euo pipefail
+          A="$(find supabase/migrations -maxdepth 1 -type f -name '*_feat_007_archive_purge_history.sql' | sort | tail -n 1)"
+          B="$(find supabase/migrations -maxdepth 1 -type f -name '*_feat_010_device_use_lock_history.sql' | sort | tail -n 1)"
+          C="$(find supabase/migrations -maxdepth 1 -type f -name '*_feat_010_rc9_cascade_freeze_fix_history.sql' | sort | tail -n 1)"
+          cmp -s database/upgrade/12-FEAT-007-ARCHIVE-PURGE.sql "$A"
+          cmp -s database/upgrade/13-FEAT-010-DEVICE-USE-LOCK.sql "$B"
+          cmp -s database/upgrade/14-FEAT-010-RC9-CASCADE-FREEZE-FIX.sql "$C"
+          test "$(find supabase/migrations -maxdepth 1 -type f -name '*_feat_007_archive_purge_history.sql' | wc -l)" -eq 1
+          test "$(find supabase/migrations -maxdepth 1 -type f -name '*_feat_010_device_use_lock_history.sql' | wc -l)" -eq 1
+          test "$(find supabase/migrations -maxdepth 1 -type f -name '*_feat_010_rc9_cascade_freeze_fix_history.sql' | wc -l)" -eq 1
+
+      - name: Commit generated migrations
+        if: steps.guard.outputs.exists == 'false'
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add supabase/migrations
+          git commit -m "chore: record upgrade 12 13 14 migration sources"
+          git push origin HEAD:db/history-12-13-14
