@@ -1202,9 +1202,9 @@
     });
   }
 
-  function subscribeRealtime(onChange,onStatus){
+  async function subscribeRealtime(onChange,onStatus){
     const sb=requireClient();
-    unsubscribeRealtime();
+    await unsubscribeRealtime();
 
     const channelName=`so-tu-hoc-live-${Date.now()}-${Math.random().toString(36).slice(2,8)}`;
     let channel=sb.channel(channelName);
