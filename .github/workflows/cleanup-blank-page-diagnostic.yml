@@ -1,0 +1,85 @@
+name: Cleanup Branch Blank Page Diagnostic
+
+on:
+  push:
+    branches:
+      - maint/cleanup-blank-page
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version-file: '.nvmrc'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate browser Supabase config
+        env:
+          SUPABASE_PROJECT_URL: ${{ secrets.SUPABASE_PROJECT_URL }}
+          SUPABASE_PUBLISHABLE_KEY: ${{ secrets.SUPABASE_PUBLISHABLE_KEY }}
+          LOGIN_DOMAIN: ${{ vars.LOGIN_DOMAIN }}
+        run: |
+          node <<'NODE'
+          const fs = require('node:fs')
+          const projectUrl = String(process.env.SUPABASE_PROJECT_URL || '').trim()
+          const publishableKey = String(process.env.SUPABASE_PUBLISHABLE_KEY || '').trim()
+          const loginDomain = String(process.env.LOGIN_DOMAIN || 'users.example.com').trim()
+          if (!projectUrl || !publishableKey) throw new Error('Missing browser Supabase config')
+          fs.writeFileSync(
+            'public/config.js',
+            'window.APP_CONFIG = ' + JSON.stringify({
+              mode: 'supabase',
+              projectUrl: projectUrl.replace(/\/$/, ''),
+              publishableKey,
+              loginDomain: loginDomain || 'users.example.com',
+              fallbackRefreshSeconds: 180,
+            }, null, 2) + ';\n'
+          )
+          NODE
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Build production Pages bundle
+        env:
+          VITE_OWL_MASCOT_V2_ENABLED: 'true'
+        run: npm run build:pages
+
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Start static server
+        run: |
+          python3 -m http.server 4173 -d dist > /tmp/blank-page-http.log 2>&1 &
+          echo $! > /tmp/blank-page-http.pid
+          for i in {1..30}; do
+            if curl -fsS http://127.0.0.1:4173/ >/dev/null; then exit 0; fi
+            sleep 1
+          done
+          cat /tmp/blank-page-http.log
+          exit 1
+
+      - name: Run runtime smoke
+        run: node scripts/blank-page-smoke.mjs
+
+      - name: Upload diagnostic screenshot
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: blank-page-smoke
+          path: |
+            blank-page-smoke.png
+            /tmp/blank-page-http.log
+          if-no-files-found: ignore
