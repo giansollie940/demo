@@ -9,6 +9,7 @@ import { buildOwlContextMessages, createQuoteRotator, messageFromQuote, type Owl
 import { useDailyQuote } from '../../features/owl/daily-quote'
 import { useNowTicker } from '../../features/shared/useNowTicker'
 import { useDevicePolicy } from '../../features/registrations/device-policy-queries'
+import { useTeacherQueueWeeks } from '../../features/owl/useTeacherQueueWeeks'
 import { createOwlMascotController } from '../../features/owl/mascot-v2'
 import { useHomeworkViewStore } from '../../features/homework/view-context'
 
@@ -28,7 +29,8 @@ const deviceTab = computed(() => deviceContext.value || adminDeviceContext.value
 const policyClass = computed(() => deviceContext.value ? context.selectedClassId : null)
 const policyWeek = computed(() => deviceContext.value ? context.selectedWeekId : null)
 const devicePolicy = useDevicePolicy(policyClass, policyWeek)
-const messages = computed(() => auth.currentUser ? buildOwlContextMessages({ state: auth.legacyState, user: auth.currentUser, path: route.path, homeworkTab: homework.selectedTab, weekId: context.selectedWeekId, nowMs: nowMs.value, deviceTab: deviceTab.value, devicePolicySlots: deviceContext.value && devicePolicy.query.isSuccess.value ? devicePolicy.query.data.value : undefined }) : [])
+const teacherQueue = useTeacherQueueWeeks()
+const messages = computed(() => auth.currentUser ? buildOwlContextMessages({ state: auth.legacyState, user: auth.currentUser, path: route.path, homeworkTab: homework.selectedTab, weekId: context.selectedWeekId, nowMs: nowMs.value, deviceTab: deviceTab.value, devicePolicySlots: deviceContext.value && devicePolicy.query.isSuccess.value ? devicePolicy.query.data.value : undefined, teacherQueueWeeks: teacherQueue.teacherQueueWeeks.value }) : [])
 const urgent = computed(() => messages.value.some(item => item.urgent))
 const mandatoryLearnerAlerts = computed(() => ['student', 'monitor'].includes(auth.currentUser?.role ?? ''))
 const quoteRotator = createQuoteRotator(undefined, { recentLimit: 4 })

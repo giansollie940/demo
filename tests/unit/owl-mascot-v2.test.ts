@@ -97,3 +97,87 @@ describe('BUG-003 Admin Owl role isolation', () => {
     expect(messages.some(message => message.urgent)).toBe(false)
   })
 })
+
+
+describe('BUG-005 cross-week Teacher queue alerts', () => {
+  const nowMs = new Date('2026-09-25T06:00:00+07:00').getTime()
+  const state = {
+    currentWeekId: 'w8',
+    weeks: [
+      { id: 'w8', number: 8, startDate: '2026-09-21', endDate: '2026-09-25', status: 'open' },
+      { id: 'w9', number: 9, startDate: '2026-09-28', endDate: '2026-10-02', status: 'open' },
+    ],
+    periods: [{ n: 1, start: '08:00', end: '08:45' }],
+    registrations: [],
+    schedule: [],
+    users: [],
+  } as unknown as LegacyState
+  const teacher = { id: 't', role: 'teacher' } as CurrentUser
+  const admin = { id: 'a', role: 'admin' } as CurrentUser
+  const week9Registration = {
+    id: 'r9',
+    studentId: 's1',
+    weekId: 'w9',
+    dow: 0,
+    period: 1,
+    content: 'Ôn tập',
+    status: 'submitted',
+    approvalSource: 'manual',
+    aiReviewStatus: 'completed',
+  }
+
+  it('uses selected-week query data when the operational week is different', () => {
+    const messages = buildOwlContextMessages({
+      state,
+      user: teacher,
+      path: '/review',
+      weekId: 'w9',
+      nowMs,
+      teacherQueueWeeks: [{ weekId: 'w9', registrations: [week9Registration] }],
+    } as any)
+    expect(messages.some(message => message.urgent && message.text.includes('Tuần 9 còn 1 đăng ký cần giáo viên xử lý'))).toBe(true)
+  })
+
+  it('surfaces actionable work in the next monitored week while viewing the current week', () => {
+    const messages = buildOwlContextMessages({
+      state,
+      user: teacher,
+      path: '/review',
+      weekId: 'w8',
+      nowMs,
+      teacherQueueWeeks: [
+        { weekId: 'w8', registrations: [] },
+        { weekId: 'w9', registrations: [week9Registration] },
+      ],
+    } as any)
+    expect(messages.some(message => message.urgent && message.text.includes('Tuần 9 có 1 đăng ký cần giáo viên xử lý'))).toBe(true)
+  })
+
+  it('does not leak cross-week Teacher workload to Admin', () => {
+    const messages = buildOwlContextMessages({
+      state,
+      user: admin,
+      path: '/admin',
+      weekId: 'w8',
+      nowMs,
+      teacherQueueWeeks: [{ weekId: 'w9', registrations: [week9Registration] }],
+    } as any)
+    expect(messages.some(message => message.text.includes('cần giáo viên xử lý'))).toBe(false)
+    expect(messages.some(message => message.urgent)).toBe(false)
+  })
+
+  it('clears the cross-week alert when the row is no longer actionable', () => {
+    const messages = buildOwlContextMessages({
+      state,
+      user: teacher,
+      path: '/review',
+      weekId: 'w8',
+      nowMs,
+      teacherQueueWeeks: [{
+        weekId: 'w9',
+        registrations: [{ ...week9Registration, status: 'approved' }],
+      }],
+    } as any)
+    expect(messages.some(message => message.text.includes('Tuần 9') && message.urgent)).toBe(false)
+  })
+})
