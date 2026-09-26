@@ -13,7 +13,7 @@ import WiseOwl from '../components/owl/WiseOwl.vue'
 import OwlMascotV2 from '../components/owl/OwlMascotV2.vue'
 import { owlMascotV2Enabled } from '../features/owl/mascot-v2'
 
-import schoolPatternUrl from '../assets/images/school-pattern-bg.png'
+import schoolPatternUrl from '../assets/images/school-pattern-bg.webp'
 
 import { useAuthStore } from '../stores/auth'
 import { useContextStore } from '../stores/context'
