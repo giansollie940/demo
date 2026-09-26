@@ -11,6 +11,7 @@ vi.mock('../../src/features/homework/view-context', () => ({useHomeworkViewStore
 vi.mock('../../src/features/owl/daily-quote', () => ({useDailyQuote: () => ({data:{value:null}})}));
 vi.mock('../../src/features/shared/useNowTicker', () => ({useNowTicker: () => ({value:0})}));
 vi.mock('../../src/features/registrations/device-policy-queries', () => ({useDevicePolicy: () => ({query:{isSuccess:{value:false},data:{value:[]}}})}));
+vi.mock('../../src/features/owl/useTeacherQueueWeeks', () => ({useTeacherQueueWeeks: () => ({teacherQueueWeeks:{value:[]}})}));
 vi.mock('../../src/features/owl/owl-model', async () => ({...(await vi.importActual('../../src/features/owl/owl-model')),buildOwlContextMessages: () => scenario.messages}));
 import Owl from '../../src/components/owl/OwlMascotV2.vue';
 let app: any;
