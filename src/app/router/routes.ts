@@ -2,20 +2,22 @@ import type { RouteRecordRaw } from 'vue-router'
 import AppShell from '../../layouts/AppShell.vue'
 import DashboardWithPeoplePage from '../../pages/DashboardWithPeoplePage.vue'
 import LoginPage from '../../pages/LoginPage.vue'
-import RegistrationPage from '../../pages/RegistrationPage.vue'
-import ApprovalPage from '../../pages/ApprovalPage.vue'
-import TrackingPage from '../../pages/TrackingPage.vue'
-import StudentsPage from '../../pages/StudentsPage.vue'
-import AdminPage from '../../pages/AdminPage.vue'
-import SchedulePage from '../../pages/SchedulePage.vue'
-import WeeksPage from '../../pages/WeeksPage.vue'
-import StatisticsPage from '../../pages/StatisticsPage.vue'
-import HistoryPage from '../../pages/HistoryPage.vue'
-import CommentsPage from '../../pages/CommentsPage.vue'
-import SettingsPage from '../../pages/SettingsPage.vue'
-import IssuesPage from '../../pages/IssuesPage.vue'
-import HomeworkPage from '../../pages/HomeworkPage.vue'
 import type { UserRole } from '../../types/legacy'
+
+// Other pages load on first visit so the initial bundle stays small.
+const RegistrationPage = () => import('../../pages/RegistrationPage.vue')
+const ApprovalPage = () => import('../../pages/ApprovalPage.vue')
+const TrackingPage = () => import('../../pages/TrackingPage.vue')
+const StudentsPage = () => import('../../pages/StudentsPage.vue')
+const AdminPage = () => import('../../pages/AdminPage.vue')
+const SchedulePage = () => import('../../pages/SchedulePage.vue')
+const WeeksPage = () => import('../../pages/WeeksPage.vue')
+const StatisticsPage = () => import('../../pages/StatisticsPage.vue')
+const HistoryPage = () => import('../../pages/HistoryPage.vue')
+const CommentsPage = () => import('../../pages/CommentsPage.vue')
+const SettingsPage = () => import('../../pages/SettingsPage.vue')
+const IssuesPage = () => import('../../pages/IssuesPage.vue')
+const HomeworkPage = () => import('../../pages/HomeworkPage.vue')
 
 const learners: UserRole[] = ['student', 'monitor']
 const teachers: UserRole[] = ['teacher']
