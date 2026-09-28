@@ -1,17 +1,20 @@
 ﻿<script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useIntervalFn } from '@vueuse/core'
-import { Eye, EyeOff, LockKeyhole, Moon, Sun, UserRound } from 'lucide-vue-next'
+import { Eye, EyeOff, Flashlight, LockKeyhole, Moon, Sun, UserRound } from 'lucide-vue-next'
 import AuthLayout from '../layouts/AuthLayout.vue'
 import AppButton from '../components/ui/AppButton.vue'
 import IconButton from '../components/ui/IconButton.vue'
+import LoginOwl from '../components/login/LoginOwl.vue'
+import { createOwlCameo, pointNearRect, supportsFlashlightMask } from '../features/login/flashlight'
 import { useAuthStore } from '../stores/auth'
 import { useContextStore } from '../stores/context'
 import { usePreferencesStore } from '../stores/preferences'
 
 const faviconUrl = `${import.meta.env.BASE_URL}assets/images/favicon.png`
-const loginHeroUrl = `${import.meta.env.BASE_URL}assets/images/login-hero.png`
+const heroDayUrl = `${import.meta.env.BASE_URL}assets/images/login-hero-day.webp`
+const heroNightUrl = `${import.meta.env.BASE_URL}assets/images/login-hero-night.webp`
 
 const auth = useAuthStore()
 const context = useContextStore()
@@ -41,6 +44,135 @@ useIntervalFn(() => {
 
 const slogan = computed(() => slogans[sloganIndex.value])
 
+// ===== Flashlight password reveal (UIFX-LOGIN-FLASHLIGHT-OWL-001) =====
+// Purely visual: the night mode lives only on this page and never touches the saved theme,
+// so the app opens in whatever theme Settings holds once the user signs in.
+const maskSupported = supportsFlashlightMask()
+const flashlight = ref(false)
+const revealOn = computed(() => maskSupported ? flashlight.value : showPassword.value)
+const heroNight = computed(() => flashlight.value || preferences.resolvedTheme === 'dark')
+
+const fxRoot = ref<HTMLElement | null>(null)
+const revealLayer = ref<HTMLElement | null>(null)
+const revealText = ref<HTMLElement | null>(null)
+const codeField = ref<HTMLElement | null>(null)
+const loginPanel = ref<HTMLElement | null>(null)
+const revealOverflow = ref(false)
+
+const owl = createOwlCameo()
+const owlBox = ref({ x: 0, y: 0, size: 92 })
+
+let pointerX = 0
+let pointerY = 0
+let frame = 0
+
+function paint() {
+  frame = 0
+  fxRoot.value?.style.setProperty('--flash-x', `${pointerX}px`)
+  fxRoot.value?.style.setProperty('--flash-y', `${pointerY}px`)
+  const layer = revealLayer.value
+  if (layer) {
+    const rect = layer.getBoundingClientRect()
+    layer.style.setProperty('--lx', `${pointerX - rect.left}px`)
+    layer.style.setProperty('--ly', `${pointerY - rect.top}px`)
+  }
+  const field = codeField.value
+  if (!owl.shown.value && field && pointNearRect(pointerX, pointerY, field.getBoundingClientRect(), 24)) showOwl(field)
+}
+
+function aimAt(x: number, y: number) {
+  pointerX = x
+  pointerY = y
+  if (!frame) frame = requestAnimationFrame(paint)
+}
+
+function onPointer(event: PointerEvent) { aimAt(event.clientX, event.clientY) }
+function onTouch(event: TouchEvent) {
+  const touch = event.touches[0]
+  if (touch) aimAt(touch.clientX, touch.clientY)
+}
+function onKey(event: KeyboardEvent) { if (event.key === 'Escape') setFlashlight(false) }
+
+// Perch beside the login card, left of the username field; fall back to just above the field
+// when there is no room (tablet/mobile). Never over the inputs, the eye button or submit.
+function showOwl(field: HTMLElement) {
+  const rect = field.getBoundingClientRect()
+  const vw = window.innerWidth
+  const size = vw < 560 ? 68 : 92
+  const panel = loginPanel.value?.getBoundingClientRect()
+  let x = (panel?.left ?? rect.left) - size - 14
+  let y = rect.top + rect.height / 2 - size / 2
+  if (x < 8) {
+    x = rect.right - size
+    y = rect.top - size - 26
+  }
+  owlBox.value = { x: Math.min(Math.max(8, x), vw - size - 8), y: Math.max(8, y), size }
+  owl.play()
+}
+
+function listen(on: boolean) {
+  const method = on ? 'addEventListener' : 'removeEventListener'
+  window[method]('pointermove', onPointer as EventListener, { passive: true } as AddEventListenerOptions)
+  window[method]('pointerdown', onPointer as EventListener, { passive: true } as AddEventListenerOptions)
+  window[method]('touchmove', onTouch as EventListener, { passive: true } as AddEventListenerOptions)
+  window[method]('keydown', onKey as EventListener)
+}
+
+function setFlashlight(on: boolean) {
+  if (flashlight.value === on) return
+  flashlight.value = on
+  listen(on)
+  if (!on) {
+    if (frame) cancelAnimationFrame(frame)
+    frame = 0
+    owl.reset()
+  }
+}
+
+function toggleReveal(event: MouseEvent) {
+  if (!maskSupported) {
+    showPassword.value = !showPassword.value
+    return
+  }
+  if (!flashlight.value) {
+    // Start the light where the user pressed; keyboard presses (detail 0) start on the button itself.
+    const button = event.currentTarget as HTMLElement
+    const rect = button.getBoundingClientRect()
+    const fromPointer = event.detail > 0
+    aimAt(fromPointer ? event.clientX : rect.left + rect.width / 2, fromPointer ? event.clientY : rect.top + rect.height / 2)
+  }
+  setFlashlight(!flashlight.value)
+}
+
+// Long passwords: keep the tail (where the caret usually is) in view, like the input does.
+watch([password, flashlight], async () => {
+  if (!flashlight.value) return
+  await nextTick()
+  const layer = revealLayer.value
+  const text = revealText.value
+  revealOverflow.value = Boolean(layer && text && text.scrollWidth > layer.clientWidth)
+  if (frame === 0 && layer) paint()
+})
+
+onBeforeUnmount(() => setFlashlight(false))
+
+function toggleTheme() {
+  const doc = document as Document & { startViewTransition?: (update: () => Promise<void>) => { finished: Promise<void> } }
+  const reduced = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
+  if (!doc.startViewTransition || reduced) {
+    preferences.toggleTheme()
+    return
+  }
+  // The view transition cross-fades the whole page; the hero's own fade is paused meanwhile
+  // so the two animations don't stack.
+  const root = document.documentElement
+  root.classList.add('theme-switching')
+  doc.startViewTransition(async () => {
+    preferences.toggleTheme()
+    await nextTick()
+  }).finished.finally(() => root.classList.remove('theme-switching'))
+}
+
 async function submit() {
   // novalidate trên form: bong bóng kiểm tra của trình duyệt không theo theme và
   // hiện bằng ngôn ngữ của trình duyệt. Trang này đã có sẵn chỗ báo lỗi riêng
@@ -65,6 +197,7 @@ async function submit() {
 
 <template>
   <AuthLayout>
+    <div ref="fxRoot" class="login-fx" :class="{ 'flashlight-on': flashlight }">
     <section class="login-shell">
       <div class="login-visual">
         <header class="brand-row">
@@ -72,7 +205,7 @@ async function submit() {
             <img :src="faviconUrl" alt="" />
             <strong>SỔ TỰ HỌC</strong>
           </div>
-          <IconButton label="Đổi giao diện sáng/tối" @click="preferences.toggleTheme">
+          <IconButton label="Đổi giao diện sáng/tối" @click="toggleTheme">
             <Sun v-if="preferences.resolvedTheme === 'dark'" />
             <Moon v-else />
           </IconButton>
@@ -84,8 +217,9 @@ async function submit() {
           <p>Theo dõi kế hoạch, nhận phản hồi và tiến bộ rõ ràng theo từng tuần.</p>
         </div>
 
-        <figure class="hero-card">
-          <img :src="loginHeroUrl" alt="Học sinh cùng học tập" />
+        <figure class="hero-card" :class="{ night: heroNight }">
+          <img class="hero-day" :src="heroDayUrl" alt="Học sinh cùng học nhóm ban ngày" :aria-hidden="heroNight" />
+          <img class="hero-night" :src="heroNightUrl" alt="Học sinh tự học ban đêm" :aria-hidden="!heroNight" />
         </figure>
 
         <div class="slogan" aria-live="polite">
@@ -100,7 +234,7 @@ async function submit() {
         </div>
       </div>
 
-      <div class="login-panel">
+      <div ref="loginPanel" class="login-panel">
         <div class="form-heading">
           <span>TÀI KHOẢN HỌC TẬP</span>
           <h2>Chào mừng trở lại</h2>
@@ -110,7 +244,7 @@ async function submit() {
         <form class="login-form" novalidate @submit.prevent="submit">
           <label>
             <span>Mã đăng nhập</span>
-            <div class="field">
+            <div ref="codeField" class="field">
               <UserRound />
               <input
                 v-model.trim="code"
@@ -126,21 +260,35 @@ async function submit() {
             <span>Mật khẩu</span>
             <div class="field">
               <LockKeyhole />
-              <input
-                v-model="password"
-                :type="showPassword ? 'text' : 'password'"
-                autocomplete="current-password"
-                placeholder="Nhập mật khẩu"
-                required
-                :aria-invalid="passwordInvalid"
-              />
+              <span class="password-slot">
+                <input
+                  v-model="password"
+                  :type="showPassword ? 'text' : 'password'"
+                  autocomplete="current-password"
+                  placeholder="Nhập mật khẩu"
+                  required
+                  :aria-invalid="passwordInvalid"
+                />
+                <!-- Real characters, visible only inside the flashlight mask. Rendered as text
+                     (never an attribute) and only while the flashlight is on. -->
+                <span
+                  v-if="flashlight && password"
+                  ref="revealLayer"
+                  class="password-reveal-layer"
+                  :class="{ overflow: revealOverflow }"
+                  aria-hidden="true"
+                ><span ref="revealText">{{ password }}</span></span>
+              </span>
               <button
                 type="button"
                 class="reveal"
-                :aria-label="showPassword ? 'Ẩn mật khẩu' : 'Hiện mật khẩu'"
-                @click="showPassword = !showPassword"
+                :class="{ lit: flashlight }"
+                :aria-pressed="revealOn"
+                :aria-label="revealOn ? 'Tắt xem mật khẩu' : 'Bật xem mật khẩu'"
+                @click="toggleReveal"
               >
-                <EyeOff v-if="showPassword" />
+                <Flashlight v-if="flashlight" />
+                <EyeOff v-else-if="showPassword" />
                 <Eye v-else />
               </button>
             </div>
@@ -162,6 +310,17 @@ async function submit() {
         </div>
       </div>
     </section>
+
+    <div class="night-overlay" aria-hidden="true"></div>
+    <div class="flash-glow" aria-hidden="true"></div>
+    <LoginOwl
+      :phase="owl.phase.value"
+      :eyes-closed="owl.eyesClosed.value"
+      :x="owlBox.x"
+      :y="owlBox.y"
+      :size="owlBox.size"
+    />
+    </div>
   </AuthLayout>
 </template>
 
@@ -254,6 +413,28 @@ async function submit() {
   border-radius: 0;
   background: transparent;
   box-shadow: none;
+}
+
+.hero-card {
+  display: grid;
+}
+
+.hero-card img {
+  grid-area: 1 / 1;
+  transition: opacity 600ms ease;
+}
+
+.hero-card .hero-night,
+.hero-card.night .hero-day {
+  opacity: 0;
+}
+
+.hero-card.night .hero-night {
+  opacity: 1;
+}
+
+:global(html.theme-switching) .hero-card img {
+  transition: none;
 }
 
 .hero-card img {
@@ -441,6 +622,106 @@ async function submit() {
 }
 
 .reveal svg { width: 19px; }
+
+.reveal:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
+.reveal.lit {
+  color: #ffd98a;
+  filter: drop-shadow(0 0 6px rgb(255 220 150 / .8));
+}
+
+/* ===== UIFX-LOGIN-FLASHLIGHT-OWL-001 ===== */
+.login-fx {
+  display: contents;
+  --flash-x: 50vw;
+  --flash-y: 50vh;
+  --flash-r: clamp(96px, 11vw, 150px);
+}
+
+.night-overlay,
+.flash-glow {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 500ms ease, visibility 0s linear 500ms;
+}
+
+.night-overlay {
+  z-index: 40;
+  background: radial-gradient(120% 90% at 50% 0%, #0c213d 0%, #091a30 55%, #071426 100%);
+  -webkit-mask-image: radial-gradient(circle var(--flash-r) at var(--flash-x) var(--flash-y), transparent 0%, transparent 45%, #000 100%);
+  mask-image: radial-gradient(circle var(--flash-r) at var(--flash-x) var(--flash-y), transparent 0%, transparent 45%, #000 100%);
+}
+
+/* Warm tint inside the beam so it reads as lamp light, not a hole. Multiply only warms
+   the colours underneath; it never washes the text out to white. */
+.flash-glow {
+  z-index: 41;
+  mix-blend-mode: multiply;
+  background: radial-gradient(
+    circle calc(var(--flash-r) * 1.1) at var(--flash-x) var(--flash-y),
+    rgb(255 246 205 / .95) 0%,
+    rgb(255 220 150 / .2) 70%,
+    transparent 100%
+  );
+}
+
+.flashlight-on .night-overlay,
+.flashlight-on .flash-glow {
+  visibility: visible;
+  transition: opacity 500ms ease, visibility 0s;
+}
+
+.flashlight-on .night-overlay { opacity: .88; }
+.flashlight-on .flash-glow { opacity: 1; }
+
+.password-slot {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  display: flex;
+}
+
+.password-reveal-layer {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  overflow: hidden;
+  white-space: pre;
+  pointer-events: none;
+  background: var(--field-surface);
+  color: var(--text);
+  font: inherit;
+  font-size: .95rem;
+  line-height: 1.45;
+  /* Opaque inside the beam (covers the dots), transparent outside it (dots show through). */
+  -webkit-mask-image: radial-gradient(circle var(--flash-r) at var(--lx, -999px) var(--ly, -999px), #000 0%, #000 45%, transparent 100%);
+  mask-image: radial-gradient(circle var(--flash-r) at var(--lx, -999px) var(--ly, -999px), #000 0%, #000 45%, transparent 100%);
+}
+
+.password-reveal-layer.overflow {
+  justify-content: flex-end;
+}
+
+@media (max-width: 767px) {
+  .login-fx { --flash-r: clamp(90px, 28vw, 120px); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .night-overlay,
+  .flash-glow,
+  .flashlight-on .night-overlay,
+  .flashlight-on .flash-glow,
+  .hero-card img {
+    transition-duration: 150ms;
+  }
+}
 .submit { width: 100%; min-height: 50px; font-size: .92rem; }
 .error { margin: 0; color: var(--color-danger); font-size: 0.9rem; }
 
@@ -514,3 +795,12 @@ async function submit() {
 }
 </style>
 
+
+<style>
+/* Light/dark switch on the login page cross-fades the whole page (View Transitions API). */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation-duration: 550ms;
+  animation-timing-function: ease;
+}
+</style>
