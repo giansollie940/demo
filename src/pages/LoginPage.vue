@@ -2,12 +2,14 @@
 import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useIntervalFn } from '@vueuse/core'
-import { Eye, EyeOff, Flashlight, LockKeyhole, Moon, Sun, UserRound } from 'lucide-vue-next'
+import { Eye, EyeOff, LockKeyhole, Moon, Sun, UserRound } from 'lucide-vue-next'
 import AuthLayout from '../layouts/AuthLayout.vue'
 import AppButton from '../components/ui/AppButton.vue'
 import IconButton from '../components/ui/IconButton.vue'
+import LoginFlashlight from '../components/login/LoginFlashlight.vue'
 import LoginOwl from '../components/login/LoginOwl.vue'
-import { createOwlCameo, pointNearRect, supportsFlashlightMask } from '../features/login/flashlight'
+import LoginSky from '../components/login/LoginSky.vue'
+import { beamGeometry, createOwlCameo, flashRadius, pointNearRect, supportsBeamComposite, supportsFlashlightMask } from '../features/login/flashlight'
 import { useAuthStore } from '../stores/auth'
 import { useContextStore } from '../stores/context'
 import { usePreferencesStore } from '../stores/preferences'
@@ -48,6 +50,7 @@ const slogan = computed(() => slogans[sloganIndex.value])
 // Purely visual: the night mode lives only on this page and never touches the saved theme,
 // so the app opens in whatever theme Settings holds once the user signs in.
 const maskSupported = supportsFlashlightMask()
+const beamSupported = maskSupported && supportsBeamComposite()
 const flashlight = ref(false)
 const revealOn = computed(() => maskSupported ? flashlight.value : showPassword.value)
 const heroNight = computed(() => flashlight.value || preferences.resolvedTheme === 'dark')
@@ -56,6 +59,7 @@ const fxRoot = ref<HTMLElement | null>(null)
 const revealLayer = ref<HTMLElement | null>(null)
 const revealText = ref<HTMLElement | null>(null)
 const codeField = ref<HTMLElement | null>(null)
+const passwordField = ref<HTMLElement | null>(null)
 const loginPanel = ref<HTMLElement | null>(null)
 const revealOverflow = ref(false)
 
@@ -65,16 +69,48 @@ const owlBox = ref({ x: 0, y: 0, size: 92 })
 let pointerX = 0
 let pointerY = 0
 let frame = 0
+// Keep in sync with the conic-gradient stops in the .beam styles (8deg soft edge, 26deg core).
+const BEAM_SPREAD = 26
+const BEAM_SOFT = 8
+
+// The torch hangs beside the login card, level with the password field, and swivels on its tail.
+// Without room beside the card (tablet/mobile) it is held up from the bottom centre of the screen.
+function torchPivot(vw: number, vh: number) {
+  const length = vw < 560 ? 84 : 110
+  const field = passwordField.value?.getBoundingClientRect()
+  const panel = loginPanel.value?.getBoundingClientRect()
+  const besideX = panel ? panel.left - length - 26 : -1
+  if (field && besideX >= 8) return { x: besideX, y: field.top + field.height / 2, length }
+  return { x: vw / 2, y: vh - 20, length }
+}
 
 function paint() {
   frame = 0
-  fxRoot.value?.style.setProperty('--flash-x', `${pointerX}px`)
-  fxRoot.value?.style.setProperty('--flash-y', `${pointerY}px`)
+  const root = fxRoot.value
+  if (!root) return
+  const vw = window.innerWidth
+  const pivot = torchPivot(vw, window.innerHeight)
+  const radius = flashRadius(vw)
+  const beam = beamGeometry(pivot, { x: pointerX, y: pointerY }, pivot.length * 98 / 120, radius)
+  const set = (name: string, value: string) => root.style.setProperty(name, value)
+  set('--flash-x', `${pointerX}px`)
+  set('--flash-y', `${pointerY}px`)
+  set('--flash-r', `${radius}px`)
+  set('--pivot-x', `${pivot.x}px`)
+  set('--pivot-y', `${pivot.y}px`)
+  set('--torch-length', `${pivot.length}px`)
+  set('--beam-rot', `${beam.rotation}deg`)
+  set('--hx', `${beam.head.x}px`)
+  set('--hy', `${beam.head.y}px`)
+  set('--beam-from', `${beam.conicCenter - BEAM_SPREAD / 2 - BEAM_SOFT}deg`)
+  set('--beam-reach', `${beam.reach}px`)
   const layer = revealLayer.value
   if (layer) {
     const rect = layer.getBoundingClientRect()
     layer.style.setProperty('--lx', `${pointerX - rect.left}px`)
     layer.style.setProperty('--ly', `${pointerY - rect.top}px`)
+    layer.style.setProperty('--lhx', `${beam.head.x - rect.left}px`)
+    layer.style.setProperty('--lhy', `${beam.head.y - rect.top}px`)
   }
   const field = codeField.value
   if (!owl.shown.value && field && pointNearRect(pointerX, pointerY, field.getBoundingClientRect(), 24)) showOwl(field)
@@ -92,6 +128,7 @@ function onTouch(event: TouchEvent) {
   if (touch) aimAt(touch.clientX, touch.clientY)
 }
 function onKey(event: KeyboardEvent) { if (event.key === 'Escape') setFlashlight(false) }
+function onLayout() { aimAt(pointerX, pointerY) }
 
 // Perch beside the login card, left of the username field; fall back to just above the field
 // when there is no room (tablet/mobile). Never over the inputs, the eye button or submit.
@@ -116,6 +153,8 @@ function listen(on: boolean) {
   window[method]('pointerdown', onPointer as EventListener, { passive: true } as AddEventListenerOptions)
   window[method]('touchmove', onTouch as EventListener, { passive: true } as AddEventListenerOptions)
   window[method]('keydown', onKey as EventListener)
+  window[method]('resize', onLayout)
+  window[method]('scroll', onLayout, { passive: true, capture: true } as AddEventListenerOptions)
 }
 
 function setFlashlight(on: boolean) {
@@ -197,9 +236,11 @@ async function submit() {
 
 <template>
   <AuthLayout>
-    <div ref="fxRoot" class="login-fx" :class="{ 'flashlight-on': flashlight }">
+    <div ref="fxRoot" class="login-fx" :class="{ 'flashlight-on': flashlight, beam: beamSupported }">
     <section class="login-shell">
       <div class="login-visual">
+        <LoginSky :night="heroNight" />
+
         <header class="brand-row">
           <div class="brand">
             <img :src="faviconUrl" alt="" />
@@ -258,7 +299,7 @@ async function submit() {
 
           <label>
             <span>Mật khẩu</span>
-            <div class="field">
+            <div ref="passwordField" class="field">
               <LockKeyhole />
               <span class="password-slot">
                 <input
@@ -287,8 +328,7 @@ async function submit() {
                 :aria-label="revealOn ? 'Tắt xem mật khẩu' : 'Bật xem mật khẩu'"
                 @click="toggleReveal"
               >
-                <Flashlight v-if="flashlight" />
-                <EyeOff v-else-if="showPassword" />
+                <EyeOff v-if="revealOn" />
                 <Eye v-else />
               </button>
             </div>
@@ -313,6 +353,7 @@ async function submit() {
 
     <div class="night-overlay" aria-hidden="true"></div>
     <div class="flash-glow" aria-hidden="true"></div>
+    <LoginFlashlight v-if="maskSupported" :on="flashlight" />
     <LoginOwl
       :phase="owl.phase.value"
       :eyes-closed="owl.eyesClosed.value"
@@ -709,8 +750,41 @@ async function submit() {
   justify-content: flex-end;
 }
 
-@media (max-width: 767px) {
-  .login-fx { --flash-r: clamp(90px, 28vw, 120px); }
+/* Cone beam from the torch head to the spot. Lit area = (cone ∩ within reach) ∪ spot; the
+   night overlay uses its complement. Only for browsers with mask-composite (.beam); others
+   keep the round spot above. The --lit-* layers are resolved on .login-fx in viewport px. */
+.login-fx.beam {
+  --lit-spot: radial-gradient(circle var(--flash-r) at var(--flash-x) var(--flash-y), #000 0%, #000 45%, transparent 100%);
+  --lit-cone: conic-gradient(from var(--beam-from) at var(--hx) var(--hy), transparent 0deg, #000 8deg, #000 34deg, transparent 42deg, transparent 360deg);
+  --lit-reach: radial-gradient(circle var(--beam-reach) at var(--hx) var(--hy), #000 0%, #000 72%, transparent 100%);
+}
+
+.beam .night-overlay {
+  -webkit-mask-image: linear-gradient(#000, #000), var(--lit-spot), var(--lit-cone), var(--lit-reach);
+  mask-image: linear-gradient(#000, #000), var(--lit-spot), var(--lit-cone), var(--lit-reach);
+  -webkit-mask-composite: xor, source-over, source-in, source-over;
+  mask-composite: exclude, add, intersect, add;
+}
+
+.beam .flash-glow {
+  background: radial-gradient(circle calc(var(--flash-r) * 1.2) at var(--flash-x) var(--flash-y), rgb(255 248 222) 0%, rgb(255 236 196) 100%);
+  -webkit-mask-image: var(--lit-spot), var(--lit-cone), var(--lit-reach);
+  mask-image: var(--lit-spot), var(--lit-cone), var(--lit-reach);
+  -webkit-mask-composite: source-over, source-in, source-over;
+  mask-composite: add, intersect, add;
+}
+
+.beam .password-reveal-layer {
+  -webkit-mask-image:
+    radial-gradient(circle var(--flash-r) at var(--lx, -999px) var(--ly, -999px), #000 0%, #000 45%, transparent 100%),
+    conic-gradient(from var(--beam-from) at var(--lhx, -999px) var(--lhy, -999px), transparent 0deg, #000 8deg, #000 34deg, transparent 42deg, transparent 360deg),
+    radial-gradient(circle var(--beam-reach) at var(--lhx, -999px) var(--lhy, -999px), #000 0%, #000 72%, transparent 100%);
+  mask-image:
+    radial-gradient(circle var(--flash-r) at var(--lx, -999px) var(--ly, -999px), #000 0%, #000 45%, transparent 100%),
+    conic-gradient(from var(--beam-from) at var(--lhx, -999px) var(--lhy, -999px), transparent 0deg, #000 8deg, #000 34deg, transparent 42deg, transparent 360deg),
+    radial-gradient(circle var(--beam-reach) at var(--lhx, -999px) var(--lhy, -999px), #000 0%, #000 72%, transparent 100%);
+  -webkit-mask-composite: source-over, source-in, source-over;
+  mask-composite: add, intersect, add;
 }
 
 @media (prefers-reduced-motion: reduce) {

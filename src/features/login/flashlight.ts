@@ -10,6 +10,37 @@ export function supportsFlashlightMask(css: { supports?: (property: string, valu
   }
 }
 
+/** The cone beam intersects several mask layers; without mask-composite only the round spot is drawn. */
+export function supportsBeamComposite(css: { supports?: (property: string, value: string) => boolean } | undefined = globalThis.CSS): boolean {
+  try {
+    return Boolean(css?.supports?.('mask-composite', 'intersect') || css?.supports?.('-webkit-mask-composite', 'source-in'))
+  } catch {
+    return false
+  }
+}
+
+/** Radius of the round spot at the end of the beam; mirrors the old clamp() so mobile gets a smaller light. */
+export function flashRadius(viewportWidth: number): number {
+  return viewportWidth < 768
+    ? Math.min(120, Math.max(90, viewportWidth * 0.28))
+    : Math.min(150, Math.max(96, viewportWidth * 0.11))
+}
+
+export interface Point { x: number; y: number }
+
+/**
+ * Where the flashlight points and how far its beam reaches.
+ * `rotation` is the screen angle (0° = right, clockwise) used to rotate the torch artwork;
+ * `conicCenter` is the same direction in conic-gradient terms (0° = up).
+ */
+export function beamGeometry(pivot: Point, target: Point, lensOffset: number, spotRadius: number) {
+  const rotation = Math.atan2(target.y - pivot.y, target.x - pivot.x) * 180 / Math.PI
+  const rad = rotation * Math.PI / 180
+  const head = { x: pivot.x + Math.cos(rad) * lensOffset, y: pivot.y + Math.sin(rad) * lensOffset }
+  const reach = Math.hypot(target.x - head.x, target.y - head.y) + spotRadius
+  return { rotation, head, reach, conicCenter: rotation + 90 }
+}
+
 interface RectLike { left: number; top: number; right: number; bottom: number }
 
 /** True when the point sits inside the rect grown by `pad` px on every side. */
