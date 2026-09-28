@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
-import { createOwlCameo, OWL_CAMEO_TIMING, pointNearRect, supportsFlashlightMask } from '../../src/features/login/flashlight'
+import { beamGeometry, createOwlCameo, flashRadius, OWL_CAMEO_TIMING, pointNearRect, supportsBeamComposite, supportsFlashlightMask } from '../../src/features/login/flashlight'
 
 describe('supportsFlashlightMask', () => {
   test('accepts standard or -webkit- mask support', () => {
@@ -10,6 +10,29 @@ describe('supportsFlashlightMask', () => {
     expect(supportsFlashlightMask({ supports: () => false })).toBe(false)
     expect(supportsFlashlightMask(undefined)).toBe(false)
     expect(supportsFlashlightMask({ supports: () => { throw new Error('boom') } })).toBe(false)
+  })
+})
+
+describe('beam', () => {
+  test('points the torch at the target and starts the beam at the lens', () => {
+    const right = beamGeometry({ x: 0, y: 0 }, { x: 200, y: 0 }, 90, 100)
+    expect(right.rotation).toBe(0)
+    expect(right.conicCenter).toBe(90)
+    expect(right.head).toEqual({ x: 90, y: 0 })
+    expect(right.reach).toBe(210)
+    const up = beamGeometry({ x: 100, y: 500 }, { x: 100, y: 100 }, 80, 100)
+    expect(up.rotation).toBe(-90)
+    expect(up.conicCenter).toBe(0)
+    expect(up.head.x).toBeCloseTo(100)
+    expect(up.head.y).toBeCloseTo(420)
+  })
+  test('mask-composite detection and responsive spot radius', () => {
+    expect(supportsBeamComposite({ supports: (p, v) => p === 'mask-composite' && v === 'intersect' })).toBe(true)
+    expect(supportsBeamComposite({ supports: (p, v) => p === '-webkit-mask-composite' && v === 'source-in' })).toBe(true)
+    expect(supportsBeamComposite({ supports: () => false })).toBe(false)
+    expect(flashRadius(360)).toBeCloseTo(100.8)
+    expect(flashRadius(1440)).toBeCloseTo(150)
+    expect(flashRadius(800)).toBe(96)
   })
 })
 
