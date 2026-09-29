@@ -60,7 +60,8 @@ const revealLayer = ref<HTMLElement | null>(null)
 const revealText = ref<HTMLElement | null>(null)
 const codeField = ref<HTMLElement | null>(null)
 const passwordField = ref<HTMLElement | null>(null)
-const loginPanel = ref<HTMLElement | null>(null)
+const revealButton = ref<HTMLElement | null>(null)
+const passwordSlot = ref<HTMLElement | null>(null)
 const revealOverflow = ref(false)
 
 const owl = createOwlCameo()
@@ -73,15 +74,12 @@ let frame = 0
 const BEAM_SPREAD = 26
 const BEAM_SOFT = 8
 
-// The torch hangs beside the login card, level with the password field, and swivels on its tail.
-// Without room beside the card (tablet/mobile) it is held up from the bottom centre of the screen.
-function torchPivot(vw: number, vh: number) {
-  const length = vw < 560 ? 84 : 110
-  const field = passwordField.value?.getBoundingClientRect()
-  const panel = loginPanel.value?.getBoundingClientRect()
-  const besideX = panel ? panel.left - length - 26 : -1
-  if (field && besideX >= 8) return { x: besideX, y: field.top + field.height / 2, length }
-  return { x: vw / 2, y: vh - 20, length }
+// The torch takes the eye button's place in the password field and swivels on its tail there.
+function torchPivot(vw: number) {
+  const length = vw < 560 ? 64 : 76
+  const eye = revealButton.value?.getBoundingClientRect()
+  if (!eye) return { x: vw / 2, y: window.innerHeight - 20, length }
+  return { x: eye.left + eye.width / 2, y: eye.top + eye.height / 2, length }
 }
 
 function paint() {
@@ -89,7 +87,7 @@ function paint() {
   const root = fxRoot.value
   if (!root) return
   const vw = window.innerWidth
-  const pivot = torchPivot(vw, window.innerHeight)
+  const pivot = torchPivot(vw)
   const radius = flashRadius(vw)
   const beam = beamGeometry(pivot, { x: pointerX, y: pointerY }, pivot.length * 98 / 120, radius)
   const set = (name: string, value: string) => root.style.setProperty(name, value)
@@ -129,21 +127,20 @@ function onTouch(event: TouchEvent) {
 }
 function onKey(event: KeyboardEvent) { if (event.key === 'Escape') setFlashlight(false) }
 function onLayout() { aimAt(pointerX, pointerY) }
+// Second click anywhere switches the light off. Clicks on the eye button toggle it themselves.
+function onClickAnywhere(event: MouseEvent) {
+  if (revealButton.value?.contains(event.target as Node)) return
+  setFlashlight(false)
+}
+let clickArmTimer: ReturnType<typeof setTimeout> | undefined
 
-// Perch beside the login card, left of the username field; fall back to just above the field
-// when there is no room (tablet/mobile). Never over the inputs, the eye button or submit.
+// Perch on the top edge of the username box, at its right end (the label text sits on the left),
+// so the owl stands on something instead of floating. The owl artwork's feet sit ~6% above
+// the bottom of its box, so it is lowered by that much to rest on the border.
 function showOwl(field: HTMLElement) {
   const rect = field.getBoundingClientRect()
-  const vw = window.innerWidth
-  const size = vw < 560 ? 68 : 92
-  const panel = loginPanel.value?.getBoundingClientRect()
-  let x = (panel?.left ?? rect.left) - size - 14
-  let y = rect.top + rect.height / 2 - size / 2
-  if (x < 8) {
-    x = rect.right - size
-    y = rect.top - size - 26
-  }
-  owlBox.value = { x: Math.min(Math.max(8, x), vw - size - 8), y: Math.max(8, y), size }
+  const size = window.innerWidth < 560 ? 60 : 72
+  owlBox.value = { x: rect.right - size - 14, y: rect.top - size + size * 0.06, size }
   owl.play()
 }
 
@@ -153,6 +150,10 @@ function listen(on: boolean) {
   window[method]('pointerdown', onPointer as EventListener, { passive: true } as AddEventListenerOptions)
   window[method]('touchmove', onTouch as EventListener, { passive: true } as AddEventListenerOptions)
   window[method]('keydown', onKey as EventListener)
+  // Armed on the next task so the click that switched the light on does not switch it off again.
+  clearTimeout(clickArmTimer)
+  if (on) clickArmTimer = setTimeout(() => window.addEventListener('click', onClickAnywhere))
+  else window.removeEventListener('click', onClickAnywhere)
   window[method]('resize', onLayout)
   window[method]('scroll', onLayout, { passive: true, capture: true } as AddEventListenerOptions)
 }
@@ -168,17 +169,15 @@ function setFlashlight(on: boolean) {
   }
 }
 
-function toggleReveal(event: MouseEvent) {
+function toggleReveal() {
   if (!maskSupported) {
     showPassword.value = !showPassword.value
     return
   }
   if (!flashlight.value) {
-    // Start the light where the user pressed; keyboard presses (detail 0) start on the button itself.
-    const button = event.currentTarget as HTMLElement
-    const rect = button.getBoundingClientRect()
-    const fromPointer = event.detail > 0
-    aimAt(fromPointer ? event.clientX : rect.left + rect.width / 2, fromPointer ? event.clientY : rect.top + rect.height / 2)
+    // The torch sits on the eye button, so start by shining back across the password text.
+    const slot = passwordSlot.value?.getBoundingClientRect()
+    if (slot) aimAt(slot.left + slot.width * 0.3, slot.top + slot.height / 2)
   }
   setFlashlight(!flashlight.value)
 }
@@ -239,8 +238,6 @@ async function submit() {
     <div ref="fxRoot" class="login-fx" :class="{ 'flashlight-on': flashlight, beam: beamSupported }">
     <section class="login-shell">
       <div class="login-visual">
-        <LoginSky :night="heroNight" />
-
         <header class="brand-row">
           <div class="brand">
             <img :src="faviconUrl" alt="" />
@@ -259,6 +256,7 @@ async function submit() {
         </div>
 
         <figure class="hero-card" :class="{ night: heroNight }">
+          <LoginSky :night="heroNight" />
           <img class="hero-day" :src="heroDayUrl" alt="Học sinh cùng học nhóm ban ngày" :aria-hidden="heroNight" />
           <img class="hero-night" :src="heroNightUrl" alt="Học sinh tự học ban đêm" :aria-hidden="!heroNight" />
         </figure>
@@ -275,7 +273,7 @@ async function submit() {
         </div>
       </div>
 
-      <div ref="loginPanel" class="login-panel">
+      <div class="login-panel">
         <div class="form-heading">
           <span>TÀI KHOẢN HỌC TẬP</span>
           <h2>Chào mừng trở lại</h2>
@@ -301,7 +299,7 @@ async function submit() {
             <span>Mật khẩu</span>
             <div ref="passwordField" class="field">
               <LockKeyhole />
-              <span class="password-slot">
+              <span ref="passwordSlot" class="password-slot">
                 <input
                   v-model="password"
                   :type="showPassword ? 'text' : 'password'"
@@ -321,6 +319,7 @@ async function submit() {
                 ><span ref="revealText">{{ password }}</span></span>
               </span>
               <button
+                ref="revealButton"
                 type="button"
                 class="reveal"
                 :class="{ lit: flashlight }"
@@ -457,6 +456,7 @@ async function submit() {
 }
 
 .hero-card {
+  position: relative;
   display: grid;
 }
 
@@ -742,8 +742,8 @@ async function submit() {
   font-size: .95rem;
   line-height: 1.45;
   /* Opaque inside the beam (covers the dots), transparent outside it (dots show through). */
-  -webkit-mask-image: radial-gradient(circle var(--flash-r) at var(--lx, -999px) var(--ly, -999px), #000 0%, #000 45%, transparent 100%);
-  mask-image: radial-gradient(circle var(--flash-r) at var(--lx, -999px) var(--ly, -999px), #000 0%, #000 45%, transparent 100%);
+  -webkit-mask-image: radial-gradient(circle var(--flash-r) at var(--lx, -999px) var(--ly, -999px), #000 0%, #000 62%, transparent 72%);
+  mask-image: radial-gradient(circle var(--flash-r) at var(--lx, -999px) var(--ly, -999px), #000 0%, #000 62%, transparent 72%);
 }
 
 .password-reveal-layer.overflow {
@@ -774,15 +774,16 @@ async function submit() {
   mask-composite: add, intersect, add;
 }
 
+/* Harder edges than the overlay so characters and dots never show on top of each other. */
 .beam .password-reveal-layer {
   -webkit-mask-image:
-    radial-gradient(circle var(--flash-r) at var(--lx, -999px) var(--ly, -999px), #000 0%, #000 45%, transparent 100%),
-    conic-gradient(from var(--beam-from) at var(--lhx, -999px) var(--lhy, -999px), transparent 0deg, #000 8deg, #000 34deg, transparent 42deg, transparent 360deg),
-    radial-gradient(circle var(--beam-reach) at var(--lhx, -999px) var(--lhy, -999px), #000 0%, #000 72%, transparent 100%);
+    radial-gradient(circle var(--flash-r) at var(--lx, -999px) var(--ly, -999px), #000 0%, #000 62%, transparent 72%),
+    conic-gradient(from var(--beam-from) at var(--lhx, -999px) var(--lhy, -999px), transparent 0deg, transparent 6deg, #000 9deg, #000 33deg, transparent 36deg, transparent 360deg),
+    radial-gradient(circle var(--beam-reach) at var(--lhx, -999px) var(--lhy, -999px), #000 0%, #000 80%, transparent 88%);
   mask-image:
-    radial-gradient(circle var(--flash-r) at var(--lx, -999px) var(--ly, -999px), #000 0%, #000 45%, transparent 100%),
-    conic-gradient(from var(--beam-from) at var(--lhx, -999px) var(--lhy, -999px), transparent 0deg, #000 8deg, #000 34deg, transparent 42deg, transparent 360deg),
-    radial-gradient(circle var(--beam-reach) at var(--lhx, -999px) var(--lhy, -999px), #000 0%, #000 72%, transparent 100%);
+    radial-gradient(circle var(--flash-r) at var(--lx, -999px) var(--ly, -999px), #000 0%, #000 62%, transparent 72%),
+    conic-gradient(from var(--beam-from) at var(--lhx, -999px) var(--lhy, -999px), transparent 0deg, transparent 6deg, #000 9deg, #000 33deg, transparent 36deg, transparent 360deg),
+    radial-gradient(circle var(--beam-reach) at var(--lhx, -999px) var(--lhy, -999px), #000 0%, #000 80%, transparent 88%);
   -webkit-mask-composite: source-over, source-in, source-over;
   mask-composite: add, intersect, add;
 }
