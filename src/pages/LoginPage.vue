@@ -61,7 +61,6 @@ const heroNight = computed(() => flashlight.value || preferences.resolvedTheme =
 const fxRoot = ref<HTMLElement | null>(null)
 const revealLayer = ref<HTMLElement | null>(null)
 const revealText = ref<HTMLElement | null>(null)
-const codeField = ref<HTMLElement | null>(null)
 const passwordField = ref<HTMLElement | null>(null)
 const revealButton = ref<HTMLElement | null>(null)
 const headline = ref<HTMLElement | null>(null)
@@ -115,8 +114,20 @@ function paint() {
     layer.style.setProperty('--lhx', `${beam.head.x - rect.left}px`)
     layer.style.setProperty('--lhy', `${beam.head.y - rect.top}px`)
   }
-  const field = codeField.value
-  if (!owl.shown.value && field && pointNearRect(pointerX, pointerY, field.getBoundingClientRect(), 24)) showOwl()
+  // The owl only turns up once the beam actually reaches its perch.
+  if (!owl.shown.value) {
+    const perch = owlPerch()
+    // Glinting eyes wait in the dark at the perch as a hint of where to shine.
+    if (perch) {
+      set('--hint-x', `${perch.x}px`)
+      set('--hint-y', `${perch.y}px`)
+      set('--hint-size', `${perch.size}px`)
+    }
+    if (perch && pointNearRect(pointerX, pointerY, { left: perch.x, top: perch.y, right: perch.x + perch.size, bottom: perch.y + perch.size }, 16)) {
+      owlBox.value = perch
+      owl.play()
+    }
+  }
 }
 
 function aimAt(x: number, y: number) {
@@ -147,19 +158,18 @@ function firstLineRect(heading: HTMLElement | null): DOMRect | undefined {
   return range.getClientRects()[0]
 }
 
-// Perch at the end of the headline's first line ("Mỗi giờ tự học"), feet on that line, as if the
-// owl had landed on the words. On phones that headline has usually scrolled away by the time the
-// username field is lit, so the owl lands on the card's "Chào mừng trở lại" heading instead.
+// The owl's perch: the end of the headline's first line ("Mỗi giờ tự học"), feet on that line, as
+// if it had landed on the words. On phones that headline has usually scrolled away while the form
+// is in view, so the perch moves to the end of the card's "Chào mừng trở lại" heading instead.
 // The owl artwork's feet sit ~6% above the bottom of its box.
-function showOwl() {
+function owlPerch() {
   const size = window.innerWidth < 560 ? 76 : 104
   const hero = firstLineRect(headline.value)
   const onScreen = (rect?: DOMRect) => rect && rect.top - size > 0 && rect.bottom < window.innerHeight
   const line = onScreen(hero) ? hero : firstLineRect(cardHeading.value) ?? hero
-  if (!line) return
+  if (!line) return null
   const x = Math.min(line.right + 6, window.innerWidth - size - 8)
-  owlBox.value = { x, y: line.bottom - size * 0.94 - line.height * 0.12, size }
-  owl.play()
+  return { x, y: line.bottom - size * 0.94 - line.height * 0.12, size }
 }
 
 function listen(on: boolean) {
@@ -301,7 +311,7 @@ async function submit() {
         <form class="login-form" novalidate @submit.prevent="submit">
           <label>
             <span>Mã đăng nhập</span>
-            <div ref="codeField" class="field">
+            <div class="field">
               <UserRound />
               <input
                 v-model.trim="code"
@@ -378,6 +388,10 @@ async function submit() {
       :y="owlBox.y"
       :size="owlBox.size"
     />
+    <div v-if="flashlight && !owl.shown.value" class="owl-hint" aria-hidden="true">
+      <i class="eye left"></i>
+      <i class="eye right"></i>
+    </div>
     </div>
   </AuthLayout>
 </template>
@@ -771,6 +785,55 @@ async function submit() {
 
 .password-reveal-layer.overflow {
   justify-content: flex-end;
+}
+
+/* Two glinting eyes above the night overlay, placed exactly where the owl's pupils will be
+   (pupil centres at 39% / 60% across and 34% down the owl artwork). */
+.owl-hint {
+  position: fixed;
+  z-index: 42;
+  left: var(--hint-x, -200px);
+  top: var(--hint-y, -200px);
+  width: var(--hint-size, 104px);
+  height: var(--hint-size, 104px);
+  pointer-events: none;
+  animation: owl-hint-in 900ms ease 400ms both;
+}
+
+.owl-hint .eye {
+  position: absolute;
+  top: calc(34% - 4.5%);
+  width: 9%;
+  height: 9%;
+  border-radius: 50%;
+  background: radial-gradient(circle at 38% 35%, #fffbe6 0 22%, #ffd75e 45%, #f2a93b 100%);
+  box-shadow: 0 0 6px 2px rgb(255 214 110 / .75), 0 0 16px 6px rgb(255 190 80 / .35);
+  animation: owl-hint-blink 3.6s ease-in-out infinite, owl-hint-glow 1.8s ease-in-out infinite;
+}
+
+.owl-hint .eye.left { left: calc(39% - 4.5%); }
+.owl-hint .eye.right { left: calc(60.4% - 4.5%); }
+
+/* A small four-point glint that twinkles off the left eye now and then. */
+.owl-hint .eye.left::after {
+  content: '';
+  position: absolute;
+  left: -70%;
+  top: -80%;
+  width: 110%;
+  height: 110%;
+  background: #fff8d6;
+  clip-path: polygon(50% 0, 60% 40%, 100% 50%, 60% 60%, 50% 100%, 40% 60%, 0 50%, 40% 40%);
+  animation: owl-hint-glint 3.6s ease-in-out infinite;
+}
+
+@keyframes owl-hint-in { from { opacity: 0; } }
+@keyframes owl-hint-blink { 0%, 44%, 52%, 100% { scale: 1 1; } 48% { scale: 1 .1; } }
+@keyframes owl-hint-glow { 0%, 100% { filter: brightness(.9); } 50% { filter: brightness(1.25); } }
+@keyframes owl-hint-glint { 0%, 60%, 100% { opacity: 0; scale: .4; } 72% { opacity: 1; scale: 1; } 84% { opacity: 0; scale: .6; } }
+
+@media (prefers-reduced-motion: reduce) {
+  .owl-hint, .owl-hint .eye, .owl-hint .eye.left::after { animation: none; }
 }
 
 /* Trapezoid beam: the torch's cone cut off just past the pointer. Lit area = cone ∩ reach; the
