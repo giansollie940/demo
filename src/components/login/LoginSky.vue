@@ -1,12 +1,30 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
 
-/** Day: the sun rises over a horizon with slowly turning rays. Night: the moon fades in with twinkling stars. */
+/**
+ * Sits at the hero's top-right corner. Day: the sun rises over a horizon, its halo breathing and
+ * rays shimmering, with sparkles around it. Night: the moon fades in with a soft halo, twinkling
+ * stars and the odd shooting star.
+ */
 defineProps<{ night: boolean }>()
 // Start below the horizon and rise on the first frame, so the sun also rises when the page opens.
 const ready = ref(false)
 onMounted(() => requestAnimationFrame(() => { ready.value = true }))
-const rays = Array.from({ length: 12 }, (_, i) => i * 30)
+const rays = Array.from({ length: 16 }, (_, i) => ({ deg: i * 22.5, long: i % 2 === 0 }))
+const sparkles = [
+  { x: 6, y: 30, s: .9, d: 0 },
+  { x: 92, y: 18, s: .7, d: .7 },
+  { x: 86, y: 78, s: .6, d: 1.4 },
+  { x: 14, y: 82, s: .5, d: 2.1 },
+]
+const stars = [
+  { x: 88, y: 12, s: 1, d: 0 },
+  { x: 12, y: 16, s: .75, d: .6 },
+  { x: 94, y: 62, s: .6, d: 1.2 },
+  { x: 4, y: 58, s: .55, d: 1.8 },
+  { x: 60, y: 2, s: .5, d: 2.4 },
+]
+const star = 'M0-10C.8-3 3-.8 10 0 3 .8.8 3 0 10-.8 3-3 .8-10 0-3-.8-.8-3 0-10Z'
 </script>
 
 <template>
@@ -15,32 +33,78 @@ const rays = Array.from({ length: 12 }, (_, i) => i * 30)
       <svg class="sun" viewBox="0 0 100 100">
         <defs>
           <radialGradient id="login-sun-core" cx=".42" cy=".38" r=".7">
-            <stop offset="0" stop-color="#fff7c2" />
-            <stop offset=".55" stop-color="#ffd05a" />
-            <stop offset="1" stop-color="#ffa630" />
+            <stop offset="0" stop-color="#fffbe0" />
+            <stop offset=".5" stop-color="#ffd65c" />
+            <stop offset="1" stop-color="#ff9f2e" />
+          </radialGradient>
+          <radialGradient id="login-sun-halo">
+            <stop offset=".35" stop-color="#ffe08a" stop-opacity=".75" />
+            <stop offset="1" stop-color="#ffe08a" stop-opacity="0" />
           </radialGradient>
         </defs>
+        <circle class="halo" cx="50" cy="50" r="48" fill="url(#login-sun-halo)" />
         <g class="rays">
-          <rect v-for="deg in rays" :key="deg" x="48" y="4" width="4" height="13" rx="2" fill="#ffc247" :transform="`rotate(${deg} 50 50)`" />
+          <rect
+            v-for="ray in rays"
+            :key="ray.deg"
+            :class="{ long: ray.long }"
+            x="48.5"
+            :y="ray.long ? 3 : 10"
+            width="3"
+            :height="ray.long ? 14 : 8"
+            rx="1.5"
+            fill="#ffc43d"
+            :transform="`rotate(${ray.deg} 50 50)`"
+          />
         </g>
-        <circle cx="50" cy="50" r="23" fill="url(#login-sun-core)" />
+        <circle cx="50" cy="50" r="22" fill="url(#login-sun-core)" />
+        <ellipse cx="42" cy="41" rx="7" ry="4.5" fill="#fff" fill-opacity=".55" transform="rotate(-30 42 41)" />
       </svg>
     </div>
+    <svg class="sparkles" viewBox="0 0 100 100">
+      <path
+        v-for="(p, i) in sparkles"
+        :key="i"
+        class="twinkle"
+        :d="star"
+        fill="#fff3b0"
+        :style="{ transform: `translate(${p.x}px, ${p.y}px) scale(${p.s * .75})`, animationDelay: `${p.d}s` }"
+      />
+    </svg>
     <svg class="moon" viewBox="0 0 100 100">
       <defs>
         <mask id="login-moon-cut">
           <rect width="100" height="100" fill="#fff" />
-          <circle cx="62" cy="40" r="22" fill="#000" />
+          <circle cx="63" cy="40" r="21" fill="#000" />
         </mask>
         <radialGradient id="login-moon-core" cx=".35" cy=".4" r=".75">
-          <stop offset="0" stop-color="#fffdf0" />
-          <stop offset="1" stop-color="#ffe7a3" />
+          <stop offset="0" stop-color="#fffdf2" />
+          <stop offset="1" stop-color="#ffe49a" />
         </radialGradient>
+        <radialGradient id="login-moon-halo">
+          <stop offset=".3" stop-color="#fff2c4" stop-opacity=".55" />
+          <stop offset="1" stop-color="#fff2c4" stop-opacity="0" />
+        </radialGradient>
+        <linearGradient id="login-shooting" x1="0" y1="0" x2="1" y2="0">
+          <stop offset="0" stop-color="#fff6cd" stop-opacity="0" />
+          <stop offset="1" stop-color="#fffdf2" />
+        </linearGradient>
       </defs>
-      <circle cx="50" cy="52" r="27" fill="url(#login-moon-core)" mask="url(#login-moon-cut)" />
-      <path class="star s1" d="M84 16l2 5 5 2-5 2-2 5-2-5-5-2 5-2z" fill="#fff6cd" />
-      <path class="star s2" d="M20 20l1.5 3.5 3.5 1.5-3.5 1.5-1.5 3.5-1.5-3.5-3.5-1.5 3.5-1.5z" fill="#fff6cd" />
-      <path class="star s3" d="M88 72l1.5 3.5 3.5 1.5-3.5 1.5-1.5 3.5-1.5-3.5-3.5-1.5 3.5-1.5z" fill="#fff6cd" />
+      <circle class="halo" cx="48" cy="52" r="46" fill="url(#login-moon-halo)" />
+      <g mask="url(#login-moon-cut)">
+        <circle cx="48" cy="52" r="26" fill="url(#login-moon-core)" />
+        <circle cx="38" cy="60" r="3.2" fill="#f3d27a" fill-opacity=".5" />
+        <circle cx="46" cy="70" r="2" fill="#f3d27a" fill-opacity=".45" />
+      </g>
+      <path
+        v-for="(p, i) in stars"
+        :key="i"
+        class="twinkle"
+        :d="star"
+        fill="#fff6cd"
+        :style="{ transform: `translate(${p.x}px, ${p.y}px) scale(${p.s * .5})`, animationDelay: `${p.d}s` }"
+      />
+      <rect class="shooting" x="0" y="0" width="34" height="1.6" rx=".8" fill="url(#login-shooting)" />
     </svg>
   </div>
 </template>
@@ -49,10 +113,10 @@ const rays = Array.from({ length: 12 }, (_, i) => i * 30)
 .sky {
   position: absolute;
   z-index: 42;
-  top: 118px;
-  right: calc(clamp(400px, 28vw, 456px) + 28px);
-  width: 96px;
-  height: 96px;
+  top: 1%;
+  right: 3%;
+  width: clamp(48px, 8.5vw, 92px);
+  aspect-ratio: 1;
   pointer-events: none;
 }
 
@@ -60,11 +124,12 @@ const rays = Array.from({ length: 12 }, (_, i) => i * 30)
 .horizon {
   position: absolute;
   inset: 0;
-  clip-path: inset(-60% -60% 0 -60%);
+  clip-path: inset(-80% -80% 0 -80%);
 }
 
 .sun,
-.moon {
+.moon,
+.sparkles {
   position: absolute;
   inset: 0;
   width: 100%;
@@ -75,23 +140,36 @@ const rays = Array.from({ length: 12 }, (_, i) => i * 30)
 
 .sun {
   transform: translateY(95%) scale(.85);
-  filter: drop-shadow(0 0 14px rgb(255 190 70 / .75));
+  filter: drop-shadow(0 0 12px rgb(255 190 70 / .8));
   transition: transform 1200ms cubic-bezier(.2, .75, .25, 1), opacity 700ms ease;
 }
 
-.ready:not(.night) .sun {
+.ready:not(.night) .sun,
+.ready:not(.night) .sparkles {
   opacity: 1;
   transform: none;
 }
 
+.sparkles { transition: opacity 900ms ease 500ms; }
+.ready.night .sparkles { transition-delay: 0s; }
+
+.halo {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: halo-breathe 3.2s ease-in-out infinite;
+}
+
 .rays {
   transform-origin: 50px 50px;
-  animation: sun-spin 30s linear infinite;
+  animation: sun-spin 36s linear infinite;
 }
+
+.rays rect { animation: ray-shimmer 1.8s ease-in-out infinite; }
+.rays rect.long { animation-delay: .9s; }
 
 .moon {
   transform: translateY(-12px) scale(.7) rotate(-25deg);
-  filter: drop-shadow(0 0 14px rgb(255 246 205 / .65));
+  filter: drop-shadow(0 0 12px rgb(255 246 205 / .7));
   transition: transform 1000ms cubic-bezier(.2, .75, .25, 1), opacity 800ms ease;
 }
 
@@ -100,23 +178,29 @@ const rays = Array.from({ length: 12 }, (_, i) => i * 30)
   transform: none;
 }
 
-.star { transform-box: fill-box; transform-origin: center; animation: twinkle 2.6s ease-in-out infinite; }
-.s2 { animation-delay: .8s; }
-.s3 { animation-delay: 1.6s; }
-
-@keyframes sun-spin { to { rotate: 360deg; } }
-@keyframes twinkle { 0%, 100% { opacity: .35; scale: .7; } 50% { opacity: 1; scale: 1; } }
-
-@media (max-width: 980px) {
-  .sky { top: 22px; right: 84px; width: 52px; height: 52px; }
+.twinkle {
+  transform-box: view-box;
+  animation: twinkle 2.4s ease-in-out infinite;
 }
 
-@media (max-width: 560px) {
-  .sky { top: 16px; right: 64px; width: 44px; height: 44px; }
+.shooting {
+  opacity: 0;
+  animation: shooting-star 7s ease-in 2s infinite;
+}
+
+@keyframes sun-spin { to { rotate: 360deg; } }
+@keyframes halo-breathe { 0%, 100% { scale: .88; opacity: .75; } 50% { scale: 1.08; opacity: 1; } }
+@keyframes ray-shimmer { 0%, 100% { opacity: 1; } 50% { opacity: .45; } }
+@keyframes twinkle { 0%, 100% { opacity: .25; } 50% { opacity: 1; } }
+@keyframes shooting-star {
+  0%, 88% { opacity: 0; transform: translate(-20px, 18px) rotate(-28deg); }
+  91% { opacity: 1; }
+  100% { opacity: 0; transform: translate(70px, -20px) rotate(-28deg); }
 }
 
 @media (prefers-reduced-motion: reduce) {
   .sun, .moon { transform: none; transition: opacity 300ms ease; }
-  .rays, .star { animation: none; }
+  .rays, .rays rect, .halo, .twinkle, .shooting { animation: none; }
+  .twinkle { opacity: .8; }
 }
 </style>
