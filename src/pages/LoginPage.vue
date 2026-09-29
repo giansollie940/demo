@@ -10,13 +10,16 @@ import LoginFlashlight from '../components/login/LoginFlashlight.vue'
 import LoginOwl from '../components/login/LoginOwl.vue'
 import LoginSky from '../components/login/LoginSky.vue'
 import { beamGeometry, createOwlCameo, flashRadius, pointNearRect, supportsBeamComposite, supportsFlashlightMask } from '../features/login/flashlight'
+// Imported (not served from public/) so each build gives them a content-hashed name and a
+// replaced picture can never be stuck behind a cached copy of the old one.
+import heroDayUrl from '../assets/images/login/hero-day.webp'
+import heroNightUrl from '../assets/images/login/hero-night.webp'
 import { useAuthStore } from '../stores/auth'
 import { useContextStore } from '../stores/context'
 import { usePreferencesStore } from '../stores/preferences'
 
 const faviconUrl = `${import.meta.env.BASE_URL}assets/images/favicon.png`
-const heroDayUrl = `${import.meta.env.BASE_URL}assets/images/login-hero-day.webp`
-const heroNightUrl = `${import.meta.env.BASE_URL}assets/images/login-hero-night.webp`
+
 
 const auth = useAuthStore()
 const context = useContextStore()
@@ -61,6 +64,8 @@ const revealText = ref<HTMLElement | null>(null)
 const codeField = ref<HTMLElement | null>(null)
 const passwordField = ref<HTMLElement | null>(null)
 const revealButton = ref<HTMLElement | null>(null)
+const headline = ref<HTMLElement | null>(null)
+const cardHeading = ref<HTMLElement | null>(null)
 const passwordSlot = ref<HTMLElement | null>(null)
 const revealOverflow = ref(false)
 
@@ -89,7 +94,7 @@ function paint() {
   const vw = window.innerWidth
   const pivot = torchPivot(vw)
   const radius = flashRadius(vw)
-  const beam = beamGeometry(pivot, { x: pointerX, y: pointerY }, pivot.length * 98 / 120, radius)
+  const beam = beamGeometry(pivot, { x: pointerX, y: pointerY }, pivot.length * 98 / 120, beamSupported ? radius * 0.45 : radius)
   const set = (name: string, value: string) => root.style.setProperty(name, value)
   set('--flash-x', `${pointerX}px`)
   set('--flash-y', `${pointerY}px`)
@@ -111,7 +116,7 @@ function paint() {
     layer.style.setProperty('--lhy', `${beam.head.y - rect.top}px`)
   }
   const field = codeField.value
-  if (!owl.shown.value && field && pointNearRect(pointerX, pointerY, field.getBoundingClientRect(), 24)) showOwl(field)
+  if (!owl.shown.value && field && pointNearRect(pointerX, pointerY, field.getBoundingClientRect(), 24)) showOwl()
 }
 
 function aimAt(x: number, y: number) {
@@ -134,13 +139,26 @@ function onClickAnywhere(event: MouseEvent) {
 }
 let clickArmTimer: ReturnType<typeof setTimeout> | undefined
 
-// Perch on the top edge of the username box, at its right end (the label text sits on the left),
-// so the owl stands on something instead of floating. The owl artwork's feet sit ~6% above
-// the bottom of its box, so it is lowered by that much to rest on the border.
-function showOwl(field: HTMLElement) {
-  const rect = field.getBoundingClientRect()
-  const size = window.innerWidth < 560 ? 60 : 72
-  owlBox.value = { x: rect.right - size - 14, y: rect.top - size + size * 0.06, size }
+function firstLineRect(heading: HTMLElement | null): DOMRect | undefined {
+  const text = heading?.firstChild
+  if (!text) return undefined
+  const range = document.createRange()
+  range.selectNodeContents(text)
+  return range.getClientRects()[0]
+}
+
+// Perch at the end of the headline's first line ("Mỗi giờ tự học"), feet on that line, as if the
+// owl had landed on the words. On phones that headline has usually scrolled away by the time the
+// username field is lit, so the owl lands on the card's "Chào mừng trở lại" heading instead.
+// The owl artwork's feet sit ~6% above the bottom of its box.
+function showOwl() {
+  const size = window.innerWidth < 560 ? 76 : 104
+  const hero = firstLineRect(headline.value)
+  const onScreen = (rect?: DOMRect) => rect && rect.top - size > 0 && rect.bottom < window.innerHeight
+  const line = onScreen(hero) ? hero : firstLineRect(cardHeading.value) ?? hero
+  if (!line) return
+  const x = Math.min(line.right + 6, window.innerWidth - size - 8)
+  owlBox.value = { x, y: line.bottom - size * 0.94 - line.height * 0.12, size }
   owl.play()
 }
 
@@ -251,7 +269,7 @@ async function submit() {
 
         <div class="visual-copy">
           <span>HỌC CHỦ ĐỘNG</span>
-          <h1>Mỗi giờ tự học<br />đều có mục tiêu.</h1>
+          <h1 ref="headline">Mỗi giờ tự học<br />đều có mục tiêu.</h1>
           <p>Theo dõi kế hoạch, nhận phản hồi và tiến bộ rõ ràng theo từng tuần.</p>
         </div>
 
@@ -276,7 +294,7 @@ async function submit() {
       <div class="login-panel">
         <div class="form-heading">
           <span>TÀI KHOẢN HỌC TẬP</span>
-          <h2>Chào mừng trở lại</h2>
+          <h2 ref="cardHeading">Chào mừng trở lại</h2>
           <p>Dùng mã đăng nhập được nhà trường cấp.</p>
         </div>
 
@@ -750,42 +768,41 @@ async function submit() {
   justify-content: flex-end;
 }
 
-/* Cone beam from the torch head to the spot. Lit area = (cone ∩ within reach) ∪ spot; the
-   night overlay uses its complement. Only for browsers with mask-composite (.beam); others
-   keep the round spot above. The --lit-* layers are resolved on .login-fx in viewport px. */
+/* Trapezoid beam: the torch's cone cut off just past the pointer. Lit area = cone ∩ reach; the
+   night overlay uses its complement. There is no round spot at the pointer - only browsers
+   without mask-composite (no .beam) fall back to the round spot above. The --lit-* layers are
+   resolved on .login-fx in viewport px. */
 .login-fx.beam {
-  --lit-spot: radial-gradient(circle var(--flash-r) at var(--flash-x) var(--flash-y), #000 0%, #000 45%, transparent 100%);
   --lit-cone: conic-gradient(from var(--beam-from) at var(--hx) var(--hy), transparent 0deg, #000 8deg, #000 34deg, transparent 42deg, transparent 360deg);
-  --lit-reach: radial-gradient(circle var(--beam-reach) at var(--hx) var(--hy), #000 0%, #000 72%, transparent 100%);
+  --lit-reach: radial-gradient(circle var(--beam-reach) at var(--hx) var(--hy), #000 0%, #000 82%, transparent 100%);
 }
 
 .beam .night-overlay {
-  -webkit-mask-image: linear-gradient(#000, #000), var(--lit-spot), var(--lit-cone), var(--lit-reach);
-  mask-image: linear-gradient(#000, #000), var(--lit-spot), var(--lit-cone), var(--lit-reach);
-  -webkit-mask-composite: xor, source-over, source-in, source-over;
-  mask-composite: exclude, add, intersect, add;
+  -webkit-mask-image: linear-gradient(#000, #000), var(--lit-cone), var(--lit-reach);
+  mask-image: linear-gradient(#000, #000), var(--lit-cone), var(--lit-reach);
+  -webkit-mask-composite: xor, source-in, source-over;
+  mask-composite: exclude, intersect, add;
 }
 
 .beam .flash-glow {
-  background: radial-gradient(circle calc(var(--flash-r) * 1.2) at var(--flash-x) var(--flash-y), rgb(255 248 222) 0%, rgb(255 236 196) 100%);
-  -webkit-mask-image: var(--lit-spot), var(--lit-cone), var(--lit-reach);
-  mask-image: var(--lit-spot), var(--lit-cone), var(--lit-reach);
-  -webkit-mask-composite: source-over, source-in, source-over;
-  mask-composite: add, intersect, add;
+  /* Warmest right at the lens, fading along the beam. */
+  background: radial-gradient(circle var(--beam-reach) at var(--hx) var(--hy), rgb(255 236 190) 0%, rgb(255 246 220) 100%);
+  -webkit-mask-image: var(--lit-cone), var(--lit-reach);
+  mask-image: var(--lit-cone), var(--lit-reach);
+  -webkit-mask-composite: source-in, source-over;
+  mask-composite: intersect, add;
 }
 
 /* Harder edges than the overlay so characters and dots never show on top of each other. */
 .beam .password-reveal-layer {
   -webkit-mask-image:
-    radial-gradient(circle var(--flash-r) at var(--lx, -999px) var(--ly, -999px), #000 0%, #000 62%, transparent 72%),
     conic-gradient(from var(--beam-from) at var(--lhx, -999px) var(--lhy, -999px), transparent 0deg, transparent 6deg, #000 9deg, #000 33deg, transparent 36deg, transparent 360deg),
-    radial-gradient(circle var(--beam-reach) at var(--lhx, -999px) var(--lhy, -999px), #000 0%, #000 80%, transparent 88%);
+    radial-gradient(circle var(--beam-reach) at var(--lhx, -999px) var(--lhy, -999px), #000 0%, #000 88%, transparent 94%);
   mask-image:
-    radial-gradient(circle var(--flash-r) at var(--lx, -999px) var(--ly, -999px), #000 0%, #000 62%, transparent 72%),
     conic-gradient(from var(--beam-from) at var(--lhx, -999px) var(--lhy, -999px), transparent 0deg, transparent 6deg, #000 9deg, #000 33deg, transparent 36deg, transparent 360deg),
-    radial-gradient(circle var(--beam-reach) at var(--lhx, -999px) var(--lhy, -999px), #000 0%, #000 80%, transparent 88%);
-  -webkit-mask-composite: source-over, source-in, source-over;
-  mask-composite: add, intersect, add;
+    radial-gradient(circle var(--beam-reach) at var(--lhx, -999px) var(--lhy, -999px), #000 0%, #000 88%, transparent 94%);
+  -webkit-mask-composite: source-in, source-over;
+  mask-composite: intersect, add;
 }
 
 @media (prefers-reduced-motion: reduce) {
