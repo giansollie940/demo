@@ -28,7 +28,9 @@ const asset = (name: string) => `${import.meta.env.BASE_URL}assets/images/owl/${
 /* Layer geometry mirrors OwlMascotV2 so both owls share the same artwork. */
 .login-owl {
   position: fixed;
-  z-index: 45;
+  /* Under the night overlay (40): the owl is only seen where the beam lights it, and flies off
+     into the dark. Still above the page content. */
+  z-index: 39;
   width: var(--owl-size);
   height: var(--owl-size);
   pointer-events: none;

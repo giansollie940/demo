@@ -61,7 +61,6 @@ const heroNight = computed(() => flashlight.value || preferences.resolvedTheme =
 const fxRoot = ref<HTMLElement | null>(null)
 const revealLayer = ref<HTMLElement | null>(null)
 const revealText = ref<HTMLElement | null>(null)
-const codeField = ref<HTMLElement | null>(null)
 const passwordField = ref<HTMLElement | null>(null)
 const revealButton = ref<HTMLElement | null>(null)
 const headline = ref<HTMLElement | null>(null)
@@ -115,8 +114,14 @@ function paint() {
     layer.style.setProperty('--lhx', `${beam.head.x - rect.left}px`)
     layer.style.setProperty('--lhy', `${beam.head.y - rect.top}px`)
   }
-  const field = codeField.value
-  if (!owl.shown.value && field && pointNearRect(pointerX, pointerY, field.getBoundingClientRect(), 24)) showOwl()
+  // The owl only turns up once the beam actually reaches its perch.
+  if (!owl.shown.value) {
+    const perch = owlPerch()
+    if (perch && pointNearRect(pointerX, pointerY, { left: perch.x, top: perch.y, right: perch.x + perch.size, bottom: perch.y + perch.size }, 16)) {
+      owlBox.value = perch
+      owl.play()
+    }
+  }
 }
 
 function aimAt(x: number, y: number) {
@@ -147,19 +152,18 @@ function firstLineRect(heading: HTMLElement | null): DOMRect | undefined {
   return range.getClientRects()[0]
 }
 
-// Perch at the end of the headline's first line ("Mỗi giờ tự học"), feet on that line, as if the
-// owl had landed on the words. On phones that headline has usually scrolled away by the time the
-// username field is lit, so the owl lands on the card's "Chào mừng trở lại" heading instead.
+// The owl's perch: the end of the headline's first line ("Mỗi giờ tự học"), feet on that line, as
+// if it had landed on the words. On phones that headline has usually scrolled away while the form
+// is in view, so the perch moves to the end of the card's "Chào mừng trở lại" heading instead.
 // The owl artwork's feet sit ~6% above the bottom of its box.
-function showOwl() {
+function owlPerch() {
   const size = window.innerWidth < 560 ? 76 : 104
   const hero = firstLineRect(headline.value)
   const onScreen = (rect?: DOMRect) => rect && rect.top - size > 0 && rect.bottom < window.innerHeight
   const line = onScreen(hero) ? hero : firstLineRect(cardHeading.value) ?? hero
-  if (!line) return
+  if (!line) return null
   const x = Math.min(line.right + 6, window.innerWidth - size - 8)
-  owlBox.value = { x, y: line.bottom - size * 0.94 - line.height * 0.12, size }
-  owl.play()
+  return { x, y: line.bottom - size * 0.94 - line.height * 0.12, size }
 }
 
 function listen(on: boolean) {
@@ -301,7 +305,7 @@ async function submit() {
         <form class="login-form" novalidate @submit.prevent="submit">
           <label>
             <span>Mã đăng nhập</span>
-            <div ref="codeField" class="field">
+            <div class="field">
               <UserRound />
               <input
                 v-model.trim="code"
