@@ -476,10 +476,15 @@ async function submit() {
 .hero-card {
   position: relative;
   display: grid;
+  /* One definite cell the size of the hero row, so the stacked day/night images keep
+     height: 100% of the row instead of growing to their natural height. */
+  grid-template: minmax(0, 1fr) / minmax(0, 1fr);
 }
 
 .hero-card img {
   grid-area: 1 / 1;
+  min-width: 0;
+  min-height: 0;
   transition: opacity 600ms ease;
 }
 
