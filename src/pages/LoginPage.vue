@@ -12,7 +12,7 @@ import LoginSky from '../components/login/LoginSky.vue'
 import { beamGeometry, createOwlCameo, flashRadius, pointNearRect, supportsBeamComposite, supportsFlashlightMask } from '../features/login/flashlight'
 // Imported (not served from public/) so each build gives them a content-hashed name and a
 // replaced picture can never be stuck behind a cached copy of the old one.
-import faviconUrl from '../assets/icons/icon-192.png'
+import faviconUrl from '../assets/icons/icon-512.png'
 import heroDayUrl from '../assets/images/login/hero-day.webp'
 import heroNightUrl from '../assets/images/login/hero-night.webp'
 import { useAuthStore } from '../stores/auth'
@@ -476,10 +476,15 @@ async function submit() {
 .hero-card {
   position: relative;
   display: grid;
+  /* One definite cell the size of the hero row, so the stacked day/night images keep
+     height: 100% of the row instead of growing to their natural height. */
+  grid-template: minmax(0, 1fr) / minmax(0, 1fr);
 }
 
 .hero-card img {
   grid-area: 1 / 1;
+  min-width: 0;
+  min-height: 0;
   transition: opacity 600ms ease;
 }
 

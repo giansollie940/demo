@@ -14,7 +14,7 @@ import OwlMascotV2 from '../components/owl/OwlMascotV2.vue'
 import { owlMascotV2Enabled } from '../features/owl/mascot-v2'
 
 import schoolPatternUrl from '../assets/images/school-pattern-bg.webp'
-import faviconUrl from '../assets/icons/icon-192.png'
+import faviconUrl from '../assets/icons/icon-512.png'
 
 import { useAuthStore } from '../stores/auth'
 import { useContextStore } from '../stores/context'

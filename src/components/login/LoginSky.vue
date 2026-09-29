@@ -2,12 +2,12 @@
 import { onMounted, ref } from 'vue'
 
 /**
- * Sits at the hero's top-right corner. Day: the sun rises over a horizon, its halo breathing and
+ * Sits at the hero's top-right corner. Day: the sun rises, its halo breathing and
  * rays shimmering, with sparkles around it. Night: the moon fades in with a soft halo, twinkling
  * stars and the odd shooting star.
  */
 defineProps<{ night: boolean }>()
-// Start below the horizon and rise on the first frame, so the sun also rises when the page opens.
+// Start low and faded, then rise on the first frame, so the sun also rises when the page opens.
 const ready = ref(false)
 onMounted(() => requestAnimationFrame(() => { ready.value = true }))
 const rays = Array.from({ length: 16 }, (_, i) => ({ deg: i * 22.5, long: i % 2 === 0 }))
@@ -113,18 +113,18 @@ const star = 'M0-10C.8-3 3-.8 10 0 3 .8.8 3 0 10-.8 3-3 .8-10 0-3-.8-.8-3 0-10Z'
 .sky {
   position: absolute;
   z-index: 42;
-  top: 1%;
+  top: calc(1% - 22px);
   right: 3%;
   width: clamp(48px, 8.5vw, 92px);
   aspect-ratio: 1;
   pointer-events: none;
 }
 
-/* Clips only the bottom edge, so the sun climbs out from behind a horizon while its glow stays free. */
+/* No clipping: a hard horizon edge cut the glow into a visible straight line mid-rise.
+   The sun and moon rise and set on soft fades instead. */
 .horizon {
   position: absolute;
   inset: 0;
-  clip-path: inset(-80% -80% 0 -80%);
 }
 
 .sun,
@@ -139,9 +139,9 @@ const star = 'M0-10C.8-3 3-.8 10 0 3 .8.8 3 0 10-.8 3-3 .8-10 0-3-.8-.8-3 0-10Z'
 }
 
 .sun {
-  transform: translateY(95%) scale(.85);
+  transform: translateY(45%) scale(.85);
   filter: drop-shadow(0 0 12px rgb(255 190 70 / .8));
-  transition: transform 1200ms cubic-bezier(.2, .75, .25, 1), opacity 700ms ease;
+  transition: transform 1200ms cubic-bezier(.22, .8, .3, 1), opacity 900ms cubic-bezier(.4, 0, .2, 1);
 }
 
 .ready:not(.night) .sun,
@@ -168,9 +168,9 @@ const star = 'M0-10C.8-3 3-.8 10 0 3 .8.8 3 0 10-.8 3-3 .8-10 0-3-.8-.8-3 0-10Z'
 .rays rect.long { animation-delay: .9s; }
 
 .moon {
-  transform: translateY(-12px) scale(.7) rotate(-25deg);
+  transform: translateY(45%) scale(.85) rotate(-20deg);
   filter: drop-shadow(0 0 12px rgb(255 246 205 / .7));
-  transition: transform 1000ms cubic-bezier(.2, .75, .25, 1), opacity 800ms ease;
+  transition: transform 1200ms cubic-bezier(.22, .8, .3, 1), opacity 900ms cubic-bezier(.4, 0, .2, 1);
 }
 
 .ready.night .moon {
