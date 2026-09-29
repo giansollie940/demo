@@ -1,7 +1,7 @@
 import { CATALOG, CATALOG_VERSION, itemById } from './catalog'
 
 export const MIN_ITEMS = 10
-export const MAX_ITEMS = 16
+export const MAX_ITEMS = 20
 
 /** The sample sequence shown in guidance; it must never be accepted as a real secret. */
 export const SAMPLE_SEQUENCE: readonly string[] = ['pencil_red', 'notebook_blue', 'pencil_red', 'ruler_yellow']
@@ -21,7 +21,7 @@ export function toPayload(sequence: readonly string[]): BagPayload {
 
 /**
  * Canonical verifier input: [catalog version, code, code, ...], one byte per item. At most
- * 17 bytes, so it stays well inside bcrypt's 72-byte input limit (long id strings would not:
+ * 21 bytes, so it stays well inside bcrypt's 72-byte input limit (long id strings would not:
  * later items would be silently ignored by the hash).
  */
 export function toVerifierInput(sequence: readonly string[]): Uint8Array {

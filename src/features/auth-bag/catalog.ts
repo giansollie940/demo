@@ -7,7 +7,8 @@
  */
 export const CATALOG_VERSION = 1
 
-export const ITEM_KINDS = ['pencil', 'notebook', 'ruler', 'eraser', 'crayon', 'sharpener'] as const
+// Appended kinds get the next codes, so earlier item codes never change.
+export const ITEM_KINDS = ['pencil', 'notebook', 'ruler', 'eraser', 'crayon', 'sharpener', 'pen', 'pencilcase', 'scissors'] as const
 export const ITEM_COLORS = ['red', 'blue', 'yellow', 'green'] as const
 
 export type ItemKind = typeof ITEM_KINDS[number]
@@ -28,6 +29,9 @@ const KIND_LABEL: Record<ItemKind, string> = {
   eraser: 'Tẩy',
   crayon: 'Bút sáp',
   sharpener: 'Gọt bút chì',
+  pen: 'Bút mực',
+  pencilcase: 'Hộp bút',
+  scissors: 'Kéo',
 }
 
 const COLOR_LABEL: Record<ItemColor, string> = {

@@ -49,6 +49,27 @@ const c = computed(() => PALETTE[props.color])
       <path d="M25 31 h14 M25 37 h10" :stroke="c.dark" stroke-width="1.6" stroke-linecap="round" />
       <path d="M22 50 H42 V56 H22 Z" :fill="c.dark" />
     </g>
+    <g v-else-if="kind === 'pen'" transform="rotate(-90 32 32)">
+      <rect x="27" y="6" width="10" height="36" rx="4" :fill="c.fill" :stroke="c.dark" stroke-width="2" />
+      <rect x="27" y="6" width="10" height="13" rx="4" :fill="c.dark" />
+      <path d="M38 9 V26" :stroke="c.dark" stroke-width="2.5" stroke-linecap="round" />
+      <path d="M27 42 H37 L34 52 H30 Z" fill="#d9dde6" :stroke="c.dark" stroke-width="2" stroke-linejoin="round" />
+      <path d="M31 52 L32 58 L33 52 Z" :fill="c.dark" />
+    </g>
+    <g v-else-if="kind === 'pencilcase'">
+      <rect x="6" y="20" width="52" height="28" rx="12" :fill="c.fill" :stroke="c.dark" stroke-width="2" />
+      <path d="M10 27 H54" :stroke="c.dark" stroke-width="2" stroke-dasharray="3 2.5" />
+      <rect x="46" y="23" width="6" height="11" rx="2" :fill="c.light" :stroke="c.dark" stroke-width="1.5" />
+      <circle cx="32" cy="38" r="5" fill="#fff" fill-opacity=".8" />
+    </g>
+    <g v-else-if="kind === 'scissors'">
+      <path d="M26 30 L50 8 M38 30 L14 8" :stroke="c.dark" stroke-width="5" stroke-linecap="round" />
+      <path d="M26 30 L50 8 M38 30 L14 8" stroke="#d9dde6" stroke-width="2.5" stroke-linecap="round" />
+      <circle cx="32" cy="30" r="2.5" :fill="c.dark" />
+      <circle cx="22" cy="45" r="9" fill="none" :stroke="c.fill" stroke-width="5" />
+      <circle cx="42" cy="45" r="9" fill="none" :stroke="c.fill" stroke-width="5" />
+      <path d="M26 30 L24 37 M38 30 L40 37" :stroke="c.fill" stroke-width="5" stroke-linecap="round" />
+    </g>
     <g v-else>
       <path d="M12 22 L40 14 L52 26 V46 L24 54 L12 42 Z" :fill="c.fill" :stroke="c.dark" stroke-width="2" stroke-linejoin="round" />
       <path d="M12 22 L24 34 L52 26 M24 34 V54" :stroke="c.dark" stroke-width="1.8" fill="none" stroke-linejoin="round" />

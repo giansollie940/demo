@@ -275,22 +275,7 @@ const dragItem = computed(() => (drag.value ? itemById(drag.value.id) : undefine
       </label>
 
       <div class="bag-stage">
-        <div class="desk" role="group" aria-label="Bàn dụng cụ học tập">
-          <button
-            v-for="item in desk"
-            :key="item.id"
-            type="button"
-            class="desk-item"
-            :aria-label="item.label"
-            @pointerdown="onItemPointerDown(item, $event)"
-            @click="onItemClick(item)"
-          >
-            <span class="icon"><BagItemIcon :kind="item.kind" :color="item.color" /></span>
-            <span class="label">{{ item.label }}</span>
-          </button>
-        </div>
-
-        <div class="bag-side">
+        <div class="bag-box">
           <div
             ref="bagEl"
             class="bag"
@@ -320,6 +305,24 @@ const dragItem = computed(() => (drag.value ? itemById(drag.value.id) : undefine
             <input v-model="hideCount" type="checkbox" />
             <span>Chế độ kín đáo (ẩn số món)</span>
           </label>
+        </div>
+
+        <div class="desk" role="group" aria-label="Bàn dụng cụ học tập">
+          <button
+            v-for="item in desk"
+            :key="item.id"
+            type="button"
+            class="desk-item"
+            :aria-label="item.label"
+            @pointerdown="onItemPointerDown(item, $event)"
+            @click="onItemClick(item)"
+          >
+            <span class="icon"><BagItemIcon :kind="item.kind" :color="item.color" /></span>
+            <span class="label">{{ item.label }}</span>
+          </button>
+        </div>
+
+        <div class="bag-actions">
 
           <p v-if="message" class="message" :class="message.tone" role="status">{{ message.text }}</p>
 
@@ -405,11 +408,22 @@ const dragItem = computed(() => (drag.value ? itemById(drag.value.id) : undefine
   font-size: .95rem;
 }
 
-.bag-stage { display: grid; grid-template-columns: minmax(0, 1.55fr) minmax(260px, 1fr); gap: 22px; margin-top: 18px; }
+.bag-stage {
+  display: grid;
+  grid-template-columns: minmax(0, 1.55fr) minmax(260px, 1fr);
+  grid-template-rows: auto 1fr;
+  grid-template-areas: 'desk box' 'desk actions';
+  gap: 12px 22px;
+  margin-top: 18px;
+}
+.bag-box { grid-area: box; display: grid; align-content: start; gap: 12px; }
+.bag-actions { grid-area: actions; display: grid; align-content: start; gap: 12px; }
 
 .desk {
+  grid-area: desk;
   display: grid;
   grid-template-columns: repeat(6, minmax(0, 1fr));
+  align-content: start;
   gap: 10px;
   padding: 14px;
   border-radius: 20px;
@@ -439,7 +453,6 @@ const dragItem = computed(() => (drag.value ? itemById(drag.value.id) : undefine
 .desk-item .icon { width: 46px; height: 46px; pointer-events: none; }
 .desk-item .label { font-size: .7rem; line-height: 1.2; text-align: center; pointer-events: none; }
 
-.bag-side { display: grid; align-content: start; gap: 12px; }
 
 .bag {
   position: relative;
@@ -487,8 +500,33 @@ const dragItem = computed(() => (drag.value ? itemById(drag.value.id) : undefine
 
 @keyframes bag-bump { 40% { transform: scale(1.06) rotate(-2deg); } }
 
+/* Phones/tablets: the bag sits above the desk and stays pinned while the desk scrolls, so the
+   bag and its undo/reset are always in view; the submit actions follow the desk. */
 @media (max-width: 860px) {
-  .bag-stage { grid-template-columns: 1fr; }
+  .bag-stage { grid-template-columns: 1fr; grid-template-rows: none; grid-template-areas: 'box' 'desk' 'actions'; }
+  .bag-box {
+    position: sticky;
+    top: 8px;
+    z-index: 5;
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: center;
+    gap: 8px 12px;
+    padding: 10px;
+    border-radius: 18px;
+    background: color-mix(in srgb, var(--surface) 94%, transparent);
+    box-shadow: var(--shadow-md);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+  }
+  .bag { grid-row: span 2; grid-template-columns: auto; padding: 6px 10px; }
+  .bag-art { width: 64px; height: 64px; }
+  .bag-count { font-size: .85rem; }
+  .bag-tools { grid-template-columns: 1fr 1fr; }
+  .bag-tools :deep(.app-button) { min-height: 38px; padding-inline: 8px; font-size: .8rem; white-space: normal; line-height: 1.15; }
+  .toggle { font-size: .78rem; }
+}
+
+@media (max-width: 560px) {
   .desk { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 }
 
