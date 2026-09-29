@@ -12,13 +12,13 @@ import LoginSky from '../components/login/LoginSky.vue'
 import { beamGeometry, createOwlCameo, flashRadius, pointNearRect, supportsBeamComposite, supportsFlashlightMask } from '../features/login/flashlight'
 // Imported (not served from public/) so each build gives them a content-hashed name and a
 // replaced picture can never be stuck behind a cached copy of the old one.
+import faviconUrl from '../assets/icons/icon-192.png'
 import heroDayUrl from '../assets/images/login/hero-day.webp'
 import heroNightUrl from '../assets/images/login/hero-night.webp'
 import { useAuthStore } from '../stores/auth'
 import { useContextStore } from '../stores/context'
 import { usePreferencesStore } from '../stores/preferences'
 
-const faviconUrl = `${import.meta.env.BASE_URL}assets/images/favicon.png`
 
 
 const auth = useAuthStore()

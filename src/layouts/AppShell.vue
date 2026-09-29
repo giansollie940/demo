@@ -14,14 +14,12 @@ import OwlMascotV2 from '../components/owl/OwlMascotV2.vue'
 import { owlMascotV2Enabled } from '../features/owl/mascot-v2'
 
 import schoolPatternUrl from '../assets/images/school-pattern-bg.webp'
+import faviconUrl from '../assets/icons/icon-192.png'
 
 import { useAuthStore } from '../stores/auth'
 import { useContextStore } from '../stores/context'
 import { usePreferencesStore } from '../stores/preferences'
 import { useWeekLifecycle } from '../features/weeks/useWeekLifecycle'
-
-const faviconUrl =
-  `${import.meta.env.BASE_URL}assets/images/favicon.png`
 
 const auth = useAuthStore()
 const mascotFailed = ref(false)
