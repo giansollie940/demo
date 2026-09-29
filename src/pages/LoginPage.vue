@@ -186,16 +186,28 @@ function listen(on: boolean) {
   window[method]('scroll', onLayout, { passive: true, capture: true } as AddEventListenerOptions)
 }
 
+// While the torch is on the whole page wears the dark theme. This only sets the attribute the
+// theme CSS reads; the saved preference is untouched, so switching the torch off (or leaving the
+// page after signing in) returns to whatever theme Settings holds.
+function applyPageTheme() {
+  document.documentElement.dataset.theme = flashlight.value ? 'dark' : preferences.resolvedTheme
+}
+
 function setFlashlight(on: boolean) {
   if (flashlight.value === on) return
   flashlight.value = on
   listen(on)
+  applyPageTheme()
   if (!on) {
     if (frame) cancelAnimationFrame(frame)
     frame = 0
     owl.reset()
   }
 }
+
+// The theme button (or a system theme change) re-applies the saved theme; keep the page dark
+// for as long as the torch stays on.
+watch(() => preferences.resolvedTheme, () => { if (flashlight.value) applyPageTheme() }, { flush: 'post' })
 
 function toggleReveal() {
   if (!maskSupported) {
@@ -736,11 +748,12 @@ async function submit() {
   mask-image: radial-gradient(circle var(--flash-r) at var(--flash-x) var(--flash-y), transparent 0%, transparent 45%, #000 100%);
 }
 
-/* Warm tint inside the beam so it reads as lamp light, not a hole. Multiply only warms
-   the colours underneath; it never washes the text out to white. */
+/* Warm light inside the beam so it reads as lamp light, not a hole. The page is always in the
+   dark theme while the torch is on, so screen lightens and warms what it falls on; kept
+   translucent so light text on the dark surfaces is never washed out. */
 .flash-glow {
   z-index: 41;
-  mix-blend-mode: multiply;
+  mix-blend-mode: screen;
   background: radial-gradient(
     circle calc(var(--flash-r) * 1.1) at var(--flash-x) var(--flash-y),
     rgb(255 246 205 / .95) 0%,
@@ -756,7 +769,7 @@ async function submit() {
 }
 
 .flashlight-on .night-overlay { opacity: .88; }
-.flashlight-on .flash-glow { opacity: 1; }
+.flashlight-on .flash-glow { opacity: .32; }
 
 .password-slot {
   position: relative;
