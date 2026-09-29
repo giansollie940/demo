@@ -17,6 +17,8 @@ const HistoryPage = () => import('../../pages/HistoryPage.vue')
 const CommentsPage = () => import('../../pages/CommentsPage.vue')
 const SettingsPage = () => import('../../pages/SettingsPage.vue')
 const IssuesPage = () => import('../../pages/IssuesPage.vue')
+// AUTH-BAG-001 interaction prototype: no server calls, no session. Not linked from the login page.
+const BagDemoPage = () => import('../../pages/BagDemoPage.vue')
 const HomeworkPage = () => import('../../pages/HomeworkPage.vue')
 
 const learners: UserRole[] = ['student', 'monitor']
@@ -25,6 +27,7 @@ const classUsers: UserRole[] = ['student', 'monitor', 'teacher']
 
 export const routes: RouteRecordRaw[] = [
   { path: '/login', component: LoginPage, meta: { public: true, title: 'Đăng nhập' } },
+  { path: '/bag-demo', component: BagDemoPage, meta: { public: true, title: 'Mật mã chiếc cặp (bản thử)' } },
   {
     path: '/',
     component: AppShell,
