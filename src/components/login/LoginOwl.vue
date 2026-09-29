@@ -36,7 +36,9 @@ const asset = (name: string) => `${import.meta.env.BASE_URL}assets/images/owl/${
 }
 .login-owl img { position: absolute; object-fit: contain; }
 .body { left: 7.5%; top: 9.5%; width: 85%; height: 85%; }
-.wing { top: 36%; width: 38%; height: 38%; transform-origin: 50% 25%; }
+/* Each wing is a narrow feather centred in its square image; it hinges at the top of that
+   feather (the shoulder), so a flap swings it out past the body. */
+.wing { top: 36%; width: 38%; height: 38%; transform-origin: 50% 14%; }
 .wing.left { left: 12%; }
 .wing.right { left: 50%; }
 .head { position: absolute; left: 24%; top: 3%; width: 52%; height: 52%; }
@@ -48,8 +50,9 @@ const asset = (name: string) => `${import.meta.env.BASE_URL}assets/images/owl/${
 
 .appear { animation: owl-appear 300ms cubic-bezier(.2, .8, .3, 1.2) both; }
 .fly { animation: owl-fly 850ms cubic-bezier(.45, 0, .6, 1) forwards; }
-.fly .wing.left { animation: owl-flap-left 280ms ease-in-out 3; }
-.fly .wing.right { animation: owl-flap-right 280ms ease-in-out 3; }
+/* Keeps flapping for the whole flight, not just the take-off. */
+.fly .wing.left { animation: owl-flap-left 190ms ease-in-out infinite; }
+.fly .wing.right { animation: owl-flap-right 190ms ease-in-out infinite; }
 
 @keyframes owl-appear {
   from { opacity: 0; transform: translateY(10px) scale(.85); }
@@ -60,8 +63,8 @@ const asset = (name: string) => `${import.meta.env.BASE_URL}assets/images/owl/${
   45% { opacity: 1; transform: translate(70px, -95px) rotate(10deg) scale(.9); }
   100% { opacity: 0; transform: translate(200px, -180px) rotate(20deg) scale(.65); }
 }
-@keyframes owl-flap-left { 50% { rotate: -28deg; } }
-@keyframes owl-flap-right { 50% { rotate: 28deg; } }
+@keyframes owl-flap-left { 0%, 100% { rotate: 20deg; translate: -8% 0; } 50% { rotate: 80deg; translate: -22% -10%; } }
+@keyframes owl-flap-right { 0%, 100% { rotate: -20deg; translate: 8% 0; } 50% { rotate: -80deg; translate: 22% -10%; } }
 
 @media (prefers-reduced-motion: reduce) {
   .appear { animation: owl-fade-in 200ms ease both; }
