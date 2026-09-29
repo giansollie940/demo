@@ -63,12 +63,15 @@ const c = computed(() => PALETTE[props.color])
       <circle cx="32" cy="38" r="5" fill="#fff" fill-opacity=".8" />
     </g>
     <g v-else-if="kind === 'scissors'">
-      <path d="M26 30 L50 8 M38 30 L14 8" :stroke="c.dark" stroke-width="5" stroke-linecap="round" />
-      <path d="M26 30 L50 8 M38 30 L14 8" stroke="#d9dde6" stroke-width="2.5" stroke-linecap="round" />
-      <circle cx="32" cy="30" r="2.5" :fill="c.dark" />
-      <circle cx="22" cy="45" r="9" fill="none" :stroke="c.fill" stroke-width="5" />
-      <circle cx="42" cy="45" r="9" fill="none" :stroke="c.fill" stroke-width="5" />
-      <path d="M26 30 L24 37 M38 30 L40 37" :stroke="c.fill" stroke-width="5" stroke-linecap="round" />
+      <!-- Two tapered steel blades crossing at the pivot screw, coloured finger loops below. -->
+      <path d="M29.5 37 L47.5 6.5 Q50.5 4.5 50 8.5 L35.5 36 Z" fill="#e3e7ee" stroke="#5f6b7a" stroke-width="1.6" stroke-linejoin="round" />
+      <path d="M34.5 37 L16.5 6.5 Q13.5 4.5 14 8.5 L28.5 36 Z" fill="#f1f4f8" stroke="#5f6b7a" stroke-width="1.6" stroke-linejoin="round" />
+      <path d="M31 36 L25 42 M33 36 L39 42" :stroke="c.dark" stroke-width="5" stroke-linecap="round" />
+      <ellipse cx="20.5" cy="48" rx="8.5" ry="7" transform="rotate(-25 20.5 48)" fill="none" :stroke="c.fill" stroke-width="5" />
+      <ellipse cx="43.5" cy="48" rx="8.5" ry="7" transform="rotate(25 43.5 48)" fill="none" :stroke="c.fill" stroke-width="5" />
+      <ellipse cx="20.5" cy="48" rx="8.5" ry="7" transform="rotate(-25 20.5 48)" fill="none" :stroke="c.dark" stroke-width="1.2" stroke-opacity=".5" />
+      <ellipse cx="43.5" cy="48" rx="8.5" ry="7" transform="rotate(25 43.5 48)" fill="none" :stroke="c.dark" stroke-width="1.2" stroke-opacity=".5" />
+      <circle cx="32" cy="33.5" r="2.8" fill="#8a94a3" stroke="#4b5563" stroke-width="1.2" />
     </g>
     <g v-else>
       <path d="M12 22 L40 14 L52 26 V46 L24 54 L12 42 Z" :fill="c.fill" :stroke="c.dark" stroke-width="2" stroke-linejoin="round" />
