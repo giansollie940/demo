@@ -63,14 +63,48 @@ function reset() {
 }
 
 // ===== Drag and drop =====
-let press: { id: string; x: number; y: number; pointerId: number } | null = null
+// Mouse and pen start a drag after a small movement. On touch screens a plain swipe has to keep
+// scrolling the page (the desk fills most of a phone screen), so a finger first holds an item for
+// a moment to pick it up; from then on the page stops scrolling and the item follows the finger.
+const TOUCH_HOLD_MS = 300
+const MOVE_SLOP = 8
+
+interface Press {
+  id: string
+  x: number
+  y: number
+  pointerId: number
+  touch: boolean
+  held: boolean
+  moved: boolean
+  timer?: ReturnType<typeof setTimeout>
+}
+
+let press: Press | null = null
 const drag = ref<{ id: string; x: number; y: number } | null>(null)
 const overBag = ref(false)
 let suppressClick = false
 
+function endPress() {
+  if (press?.timer) clearTimeout(press.timer)
+  press = null
+  drag.value = null
+  overBag.value = false
+}
+
 function onItemPointerDown(item: BagItem, event: PointerEvent) {
   if (event.button !== 0) return
-  press = { id: item.id, x: event.clientX, y: event.clientY, pointerId: event.pointerId }
+  endPress()
+  const touch = event.pointerType === 'touch'
+  const current: Press = { id: item.id, x: event.clientX, y: event.clientY, pointerId: event.pointerId, touch, held: !touch, moved: false }
+  if (touch) {
+    current.timer = setTimeout(() => {
+      if (press !== current) return
+      current.held = true
+      drag.value = { id: current.id, x: current.x, y: current.y }
+    }, TOUCH_HOLD_MS)
+  }
+  press = current
 }
 
 function insideBag(x: number, y: number) {
@@ -80,14 +114,32 @@ function insideBag(x: number, y: number) {
 
 function onPointerMove(event: PointerEvent) {
   if (!press || event.pointerId !== press.pointerId) return
-  if (!drag.value && Math.hypot(event.clientX - press.x, event.clientY - press.y) < 8) return
+  const far = Math.hypot(event.clientX - press.x, event.clientY - press.y) >= MOVE_SLOP
+  if (!press.held) {
+    // A finger moving before the hold completes is scrolling the page, not dragging.
+    if (far) endPress()
+    return
+  }
+  if (!drag.value && !far) return
+  if (far) press.moved = true
   drag.value = { id: press.id, x: event.clientX, y: event.clientY }
   overBag.value = insideBag(event.clientX, event.clientY)
 }
 
+// While a held item is being dragged, keep the page from scrolling under the finger (without
+// this the browser takes the gesture over and cancels the drag).
+function onTouchMove(event: TouchEvent) {
+  if (press?.touch && press.held && event.cancelable) event.preventDefault()
+}
+
 function onPointerUp(event: PointerEvent) {
   if (!press || event.pointerId !== press.pointerId) return
-  if (drag.value) {
+  if (press.touch && press.held && !press.moved) {
+    // Held but not moved: a slow tap. Add it here, since a long press may not produce a click.
+    add(press.id)
+    suppressClick = true
+    setTimeout(() => { suppressClick = false })
+  } else if (drag.value) {
     // One drop adds exactly one item; a drop outside the bag adds nothing.
     if (insideBag(event.clientX, event.clientY)) add(drag.value.id)
     // The browser dispatches its synthetic click straight after this pointerup, before any
@@ -95,15 +147,11 @@ function onPointerUp(event: PointerEvent) {
     suppressClick = true
     setTimeout(() => { suppressClick = false })
   }
-  press = null
-  drag.value = null
-  overBag.value = false
+  endPress()
 }
 
 function onPointerCancel() {
-  press = null
-  drag.value = null
-  overBag.value = false
+  endPress()
 }
 
 function onItemClick(item: BagItem) {
@@ -123,6 +171,7 @@ onMounted(() => {
   window.addEventListener('pointermove', onPointerMove)
   window.addEventListener('pointerup', onPointerUp)
   window.addEventListener('pointercancel', onPointerCancel)
+  window.addEventListener('touchmove', onTouchMove, { passive: false })
 })
 
 onBeforeUnmount(() => {
@@ -130,6 +179,8 @@ onBeforeUnmount(() => {
   window.removeEventListener('pointermove', onPointerMove)
   window.removeEventListener('pointerup', onPointerUp)
   window.removeEventListener('pointercancel', onPointerCancel)
+  window.removeEventListener('touchmove', onTouchMove)
+  endPress()
 })
 
 const dragItem = computed(() => (drag.value ? itemById(drag.value.id) : undefined))
@@ -180,6 +231,7 @@ defineExpose({ reshuffle })
           class="desk-item"
           :aria-label="item.label"
           @pointerdown="onItemPointerDown(item, $event)"
+          @contextmenu.prevent
           @click="onItemClick(item)"
         >
           <span class="icon"><BagItemIcon :kind="item.kind" :color="item.color" /></span>
@@ -242,6 +294,7 @@ defineExpose({ reshuffle })
   touch-action: manipulation;
   user-select: none;
   -webkit-user-select: none;
+  -webkit-touch-callout: none;
   transition: transform 80ms ease, background 80ms ease;
 }
 /* Only a brief press state: no lasting highlight that tells an onlooker what was picked. */
