@@ -96,6 +96,23 @@ export const useAuthStore=defineStore('auth',()=>{
     }finally{loading.value=false;ready.value=true}
   }
 
+  // AUTH-BAG-001: same as login(), but the session comes from the school-bag passcode.
+  async function loginWithBag(code:string,items:readonly string[]){
+    loading.value=true;error.value=''
+    try{
+      await legacyApi.init()
+      await legacyApi.signInBag(code,items)
+      const result=await legacyApi.loadState()
+      if(!result.currentUser||!result.state)throw new Error('Không tải được hồ sơ sau khi đăng nhập.')
+      currentUser.value=result.currentUser
+      legacyState.value=result.state
+      await refreshAvatar()
+    }catch(err){
+      // Shown by the bag page itself as one generic message; auth.error stays for the password form.
+      throw err
+    }finally{loading.value=false;ready.value=true}
+  }
+
   async function reload(preferredClassId:string|null=null,preferredSchoolYearId:string|null=null){
     if(!currentUser.value)return
     loading.value=true;error.value=''
@@ -146,5 +163,5 @@ export const useAuthStore=defineStore('auth',()=>{
     finally{clearAvatarUrl();currentUser.value=null;legacyState.value=null;error.value='';loading.value=false;ready.value=true}
   }
 
-  return{currentUser,legacyState,ready,loading,error,avatarUrl,avatarBusy,isAuthenticated,role,bootstrap,login,reload,refreshAvatar,uploadAvatar,deleteAvatar,applyRealtimeChange,logout}
+  return{currentUser,legacyState,ready,loading,error,avatarUrl,avatarBusy,isAuthenticated,role,bootstrap,login,loginWithBag,reload,refreshAvatar,uploadAvatar,deleteAvatar,applyRealtimeChange,logout}
 })

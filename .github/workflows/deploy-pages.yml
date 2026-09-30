@@ -71,6 +71,9 @@ jobs:
           SUPABASE_PROJECT_URL: ${{ secrets.SUPABASE_PROJECT_URL }}
           SUPABASE_PUBLISHABLE_KEY: ${{ secrets.SUPABASE_PUBLISHABLE_KEY }}
           LOGIN_DOMAIN: ${{ vars.LOGIN_DOMAIN }}
+          # AUTH-BAG-001: set the repository variable to "true" only after database upgrade 18
+          # and the bag-enroll / bag-login Edge Functions are live.
+          AUTH_BAG_ENABLED: ${{ vars.AUTH_BAG_ENABLED }}
         run: |
           node <<'NODE'
           const fs = require('node:fs')
@@ -91,6 +94,7 @@ jobs:
             publishableKey,
             loginDomain: loginDomain || 'users.example.com',
             fallbackRefreshSeconds: 180,
+            authBag: String(process.env.AUTH_BAG_ENABLED || '').trim() === 'true',
           }
 
           fs.writeFileSync(

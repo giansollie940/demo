@@ -2,7 +2,7 @@
 import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useIntervalFn } from '@vueuse/core'
-import { Eye, EyeOff, LockKeyhole, Moon, Sun, UserRound } from 'lucide-vue-next'
+import { Backpack, Eye, EyeOff, LockKeyhole, Moon, Sun, UserRound } from 'lucide-vue-next'
 import AuthLayout from '../layouts/AuthLayout.vue'
 import AppButton from '../components/ui/AppButton.vue'
 import IconButton from '../components/ui/IconButton.vue'
@@ -18,6 +18,7 @@ import heroNightUrl from '../assets/images/login/hero-night.webp'
 import { useAuthStore } from '../stores/auth'
 import { useContextStore } from '../stores/context'
 import { usePreferencesStore } from '../stores/preferences'
+import { bagLoginEnabled } from '../features/auth-bag/flag'
 
 
 
@@ -27,6 +28,12 @@ const preferences = usePreferencesStore()
 const router = useRouter()
 
 const code = ref('')
+// AUTH-BAG-001: secondary sign-in, shown only while the rollout flag is on.
+const bagEnabled = bagLoginEnabled()
+function openBagLogin() {
+  const value = code.value.trim()
+  void router.push({ path: '/login/bag', query: value ? { code: value } : {} })
+}
 const password = ref('')
 const showPassword = ref(false)
 const submitError = ref('')
@@ -380,6 +387,13 @@ async function submit() {
           <AppButton type="submit" :loading="auth.loading" class="submit">
             Đăng nhập
           </AppButton>
+
+          <template v-if="bagEnabled">
+            <div class="or-divider" aria-hidden="true"><span>hoặc</span></div>
+            <button type="button" class="bag-option" @click="openBagLogin">
+              <Backpack aria-hidden="true" />Đăng nhập bằng chiếc cặp
+            </button>
+          </template>
         </form>
 
         <div class="security-notes">
@@ -896,6 +910,28 @@ async function submit() {
   }
 }
 .submit { width: 100%; min-height: 50px; font-size: .92rem; }
+.or-divider { display: flex; align-items: center; gap: 10px; color: var(--text-muted); font-size: .78rem; }
+.or-divider::before, .or-divider::after { content: ''; flex: 1; height: 1px; background: var(--border); }
+.bag-option {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 46px;
+  border: 1px solid color-mix(in srgb, var(--color-primary) 28%, var(--border));
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--color-primary) 6%, var(--surface));
+  color: var(--color-primary);
+  font: inherit;
+  font-size: .88rem;
+  font-weight: 800;
+  cursor: pointer;
+  transition: background var(--transition-fast, 120ms) ease, transform var(--transition-fast, 120ms) ease;
+}
+.bag-option:hover { background: color-mix(in srgb, var(--color-primary) 12%, var(--surface)); transform: translateY(-1px); }
+.bag-option:focus-visible { outline: 3px solid var(--focus-ring, var(--color-primary)); outline-offset: 2px; }
+.bag-option svg { width: 18px; height: 18px; }
 .error { margin: 0; color: var(--color-danger); font-size: 0.9rem; }
 
 .security-notes {

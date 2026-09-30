@@ -248,6 +248,12 @@ export interface DeletedUserRecord {
   deletedAt: string | null
 }
 
+export interface BagCredentialStatus {
+  ok: true
+  enabled: boolean
+  updated_at: string | null
+}
+
 export interface LegacySupabaseService {
   enabled(): boolean
   init(): Promise<unknown>
@@ -258,6 +264,11 @@ export interface LegacySupabaseService {
   syncState(state: LegacyState, currentUser: CurrentUser): Promise<void>
   teacherRebaseWeeks(firstWeekStart: string, deadlineTime?: string, schoolYearId?: string | null): Promise<unknown>
   changeOwnPassword(currentPassword: string, newPassword: string): Promise<unknown>
+  reauthenticateOwnPassword(password: string): Promise<void>
+  bagCredential(action: 'status', items?: undefined): Promise<BagCredentialStatus>
+  bagCredential(action: 'enroll', items: readonly string[]): Promise<{ ok: true; enabled: true; credential_version: number }>
+  bagCredential(action: 'disable', items?: undefined): Promise<{ ok: true; enabled: false }>
+  signInBag(code: string, items: readonly string[]): Promise<unknown>
   downloadAvatar(path: string): Promise<Blob | null>
   uploadOwnAvatar(blob: Blob): Promise<{ avatarPath: string }>
   deleteOwnAvatar(): Promise<{ avatarPath: null }>
