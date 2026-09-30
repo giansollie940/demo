@@ -19,7 +19,8 @@ import { legacyApi } from '../services/legacy-supabase'
 import { validateAvatarFile } from '../features/profile/avatar-image.js'
 import { appDialog } from '../features/shared/app-dialog'
 import BagSettingsCard from '../components/auth-bag/BagSettingsCard.vue'
-import { bagLoginEnabled } from '../features/auth-bag/flag'
+import GameCorner from '../components/auth-bag/GameCorner.vue'
+import { bagGameEnabled, bagLoginEnabled } from '../features/auth-bag/flag'
 
 const auth=useAuthStore(),context=useContextStore(),preferences=usePreferencesStore(),createRuntime=useLegacyMutationRuntime(),route=useRoute()
 const isLearner=computed(()=>auth.currentUser?.role==='student'||auth.currentUser?.role==='monitor')
@@ -28,6 +29,7 @@ const isTeacher=computed(()=>auth.currentUser?.role==='teacher')
 const isPersonalSettings=computed(()=>isLearner.value||isAdmin.value||(isTeacher.value&&route.query.view==='personal'))
 const isMonitor=computed(()=>auth.currentUser?.role==='monitor')
 const bagEnabled=bagLoginEnabled()
+const gameEnabled=bagGameEnabled()
 const activeTab=ref('general'),saving=ref(false),status=ref<InlineStatusState>('idle'),statusMessage=ref('')
 const personalStatus=ref<InlineStatusState>('idle'),personalMessage=ref(''),passwordBusy=ref(false),currentPassword=ref(''),newPassword=ref('')
 const avatarInput=ref<HTMLInputElement|null>(null),avatarEditorFile=ref<File|null>(null)
@@ -104,6 +106,7 @@ async function removeAvatar(){if(!auth.currentUser?.avatarPath)return;if(!await 
         <p class="mandatory-note">Được hệ thống bật tự động để bạn không bỏ lỡ nhiệm vụ quan trọng.</p>
         <div class="alert-list"><span><CheckCircle2/>Nhắc chưa đăng ký</span><span><CheckCircle2/>Nhắc có yêu cầu chỉnh sửa</span><span><CheckCircle2/>Nhắc trước buổi tự học</span><template v-if="isMonitor"><span class="monitor-alert"><CheckCircle2/>Lớp còn học sinh chưa đăng ký</span><span class="monitor-alert"><CheckCircle2/>Có học sinh cần chỉnh sửa</span><span class="monitor-alert"><CheckCircle2/>Gần đến buổi học nhưng còn đăng ký chưa hoàn tất</span></template></div>
       </AppCard>
+      <GameCorner v-if="isLearner&&gameEnabled"/>
     </section>
   </div>
 

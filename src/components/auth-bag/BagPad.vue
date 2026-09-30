@@ -113,7 +113,7 @@ function add(id: string) {
 function undo() {
   if (!count.value) return
   emit('update:modelValue', props.modelValue.slice(0, -1))
-  say('Đã lấy lại món cuối')
+  say('Đã trả lại món cuối')
 }
 
 function reset() {
@@ -142,7 +142,10 @@ function onWheelKey(event: KeyboardEvent) {
     ArrowRight: () => rotate(1),
     ArrowUp: () => setColor(colorIndex.value - 1),
     ArrowDown: () => setColor(colorIndex.value + 1),
+    Backspace: undo,
+    Delete: undo,
   }
+  // Space / Enter need nothing here: the front item is a focused <button>, so they click it.
   const action = actions[event.key]
   if (!action) return
   event.preventDefault()
@@ -337,7 +340,7 @@ onBeforeUnmount(() => {
 
 const dragItem = computed(() => (drag.value ? itemById(drag.value.id) : undefined))
 
-defineExpose({ reshuffle })
+defineExpose({ reshuffle, focus: focusFront })
 </script>
 
 <template>
@@ -365,7 +368,7 @@ defineExpose({ reshuffle })
         </div>
 
         <div class="bag-tools">
-          <AppButton type="button" variant="secondary" :disabled="!count" @click="undo"><Undo2 />Lấy lại món cuối</AppButton>
+          <AppButton type="button" variant="secondary" :disabled="!count" @click="undo" title="Lấy món vừa bỏ vào ra khỏi cặp (phím Backspace)"><Undo2 />Trả lại</AppButton>
           <AppButton type="button" variant="secondary" :disabled="!count" @click="reset"><RotateCcw />Làm lại</AppButton>
         </div>
 
@@ -398,7 +401,7 @@ defineExpose({ reshuffle })
           ref="wheelEl"
           class="wheel"
           role="group"
-          :aria-label="`${label}. Mũi tên trái phải để xoay, lên xuống để đổi màu.`"
+          :aria-label="`${label}. Mũi tên trái phải để xoay, lên xuống để đổi màu, phím cách để bỏ vào cặp, Backspace để trả lại.`"
           @pointerdown="onWheelPointerDown"
           @keydown="onWheelKey"
         >
@@ -426,6 +429,7 @@ defineExpose({ reshuffle })
           <span class="hint">Lăn chuột hoặc vuốt để xoay (Shift + lăn để đổi màu), rồi bấm hoặc kéo món ở giữa vào cặp</span>
           <AppButton type="button" variant="secondary" aria-label="Xoay sang phải" @click="rotate(1)"><ChevronRight /></AppButton>
         </div>
+        <p class="key-hint"><kbd>←</kbd><kbd>→</kbd> xoay · <kbd>↑</kbd><kbd>↓</kbd> đổi màu · <kbd>Space</kbd> bỏ vào cặp · <kbd>⌫</kbd> trả lại</p>
       </div>
 
       <div class="bag-actions">
@@ -570,6 +574,10 @@ defineExpose({ reshuffle })
 .wheel-nav { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 8px; }
 .wheel-nav :deep(.app-button) { min-width: 44px; padding-inline: 10px; }
 .hint { text-align: center; color: var(--text-muted); font-size: .78rem; line-height: 1.3; }
+/* Keyboard shortcuts: only where there is a real keyboard and mouse. */
+.key-hint { display: none; margin: 0; text-align: center; color: var(--text-muted); font-size: .74rem; }
+.key-hint kbd { display: inline-block; min-width: 1.6em; margin: 0 1px; padding: 1px 5px; border: 1px solid var(--border); border-bottom-width: 2px; border-radius: 6px; background: var(--surface); font: inherit; font-weight: 800; }
+@media (hover: hover) and (pointer: fine) { .key-hint { display: block; } }
 
 /* ===== Bag ===== */
 .bag {

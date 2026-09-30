@@ -1,11 +1,14 @@
 <script setup lang="ts">
-import { onBeforeUnmount, ref } from 'vue'
+import { computed, onBeforeUnmount, ref } from 'vue'
 import { RouterLink, useRoute, useRouter } from 'vue-router'
-import { KeyRound } from 'lucide-vue-next'
+import { Gamepad2, KeyRound, Trophy } from 'lucide-vue-next'
 import AuthLayout from '../layouts/AuthLayout.vue'
 import AppButton from '../components/ui/AppButton.vue'
 import BagPad from '../components/auth-bag/BagPad.vue'
 import BagMark from '../components/auth-bag/BagMark.vue'
+import BagGame from '../components/auth-bag/BagGame.vue'
+import GameBoardList from '../components/auth-bag/GameBoardList.vue'
+import { addScore, cleanName, loadBoard, NAME_MAX, qualifies, saveBoard, type ScoreEntry } from '../features/auth-bag/game'
 import { MAX_ITEMS, MIN_ITEMS } from '../features/auth-bag/sequence'
 import { useAuthStore } from '../stores/auth'
 import { useContextStore } from '../stores/context'
@@ -33,6 +36,61 @@ const SUCCESS_PAUSE_MS = 1100
 
 function notify(tone: Tone, text: string) {
   message.value = { tone, text }
+}
+
+/** Enter in the code field with an empty bag moves on to the wheel instead of failing. */
+function onCodeEnter(event: KeyboardEvent) {
+  if (!code.value.trim() || draft.value.length) return
+  event.preventDefault()
+  pad.value?.focus()
+}
+
+// ===== Practice game (only offered while the code field is empty; never sent anywhere) =====
+// High scores here are kept in this browser only, under a typed nickname.
+const playing = ref(false)
+const game = ref<InstanceType<typeof BagGame> | null>(null)
+const board = ref<ScoreEntry[]>(loadBoard())
+const playerName = ref('')
+const savedAt = ref<number | null>(null)
+const last = ref({ score: 0, level: 1 })
+const best = computed(() => board.value[0]?.score ?? 0)
+const canSave = ref(false)
+const boardRows = computed(() => board.value.map(e => ({ key: e.at, name: e.name, score: e.score, mine: e.at === savedAt.value })))
+
+function startGame() {
+  message.value = null
+  draft.value = []
+  playing.value = true
+}
+
+function onGameStart() {
+  savedAt.value = null
+  canSave.value = false
+  board.value = loadBoard()
+  game.value?.notify('info', 'Xếp đúng các món theo đề rồi bấm "Kiểm tra". Bạn có 3 mạng. Chỉ để chơi: không gửi gì lên máy chủ, không tính lượt thử.')
+}
+
+function onGameOver(result: { score: number; level: number }) {
+  last.value = result
+  canSave.value = qualifies(board.value, result.score)
+  if (canSave.value) game.value?.notify('info', `Hết mạng rồi! Điểm của bạn: ${result.score}. Bạn lọt vào bảng xếp hạng, gõ tên để lưu nhé!`)
+}
+
+function onOverSubmit() {
+  if (canSave.value) saveScore()
+  else game.value?.start()
+}
+
+function saveScore() {
+  const name = cleanName(playerName.value)
+  if (!name) return game.value?.notify('error', 'Hãy gõ tên để lưu điểm.')
+  const entry: ScoreEntry = { name, score: last.value.score, level: last.value.level, at: Date.now() }
+  board.value = addScore(loadBoard(), entry)
+  savedAt.value = entry.at
+  canSave.value = false
+  game.value?.notify('success', saveBoard(board.value)
+    ? `Đã lưu điểm của ${name} vào bảng xếp hạng!`
+    : 'Trình duyệt này không cho lưu dữ liệu, nên điểm chỉ hiện đến khi rời trang.')
 }
 
 async function submit() {
@@ -80,11 +138,41 @@ onBeforeUnmount(() => { draft.value = [] })
         <p>Nhập mã đăng nhập, xoay tới từng món rồi bấm hoặc kéo vào cặp. Đừng xếp khi có người đang nhìn.</p>
       </div>
 
-      <form class="bag-form" novalidate @submit.prevent="submit">
+      <BagGame
+        v-if="playing"
+        ref="game"
+        :best="best"
+        :replay-secondary="canSave"
+        @start="onGameStart"
+        @over="onGameOver"
+        @over-submit="onOverSubmit"
+        @exit="playing = false"
+      >
+        <template #over>
+          <div v-if="canSave" class="save-row">
+            <label class="name-field">
+              <span>Tên trên bảng xếp hạng</span>
+              <input v-model="playerName" :maxlength="NAME_MAX" autocomplete="off" placeholder="Biệt danh, ví dụ: Mèo Ú" />
+            </label>
+            <AppButton type="submit"><Trophy />Lưu điểm</AppButton>
+          </div>
+          <div class="board">
+            <strong class="board-title"><Trophy aria-hidden="true" />Bảng xếp hạng trên máy này</strong>
+            <GameBoardList :rows="boardRows" empty="Chưa có ai. Hãy là người đầu tiên!" />
+          </div>
+        </template>
+      </BagGame>
+
+      <form v-else class="bag-form" novalidate @submit.prevent="submit">
         <label class="code-field">
           <span>Mã đăng nhập</span>
-          <input v-model.trim="code" autocomplete="username" autocapitalize="none" spellcheck="false" placeholder="Ví dụ: hs-01" />
+          <input v-model.trim="code" autocomplete="username" autocapitalize="none" spellcheck="false" placeholder="Ví dụ: hs-01" @keydown.enter="onCodeEnter" />
         </label>
+
+        <p v-if="!code" class="play-invite">
+          <span>Chưa nhập mã? Tập tay với trò chơi, không tính lượt thử.</span>
+          <button type="button" class="play-button" @click="startGame"><Gamepad2 aria-hidden="true" />Chơi "Xếp cặp theo đề"</button>
+        </p>
 
         <BagPad
           ref="pad"
@@ -142,6 +230,26 @@ onBeforeUnmount(() => { draft.value = [] })
 }
 
 .stage { margin-top: 18px; }
+
+.play-invite { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin: 10px 0 0; color: var(--text-muted); font-size: .85rem; }
+.play-button {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 6px 12px;
+  border: 1px dashed color-mix(in srgb, var(--color-primary) 45%, var(--border));
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--color-primary) 8%, var(--surface));
+  color: var(--color-primary);
+  font: inherit; font-weight: 800;
+  cursor: pointer;
+}
+.play-button:hover { background: color-mix(in srgb, var(--color-primary) 14%, var(--surface)); }
+.play-button svg { width: 16px; height: 16px; }
+.save-row { display: flex; flex-wrap: wrap; align-items: end; gap: 8px 10px; margin-top: 10px; }
+.name-field { display: grid; gap: 4px; flex: 1 1 220px; max-width: 320px; font-weight: 800; font-size: .82rem; }
+.name-field input { height: 42px; padding: 0 12px; border: 1px solid var(--border); border-radius: 12px; background: var(--input); color: var(--text); font-size: .95rem; }
+.board { margin-top: 12px; }
+.board-title { display: flex; align-items: center; gap: 6px; font-size: .9rem; }
+.board-title svg { width: 16px; height: 16px; color: #f5b400; }
 
 .message { margin: 0; padding: 10px 12px; border-radius: 12px; font-size: .9rem; line-height: 1.45; }
 .message.info { background: color-mix(in srgb, var(--color-sky, #3b82f6) 12%, var(--surface)); }
