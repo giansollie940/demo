@@ -1,10 +1,11 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
-import { Backpack, Eye, EyeOff, KeyRound, Shuffle } from 'lucide-vue-next'
+import { Eye, EyeOff, KeyRound, Shuffle } from 'lucide-vue-next'
 import AppButton from '../ui/AppButton.vue'
 import AppCard from '../ui/AppCard.vue'
 import BagItemIcon from './BagItemIcon.vue'
 import BagPad from './BagPad.vue'
+import BagMark from './BagMark.vue'
 import { itemById } from '../../features/auth-bag/catalog'
 import { checkPolicy, MAX_ITEMS, MIN_ITEMS, POLICY_MESSAGE, randomSequence, sameSequence, type PolicyIssue } from '../../features/auth-bag/sequence'
 import { legacyApi } from '../../services/legacy-supabase'
@@ -205,8 +206,8 @@ onBeforeUnmount(() => {
 
 <template>
   <AppCard padding="lg" class="bag-settings">
-    <div class="section-title">
-      <Backpack />
+    <div class="section-title bag-mark-host">
+      <BagMark :size="34" />
       <div>
         <span>CÁCH VÀO LỚP VUI HƠN</span>
         <h2>Hành trang tự học</h2>

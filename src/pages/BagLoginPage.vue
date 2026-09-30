@@ -5,6 +5,7 @@ import { KeyRound } from 'lucide-vue-next'
 import AuthLayout from '../layouts/AuthLayout.vue'
 import AppButton from '../components/ui/AppButton.vue'
 import BagPad from '../components/auth-bag/BagPad.vue'
+import BagMark from '../components/auth-bag/BagMark.vue'
 import { MAX_ITEMS, MIN_ITEMS } from '../features/auth-bag/sequence'
 import { useAuthStore } from '../stores/auth'
 import { useContextStore } from '../stores/context'
@@ -74,7 +75,7 @@ onBeforeUnmount(() => { draft.value = [] })
 
       <div class="bag-title">
         <span class="eyebrow">CHUẨN BỊ VÀO LỚP</span>
-        <h1>🎒 Hành trang tự học</h1>
+        <h1 class="bag-mark-host"><BagMark :size="40" />Hành trang tự học</h1>
         <p class="guide">Chọn đúng món, đủ số lượng, theo thứ tự bí mật của bạn.</p>
         <p>Nhập mã đăng nhập, xoay tới từng món rồi bấm hoặc kéo vào cặp. Đừng xếp khi có người đang nhìn.</p>
       </div>
@@ -126,7 +127,7 @@ onBeforeUnmount(() => { draft.value = [] })
 
 .bag-title { margin-top: 14px; }
 .eyebrow { font-size: var(--font-size-ui-min, .72rem); font-weight: 900; letter-spacing: .16em; color: var(--color-primary); }
-.bag-title h1 { margin: 6px 0; font-size: clamp(1.5rem, 2.6vw, 2rem); }
+.bag-title h1 { display: flex; align-items: center; gap: 10px; margin: 6px 0; font-size: clamp(1.5rem, 2.6vw, 2rem); }
 .bag-title p { max-width: 72ch; margin: 0; color: var(--text-muted); line-height: 1.55; }
 
 .code-field { display: grid; gap: 6px; max-width: 320px; margin-top: 16px; font-weight: 800; font-size: .85rem; }

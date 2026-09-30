@@ -40,7 +40,7 @@ const lockSeconds = computed(() => Math.max(0, Math.ceil((lockedUntil.value - no
 const heading = computed(() => ({
   create: 'Bước 1/2 — Chọn cách xếp cặp',
   confirm: 'Bước 2/2 — Nhập lại để xác nhận',
-  login: '🎒 Hành trang tự học',
+  login: 'Hành trang tự học',
 }[phase.value]))
 
 function notify(tone: Tone, text: string) {
