@@ -10,7 +10,7 @@
 |---|---|
 | BR-001 | 36 biến thể (9 loại × 4 màu), `item_id` cố định, mã gọn = vị trí trong `CATALOG` (`src/features/auth-bag/catalog.ts`); loại mới chỉ được thêm vào cuối nên mã cũ không đổi |
 | BR-002/003 | Chuỗi giữ nguyên thứ tự và món lặp; payload `{ version, items }`; verifier input `[version, code…]` 1 byte/món (`sequence.ts`) |
-| RB-001 | Bàn bên trái, cặp bên phải; trên điện thoại/máy tính bảng cặp nằm trên bàn và dính ở đầu màn hình khi cuộn; hình + màu + nhãn; click/tap, bàn phím, kéo thả; cặp kín, chỉ hiện tổng số món; animation giống nhau cho mọi món |
+| RB-001 | Bàn bên trái, cặp bên phải; trên điện thoại/máy tính bảng cặp nằm trên bàn và dính ở đầu màn hình khi cuộn; hình + màu + nhãn; click/tap, bàn phím, kéo thả (màn hình cảm ứng: giữ món ~0,3 giây rồi kéo; vuốt ngay vẫn cuộn trang); cặp kín, chỉ hiện tổng số món; animation giống nhau cho mọi món |
 | RB-002 | Tạo 10–20 món → nhập lại trên cặp trống; tuỳ chọn tạo ngẫu nhiên, nút "Xem chuỗi để học" mặc định ẩn |
 | RB-003 | Nhập mã + chuỗi, gửi một lần khi "Đóng cặp"; thông báo sai chung; xoá chuỗi sau mỗi kết quả |
 | RB-004 | Undo bỏ món cuối, Reset xoá hết; một lần thả = một món; click trình duyệt tự sinh sau khi thả không bị tính thêm; chạm nhanh sau khi kéo vẫn tính; aria-live chỉ báo "Đã thêm một món"; reduced-motion |
