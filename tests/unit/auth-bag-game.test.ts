@@ -12,8 +12,8 @@ describe('practice game', () => {
   })
 
   test('time per round grows with the number of items', () => {
-    expect(roundSeconds(1)).toBe(8 + 3 * GAME_START_LENGTH)
-    expect(roundSeconds(99)).toBe(8 + 3 * GAME_MAX_LENGTH)
+    expect(roundSeconds(1)).toBe(15 + 5 * GAME_START_LENGTH)
+    expect(roundSeconds(99)).toBe(15 + 5 * GAME_MAX_LENGTH)
     expect(roundSeconds(3)).toBeGreaterThan(roundSeconds(2))
   })
 
