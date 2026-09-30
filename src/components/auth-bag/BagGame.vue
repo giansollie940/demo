@@ -126,8 +126,10 @@ function loseLife(why: string, newList: boolean) {
 }
 
 function submit() {
-  if (over.value) emit('overSubmit')
-  else check()
+  if (over.value) return emit('overSubmit')
+  check()
+  // Back to the wheel, so the next Space adds an item instead of pressing "Kiểm tra" again.
+  if (!over.value) pad.value?.focus()
 }
 
 onMounted(start)

@@ -5,6 +5,7 @@ import AppButton from '../ui/AppButton.vue'
 import BagItemIcon from './BagItemIcon.vue'
 import { ITEM_COLORS, ITEM_KINDS, itemById, type BagItem, type ItemColor, type ItemKind } from '../../features/auth-bag/catalog'
 import { MAX_ITEMS, shuffledCatalog } from '../../features/auth-bag/sequence'
+import { activePad } from '../../features/auth-bag/active-pad'
 
 /*
  * AUTH-BAG-001 input pad: a spinning wheel of school supplies in one of four colour themes, and
@@ -136,8 +137,43 @@ function setColor(index: number) {
 }
 
 function focusFront() {
-  nextTick(() => wheelEl.value?.querySelector<HTMLButtonElement>('.wheel-item.front')?.focus())
+  nextTick(() => wheelEl.value?.querySelector<HTMLButtonElement>('.wheel-item.front')?.focus({ preventScroll: true }))
 }
+
+// ===== Keyboard focus =====
+// The shortcuts only reach the wheel while focus is in it, so focus is brought back to the front
+// item whenever a pad control is used with the mouse (colour chips, arrows, Trả lại, Làm lại,
+// the discreet toggle, the mouse wheel). The page's own actions (the slot) and text fields keep
+// their focus, and a control reached with Tab keeps its native Enter / Space behaviour.
+const rootEl = ref<HTMLElement | null>(null)
+const me = Symbol('bag-pad')
+
+function isTextField(el: Element | null) {
+  return !!el && (el instanceof HTMLInputElement && !['checkbox', 'radio', 'button'].includes(el.type)
+    || el instanceof HTMLTextAreaElement || el instanceof HTMLSelectElement || (el as HTMLElement).isContentEditable)
+}
+
+function inSlot(el: Element | null) {
+  return !!el?.closest('.bag-actions')
+}
+
+function onRootClick(event: MouseEvent) {
+  activePad.current = me
+  const target = event.target as Element | null
+  // detail === 0 is a keyboard-triggered click: leave focus where the user put it.
+  if (!event.detail || inSlot(target) || isTextField(target)) return
+  focusFront()
+}
+
+/** Page-level shortcuts for when focus is on the page body (nothing focused), e.g. right after a game starts. */
+function onDocumentKey(event: KeyboardEvent) {
+  if (event.defaultPrevented || event.ctrlKey || event.metaKey || event.altKey) return
+  const target = event.target as Element | null
+  const onBody = !target || target === document.body || target === document.documentElement
+  if (!onBody || activePad.current !== me || !rootEl.value?.isConnected) return
+  onWheelKey(event)
+}
+
 
 function onWheelKey(event: KeyboardEvent) {
   const actions: Record<string, () => void> = {
@@ -187,6 +223,7 @@ function onWheelScroll(event: WheelEvent) {
   const step = Math.sign(wheelSum)
   wheelSum = 0
   wheelPausedUntil = now + WHEEL_PAUSE_MS
+  if (!isTextField(document.activeElement)) focusFront()
   if (event.shiftKey) setColor(colorIndex.value + step)
   else rotate(step)
 }
@@ -325,6 +362,8 @@ function onVisibility() {
 }
 
 onMounted(() => {
+  activePad.current = me
+  document.addEventListener('keydown', onDocumentKey)
   reshuffle()
   // Non-passive, so the page stays put while the wheel is being spun.
   wheelEl.value?.addEventListener('wheel', onWheelScroll, { passive: false })
@@ -336,6 +375,8 @@ onMounted(() => {
 })
 
 onBeforeUnmount(() => {
+  document.removeEventListener('keydown', onDocumentKey)
+  if (activePad.current === me) activePad.current = null
   document.removeEventListener('visibilitychange', onVisibility)
   window.removeEventListener('pointermove', onPointerMove)
   window.removeEventListener('pointerup', onPointerUp)
@@ -351,7 +392,7 @@ defineExpose({ reshuffle, focus: focusFront })
 </script>
 
 <template>
-  <div class="bag-pad">
+  <div ref="rootEl" class="bag-pad" @click="onRootClick" @pointerdown="activePad.current = me">
     <div class="bag-stage">
       <div class="bag-box">
         <div

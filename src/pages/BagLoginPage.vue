@@ -101,6 +101,7 @@ async function submit() {
   // Cleared and reshuffled after every attempt, whatever the result.
   draft.value = []
   pad.value?.reshuffle()
+  pad.value?.focus() // the next try starts on the wheel, not on this button
   // Too short or too long can never match; answer like any other failure without a request.
   if (items.length < MIN_ITEMS || items.length > MAX_ITEMS) return notify('error', GENERIC_FAILURE)
   busy.value = true
