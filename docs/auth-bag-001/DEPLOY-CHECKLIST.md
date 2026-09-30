@@ -1,4 +1,4 @@
-# "Xếp cặp đi học" (AUTH-BAG-001): checklist triển khai production
+# "Hành trang tự học" (AUTH-BAG-001): checklist triển khai production
 
 Làm theo thứ tự, đánh dấu từng ô. Mỗi bước có cách kiểm tra; **dừng lại nếu kết quả khác mong đợi**.
 
@@ -92,24 +92,26 @@ curl -s -X POST "https://<PROJECT_REF>.supabase.co/functions/v1/bag-enroll" \
 - [ ] GitHub repo → **Settings → Secrets and variables → Actions → Variables** → thêm `AUTH_BAG_ENABLED` = `true`.
 - [ ] **Actions → Build and Deploy Sổ Tự Học Vue → Run workflow** (nhánh `main`), chờ xanh.
 - [ ] Mở `https://<trang-pages>/config.js`: có dòng `"authBag": true`.
-- [ ] Trang đăng nhập có nút **"Xếp cặp đi học"** dưới nút Đăng nhập (có thể cần tải lại mạnh: Ctrl+Shift+R).
+- [ ] Trang đăng nhập có nút **"Hành trang tự học"** dưới nút Đăng nhập (có thể cần tải lại mạnh: Ctrl+Shift+R).
 
 ## 5. Thử với tài khoản học sinh thử
 
 Làm trên **máy tính** trước, rồi lặp lại các bước có dấu 📱 trên **điện thoại** và **iPad**.
 
-- [ ] Đăng nhập bằng mật khẩu → **Cài đặt** → thẻ **"Xếp cặp đi học"** hiện "Chưa bật".
+- [ ] Đăng nhập bằng mật khẩu → **Cài đặt** → thẻ **"Hành trang tự học"** hiện "Chưa bật".
 - [ ] **Thiết lập** → nhập sai mật khẩu → báo "Mật khẩu hiện tại không đúng".
 - [ ] Nhập đúng mật khẩu → chọn 10 món giống nhau → **Tiếp tục** → bị chặn vì chuỗi quá dễ.
 - [ ] Chọn 10–12 món khác nhau (nhớ thứ tự) → Tiếp tục → xếp lại sai một món → bị đưa về bước 1.
 - [ ] Làm lại, xếp lại đúng → **Lưu cách xếp** → "Đang bật".
-- [ ] Đăng xuất → trang đăng nhập → gõ mã → **Xếp cặp đi học** (mã được mang sang) 📱
-- [ ] Xếp **sai** một món → **Đóng cặp — Vào lớp** → thông báo chung, cặp trống lại 📱
-- [ ] Xếp **đúng** → vào thẳng Tổng quan 📱
+- [ ] Đăng xuất → trang đăng nhập → gõ mã → **Hành trang tự học** (mã được mang sang) 📱
+- [ ] Xếp **sai** một món → **Bắt đầu tự học** → thông báo chung, cặp trống lại 📱
+- [ ] Xếp **đúng** → hiện "Hành trang đã sẵn sàng. Cùng học thôi!" rồi vào Tổng quan 📱
 - [ ] 📱 Trên điện thoại:
-  - chạm nhanh vào món → thêm 1 món;
-  - **giữ ~0,3 giây rồi kéo** vào cặp → thêm 1 món;
-  - vuốt trên bàn → trang cuộn, không thêm món;
+  - bấm 4 nút màu → ổ xoay đổi chủ đề và đổi màu dụng cụ;
+  - vuốt ngang trên ổ xoay (hoặc bấm ◀ ▶) → ổ xoay quay, không thêm món;
+  - chạm vào món ở giữa → thêm 1 món; chạm món bên cạnh → nó quay ra giữa, không thêm;
+  - **giữ món ở giữa ~0,3 giây rồi kéo** vào cặp → thêm 1 món;
+  - vuốt dọc → trang cuộn bình thường;
   - cặp dính ở đầu màn hình khi cuộn.
 - [ ] Đăng xuất → xếp sai **5 lần** → lần 6 xếp đúng vẫn bị từ chối (đang khoá 15 phút).
 - [ ] Trong lúc bị khoá, **đăng nhập bằng mật khẩu vẫn được**.
@@ -165,7 +167,7 @@ Quên hẳn cách xếp: học sinh tự đăng nhập bằng mật khẩu và *
 |---|---|---|
 | Tạm tắt (khuyên dùng) | Đặt `AUTH_BAG_ENABLED` khác `true` (hoặc xoá) → chạy lại workflow Pages | Nút và thẻ Cài đặt biến mất, `/login/bag` chuyển về `/login`. Dữ liệu giữ nguyên để bật lại |
 | Chặn ở server | `supabase functions delete bag-login` | Không ai vào lớp bằng cặp được, kể cả gọi thẳng API |
-| Gỡ hẳn | Chạy SQL dưới đây | Xoá toàn bộ dữ liệu "Xếp cặp đi học"; không ảnh hưởng mật khẩu hay dữ liệu khác |
+| Gỡ hẳn | Chạy SQL dưới đây | Xoá toàn bộ dữ liệu "Hành trang tự học"; không ảnh hưởng mật khẩu hay dữ liệu khác |
 
 ```sql
 begin;
@@ -182,11 +184,11 @@ commit;
 
 ## Mẫu thông báo cho học sinh
 
-> 🎒 **Mới: "Xếp cặp đi học"**. Một cách vào lớp vui hơn, không cần gõ mật khẩu.
+> 🎒 **Mới: "Hành trang tự học"**. Một cách vào lớp vui hơn, không cần gõ mật khẩu.
 >
-> 1. Đăng nhập như bình thường → **Cài đặt** → **Xếp cặp đi học** → **Thiết lập**.
+> 1. Đăng nhập như bình thường → **Cài đặt** → **Hành trang tự học** → **Thiết lập**.
 > 2. Chọn 10–20 dụng cụ học tập và thứ tự xếp vào cặp *của riêng em* (một món có thể chọn nhiều lần), rồi xếp lại một lần nữa để xác nhận.
-> 3. Lần sau, ở trang đăng nhập bấm **Xếp cặp đi học**, gõ mã đăng nhập, xếp đúng cặp và **Đóng cặp — Vào lớp**.
+> 3. Lần sau, ở trang đăng nhập bấm **Hành trang tự học**, gõ mã đăng nhập, xếp đúng cặp và **Bắt đầu tự học**.
 >
 > Lưu ý:
 > - Đừng xếp khi có bạn đang nhìn.

@@ -1,6 +1,7 @@
-# AUTH-BAG-001 — "Xếp cặp đi học": triển khai
+# AUTH-BAG-001 — "Hành trang tự học": triển khai
 
-Tên hiển thị cho học sinh là **"Xếp cặp đi học"** (nút "Xếp cặp đi học", trang "Chuẩn bị vào lớp", nút "Đóng cặp — Vào lớp").
+Tên hiển thị cho học sinh là **"🎒 Hành trang tự học"**. Hướng dẫn: "Chọn đúng món, đủ số lượng, theo thứ tự bí mật của bạn." Nút xác nhận: "Bắt đầu tự học". Khi thành công: "Hành trang đã sẵn sàng. Cùng học thôi!".
+Chọn món bằng **ổ xoay 9 loại dụng cụ theo 4 màu chủ đề**. Chỉ món ở giữa phía trước mới thêm được, bằng cách bấm vào hoặc kéo vào cặp. Mỗi lượt thử bắt đầu ở màu và vị trí ngẫu nhiên.
 Trong code và database vẫn dùng tên kỹ thuật `auth-bag` / `bag_auth_*`.
 Các bước triển khai từng mục có ô đánh dấu nằm trong **`DEPLOY-CHECKLIST.md`**.
 
@@ -25,7 +26,7 @@ Chuỗi dụng cụ là một credential thứ hai: server chỉ lưu bcrypt (co
 - **Thiết lập, đổi:** Cài đặt → nhập mật khẩu hiện tại → tạo chuỗi 10–20 món → nhập lại → lưu.
   Nếu quá 5 phút kể từ lúc nhập mật khẩu, app hỏi lại mật khẩu rồi lưu chuỗi đã xác nhận.
 - **Tắt:** Cài đặt → Tắt → nhập mật khẩu.
-- **Đăng nhập:** trang đăng nhập → "Xếp cặp đi học" → mã đăng nhập và chuỗi → phiên Supabase bình thường.
+- **Đăng nhập:** trang đăng nhập → "Hành trang tự học" → mã đăng nhập và chuỗi → phiên Supabase bình thường.
   Refresh, đăng xuất và RLS giữ nguyên.
 - Mọi lỗi đăng nhập (sai chuỗi, tài khoản không có, chưa bật, bị khoá, không đủ quyền) trả **cùng một thông báo**.
 - **Giới hạn thử:** 5 lần sai trong 15 phút thì khoá tài khoản 15 phút; mỗi IP tối đa 30 lần sai trong 15 phút.

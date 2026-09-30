@@ -30,8 +30,8 @@ const classUsers: UserRole[] = ['student', 'monitor', 'teacher']
 
 export const routes: RouteRecordRaw[] = [
   { path: '/login', component: LoginPage, meta: { public: true, title: 'Đăng nhập' } },
-  { path: '/login/bag', component: BagLoginPage, beforeEnter: () => bagLoginEnabled() || '/login', meta: { public: true, title: 'Xếp cặp đi học' } },
-  { path: '/bag-demo', component: BagDemoPage, meta: { public: true, title: 'Xếp cặp đi học (bản thử)' } },
+  { path: '/login/bag', component: BagLoginPage, beforeEnter: () => bagLoginEnabled() || '/login', meta: { public: true, title: 'Hành trang tự học' } },
+  { path: '/bag-demo', component: BagDemoPage, meta: { public: true, title: 'Hành trang tự học (bản thử)' } },
   {
     path: '/',
     component: AppShell,

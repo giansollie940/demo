@@ -24,10 +24,13 @@ const route = useRoute()
 const code = ref(typeof route.query.code === 'string' ? route.query.code : '')
 const draft = ref<string[]>([])
 const pad = ref<InstanceType<typeof BagPad> | null>(null)
-const message = ref<{ tone: 'info' | 'error'; text: string } | null>(null)
+type Tone = 'info' | 'error' | 'success'
+const message = ref<{ tone: Tone; text: string } | null>(null)
 const busy = ref(false)
+const ready = ref(false)
+const SUCCESS_PAUSE_MS = 1100
 
-function notify(tone: 'info' | 'error', text: string) {
+function notify(tone: Tone, text: string) {
   message.value = { tone, text }
 }
 
@@ -46,6 +49,10 @@ async function submit() {
   try {
     await auth.loginWithBag(code.value, items)
     context.hydrate(auth.legacyState)
+    ready.value = true
+    notify('success', 'Hành trang đã sẵn sàng. Cùng học thôi!')
+    // A short beat so the student sees the greeting before the dashboard opens.
+    await new Promise(resolve => setTimeout(resolve, SUCCESS_PAUSE_MS))
     await router.replace(auth.currentUser?.role === 'admin' ? '/admin' : '/dashboard')
   } catch (error) {
     const unavailable = (error as { code?: string })?.code === 'UNAVAILABLE'
@@ -67,8 +74,9 @@ onBeforeUnmount(() => { draft.value = [] })
 
       <div class="bag-title">
         <span class="eyebrow">CHUẨN BỊ VÀO LỚP</span>
-        <h1>Xếp cặp đi học</h1>
-        <p>Nhập mã đăng nhập, xếp đồ vào cặp đúng loại, đúng màu, đúng số lượng và đúng thứ tự như bạn đã chọn, rồi đóng cặp để vào lớp. Đừng xếp khi có người đang nhìn.</p>
+        <h1>🎒 Hành trang tự học</h1>
+        <p class="guide">Chọn đúng món, đủ số lượng, theo thứ tự bí mật của bạn.</p>
+        <p>Nhập mã đăng nhập, xoay tới từng món rồi bấm hoặc kéo vào cặp. Đừng xếp khi có người đang nhìn.</p>
       </div>
 
       <form class="bag-form" novalidate @submit.prevent="submit">
@@ -84,14 +92,16 @@ onBeforeUnmount(() => { draft.value = [] })
           @full="notify('error', `Cặp chỉ chứa tối đa ${MAX_ITEMS} món.`)"
           @cleared="notify('info', 'Đã xoá các món trong cặp khi bạn rời tab.')"
         >
-          <p v-if="message" class="message" :class="message.tone" role="alert">{{ message.text }}</p>
-          <AppButton type="submit" :loading="busy"><KeyRound />Đóng cặp — Vào lớp</AppButton>
+          <p v-if="message" class="message" :class="message.tone" role="alert">
+            <span v-if="message.tone === 'success'" class="sparkles" aria-hidden="true">✨</span>{{ message.text }}
+          </p>
+          <AppButton type="submit" :loading="busy || ready" :disabled="ready"><KeyRound />Bắt đầu tự học</AppButton>
           <RouterLink :to="{ path: '/login' }" class="alt">Dùng mật khẩu</RouterLink>
         </BagPad>
       </form>
 
       <p class="privacy">
-        Chưa chọn cách xếp cặp? Đăng nhập bằng mật khẩu rồi thiết lập "Xếp cặp đi học" trong Cài đặt.
+        Chưa chuẩn bị hành trang? Đăng nhập bằng mật khẩu rồi thiết lập "Hành trang tự học" trong Cài đặt.
         Cách này không chống được người quay lại toàn bộ thao tác của bạn.
       </p>
     </section>
@@ -135,6 +145,17 @@ onBeforeUnmount(() => { draft.value = [] })
 .message { margin: 0; padding: 10px 12px; border-radius: 12px; font-size: .9rem; line-height: 1.45; }
 .message.info { background: color-mix(in srgb, var(--color-sky, #3b82f6) 12%, var(--surface)); }
 .message.error { background: color-mix(in srgb, var(--color-danger) 12%, var(--surface)); color: var(--color-danger); }
+.message.success {
+  background: linear-gradient(120deg, color-mix(in srgb, var(--color-mint, #22a06b) 20%, var(--surface)), color-mix(in srgb, #f5b400 18%, var(--surface)));
+  color: var(--text);
+  font-weight: 800;
+  animation: ready-pop 420ms cubic-bezier(.3, 1.5, .5, 1);
+}
+.sparkles { display: inline-block; margin-right: 6px; animation: sparkle 900ms ease-in-out infinite; }
+.guide { color: var(--text) !important; font-weight: 800; }
+@keyframes ready-pop { 0% { transform: scale(.9); opacity: 0; } 100% { transform: scale(1); opacity: 1; } }
+@keyframes sparkle { 50% { transform: scale(1.25) rotate(12deg); } }
+@media (prefers-reduced-motion: reduce) { .message.success, .sparkles { animation: none; } }
 
 .privacy { margin: 16px 0 0; color: var(--text-muted); font-size: .8rem; line-height: 1.5; }
 

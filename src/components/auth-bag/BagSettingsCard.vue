@@ -67,7 +67,7 @@ async function loadStatus() {
   } catch (error) {
     phase.value = 'unavailable'
     notify('error', errorCode(error) === 'NOT_ELIGIBLE'
-      ? 'Tài khoản này chưa dùng được "Xếp cặp đi học".'
+      ? 'Tài khoản này chưa dùng được "Hành trang tự học".'
       : 'Chưa tải được trạng thái. Hãy thử lại sau.')
   }
 }
@@ -153,7 +153,7 @@ async function save(sequence: string[]) {
     enabled.value = result.enabled
     updatedAt.value = new Date().toISOString()
     phase.value = 'idle'
-    notify('success', 'Đã lưu cách xếp cặp của bạn. Mật khẩu vẫn giữ nguyên.')
+    notify('success', 'Đã lưu hành trang của bạn. Mật khẩu vẫn giữ nguyên.')
   } catch (error) {
     const code = errorCode(error)
     if (code === 'REAUTH_REQUIRED') {
@@ -179,7 +179,7 @@ async function disable() {
     await legacyApi.bagCredential('disable')
     enabled.value = false
     updatedAt.value = new Date().toISOString()
-    notify('success', 'Đã tắt "Xếp cặp đi học".')
+    notify('success', 'Đã tắt "Hành trang tự học".')
   } catch (error) {
     notify('error', errorText(error, 'Chưa tắt được. Vui lòng thử lại sau.'))
   } finally {
@@ -209,13 +209,13 @@ onBeforeUnmount(() => {
       <Backpack />
       <div>
         <span>CÁCH VÀO LỚP VUI HƠN</span>
-        <h2>Xếp cặp đi học</h2>
+        <h2>Hành trang tự học</h2>
       </div>
     </div>
 
     <p class="intro">
-      Chọn {{ MIN_ITEMS }}–{{ MAX_ITEMS }} dụng cụ học tập và thứ tự xếp vào cặp của riêng bạn. Lần sau chỉ cần xếp cặp
-      đúng như vậy là vào lớp, không cần gõ mật khẩu. Đây là cách phụ: mật khẩu không thay đổi và vẫn luôn dùng được.
+      Chọn đúng món, đủ số lượng, theo thứ tự bí mật của bạn ({{ MIN_ITEMS }}–{{ MAX_ITEMS }} món). Lần sau chỉ cần xếp
+      hành trang đúng như vậy là bắt đầu tự học, không cần gõ mật khẩu. Đây là cách phụ: mật khẩu không thay đổi và vẫn luôn dùng được.
     </p>
 
     <p v-if="message" class="message" :class="message.tone" role="status">{{ message.text }}</p>
@@ -241,7 +241,7 @@ onBeforeUnmount(() => {
 
     <form v-else-if="phase === 'password'" class="password-step" novalidate @submit.prevent="confirmPassword">
       <label>
-        <span>{{ intent === 'disable' ? 'Nhập mật khẩu để tắt "Xếp cặp đi học"' : 'Nhập mật khẩu hiện tại để tiếp tục' }}</span>
+        <span>{{ intent === 'disable' ? 'Nhập mật khẩu để tắt "Hành trang tự học"' : 'Nhập mật khẩu hiện tại để tiếp tục' }}</span>
         <input v-model="password" type="password" autocomplete="current-password" />
       </label>
       <div class="actions">
@@ -253,9 +253,9 @@ onBeforeUnmount(() => {
     </form>
 
     <div v-else class="enroll-step">
-      <h3>{{ phase === 'create' ? 'Bước 1/2 — Xếp cặp lần đầu' : 'Bước 2/2 — Xếp lại để xác nhận' }}</h3>
+      <h3>{{ phase === 'create' ? 'Bước 1/2 — Chuẩn bị hành trang' : 'Bước 2/2 — Xếp lại để xác nhận' }}</h3>
       <p class="muted">
-        <template v-if="phase === 'create'">Một món có thể chọn nhiều lần. Đừng tạo khi có người đang nhìn.</template>
+        <template v-if="phase === 'create'">Xoay tới món cần chọn rồi bấm hoặc kéo vào cặp. Một món có thể chọn nhiều lần. Đừng tạo khi có người đang nhìn.</template>
         <template v-else>Xếp lại đúng như lần đầu. Hai lần phải khớp hoàn toàn.</template>
       </p>
       <BagPad

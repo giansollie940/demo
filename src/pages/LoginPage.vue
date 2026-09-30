@@ -2,7 +2,7 @@
 import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useIntervalFn } from '@vueuse/core'
-import { Backpack, Eye, EyeOff, LockKeyhole, Moon, Sun, UserRound } from 'lucide-vue-next'
+import { Eye, EyeOff, LockKeyhole, Moon, Sun, UserRound } from 'lucide-vue-next'
 import AuthLayout from '../layouts/AuthLayout.vue'
 import AppButton from '../components/ui/AppButton.vue'
 import IconButton from '../components/ui/IconButton.vue'
@@ -391,7 +391,11 @@ async function submit() {
           <template v-if="bagEnabled">
             <div class="or-divider" aria-hidden="true"><span>hoặc</span></div>
             <button type="button" class="bag-option" @click="openBagLogin">
-              <Backpack aria-hidden="true" />Xếp cặp đi học
+              <span class="bag-emoji" aria-hidden="true">🎒</span>
+              <span class="bag-text">Hành trang tự học</span>
+              <span class="twinkle t1" aria-hidden="true">✦</span>
+              <span class="twinkle t2" aria-hidden="true">✦</span>
+              <span class="twinkle t3" aria-hidden="true">✦</span>
             </button>
           </template>
         </form>
@@ -912,26 +916,85 @@ async function submit() {
 .submit { width: 100%; min-height: 50px; font-size: .92rem; }
 .or-divider { display: flex; align-items: center; gap: 10px; color: var(--text-muted); font-size: .78rem; }
 .or-divider::before, .or-divider::after { content: ''; flex: 1; height: 1px; background: var(--border); }
+/* "Hành trang tự học": a four-colour border that runs round the button on hover, a sweep of
+   light, a few twinkling stars and a little wiggle of the bag. */
+@property --bag-angle {
+  syntax: '<angle>';
+  initial-value: 0deg;
+  inherits: false;
+}
 .bag-option {
+  --bag-angle: 0deg;
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 8px;
   width: 100%;
-  min-height: 46px;
-  border: 1px solid color-mix(in srgb, var(--color-primary) 28%, var(--border));
+  min-height: 48px;
+  border: 2px solid transparent;
   border-radius: 14px;
-  background: color-mix(in srgb, var(--color-primary) 6%, var(--surface));
+  background:
+    linear-gradient(color-mix(in srgb, var(--color-primary) 6%, var(--surface)), color-mix(in srgb, var(--color-primary) 6%, var(--surface))) padding-box,
+    conic-gradient(from var(--bag-angle), #e5484d, #f5b400, #22a06b, #3b82f6, #e5484d) border-box;
   color: var(--color-primary);
   font: inherit;
-  font-size: .88rem;
-  font-weight: 800;
+  font-size: .9rem;
+  font-weight: 850;
   cursor: pointer;
-  transition: background var(--transition-fast, 120ms) ease, transform var(--transition-fast, 120ms) ease;
+  transition: transform 180ms ease, box-shadow 220ms ease;
 }
-.bag-option:hover { background: color-mix(in srgb, var(--color-primary) 12%, var(--surface)); transform: translateY(-1px); }
+.bag-option::after {
+  content: '';
+  position: absolute;
+  inset: -2px;
+  z-index: -1;
+  background: linear-gradient(105deg, transparent 30%, rgb(255 255 255 / .75) 48%, rgb(255 255 255 / .15) 56%, transparent 70%);
+  transform: translateX(-120%);
+  pointer-events: none;
+}
+.bag-emoji { display: inline-block; font-size: 1.15rem; line-height: 1; transform-origin: 50% 90%; }
+.twinkle {
+  position: absolute;
+  font-size: .7rem;
+  opacity: 0;
+  pointer-events: none;
+}
+.twinkle.t1 { top: 6px; left: 16%; color: #f5b400; }
+.twinkle.t2 { bottom: 5px; left: 72%; color: #3b82f6; font-size: .6rem; }
+.twinkle.t3 { top: 8px; right: 12%; color: #e5484d; font-size: .55rem; }
+.bag-option:hover,
+.bag-option:focus-visible {
+  transform: translateY(-2px);
+  box-shadow:
+    0 6px 18px color-mix(in srgb, #f5b400 28%, transparent),
+    0 2px 14px color-mix(in srgb, #3b82f6 22%, transparent),
+    0 0 0 4px color-mix(in srgb, var(--color-primary) 10%, transparent);
+  animation: bag-border-spin 2.4s linear infinite;
+}
+.bag-option:hover::after,
+.bag-option:focus-visible::after { animation: bag-shine 1.4s ease-in-out infinite; }
+.bag-option:hover .bag-emoji,
+.bag-option:focus-visible .bag-emoji { animation: bag-wiggle 900ms ease-in-out infinite; }
+.bag-option:hover .twinkle,
+.bag-option:focus-visible .twinkle { animation: bag-twinkle 1.2s ease-in-out infinite; }
+.bag-option:hover .twinkle.t2,
+.bag-option:focus-visible .twinkle.t2 { animation-delay: .35s; }
+.bag-option:hover .twinkle.t3,
+.bag-option:focus-visible .twinkle.t3 { animation-delay: .7s; }
+.bag-option:active { transform: translateY(0) scale(.98); }
 .bag-option:focus-visible { outline: 3px solid var(--focus-ring, var(--color-primary)); outline-offset: 2px; }
-.bag-option svg { width: 18px; height: 18px; }
+@keyframes bag-border-spin { to { --bag-angle: 360deg; } }
+@keyframes bag-shine { 0% { transform: translateX(-120%); } 60%, 100% { transform: translateX(120%); } }
+@keyframes bag-wiggle { 0%, 100% { transform: rotate(0); } 25% { transform: rotate(-12deg) scale(1.1); } 75% { transform: rotate(10deg) scale(1.1); } }
+@keyframes bag-twinkle { 0%, 100% { opacity: 0; transform: scale(.4) rotate(0); } 50% { opacity: 1; transform: scale(1.2) rotate(45deg); } }
+@media (prefers-reduced-motion: reduce) {
+  .bag-option:hover, .bag-option:focus-visible, .bag-option:hover::after, .bag-option:focus-visible::after,
+  .bag-option:hover .bag-emoji, .bag-option:hover .twinkle, .bag-option:focus-visible .bag-emoji, .bag-option:focus-visible .twinkle { animation: none; }
+  .bag-option:hover .twinkle, .bag-option:focus-visible .twinkle { opacity: 1; }
+}
 .error { margin: 0; color: var(--color-danger); font-size: 0.9rem; }
 
 .security-notes {
