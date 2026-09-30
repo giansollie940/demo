@@ -19,6 +19,7 @@ import { useAuthStore } from '../stores/auth'
 import { useContextStore } from '../stores/context'
 import { usePreferencesStore } from '../stores/preferences'
 import { bagLoginEnabled } from '../features/auth-bag/flag'
+import BagMark from '../components/auth-bag/BagMark.vue'
 
 
 
@@ -390,8 +391,8 @@ async function submit() {
 
           <template v-if="bagEnabled">
             <div class="or-divider" aria-hidden="true"><span>hoặc</span></div>
-            <button type="button" class="bag-option" @click="openBagLogin">
-              <span class="bag-emoji" aria-hidden="true">🎒</span>
+            <button type="button" class="bag-option bag-mark-host" @click="openBagLogin">
+              <BagMark :size="30" />
               <span class="bag-text">Hành trang tự học</span>
               <span class="twinkle t1" aria-hidden="true">✦</span>
               <span class="twinkle t2" aria-hidden="true">✦</span>
@@ -917,7 +918,7 @@ async function submit() {
 .or-divider { display: flex; align-items: center; gap: 10px; color: var(--text-muted); font-size: .78rem; }
 .or-divider::before, .or-divider::after { content: ''; flex: 1; height: 1px; background: var(--border); }
 /* "Hành trang tự học": a four-colour border that runs round the button on hover, a sweep of
-   light, a few twinkling stars and a little wiggle of the bag. */
+   light, a few twinkling stars, and the bag mark's pencils bobbing (BagMark). */
 @property --bag-angle {
   syntax: '<angle>';
   initial-value: 0deg;
@@ -955,7 +956,6 @@ async function submit() {
   transform: translateX(-120%);
   pointer-events: none;
 }
-.bag-emoji { display: inline-block; font-size: 1.15rem; line-height: 1; transform-origin: 50% 90%; }
 .twinkle {
   position: absolute;
   font-size: .7rem;
@@ -976,8 +976,6 @@ async function submit() {
 }
 .bag-option:hover::after,
 .bag-option:focus-visible::after { animation: bag-shine 1.4s ease-in-out infinite; }
-.bag-option:hover .bag-emoji,
-.bag-option:focus-visible .bag-emoji { animation: bag-wiggle 900ms ease-in-out infinite; }
 .bag-option:hover .twinkle,
 .bag-option:focus-visible .twinkle { animation: bag-twinkle 1.2s ease-in-out infinite; }
 .bag-option:hover .twinkle.t2,
@@ -988,11 +986,10 @@ async function submit() {
 .bag-option:focus-visible { outline: 3px solid var(--focus-ring, var(--color-primary)); outline-offset: 2px; }
 @keyframes bag-border-spin { to { --bag-angle: 360deg; } }
 @keyframes bag-shine { 0% { transform: translateX(-120%); } 60%, 100% { transform: translateX(120%); } }
-@keyframes bag-wiggle { 0%, 100% { transform: rotate(0); } 25% { transform: rotate(-12deg) scale(1.1); } 75% { transform: rotate(10deg) scale(1.1); } }
 @keyframes bag-twinkle { 0%, 100% { opacity: 0; transform: scale(.4) rotate(0); } 50% { opacity: 1; transform: scale(1.2) rotate(45deg); } }
 @media (prefers-reduced-motion: reduce) {
   .bag-option:hover, .bag-option:focus-visible, .bag-option:hover::after, .bag-option:focus-visible::after,
-  .bag-option:hover .bag-emoji, .bag-option:hover .twinkle, .bag-option:focus-visible .bag-emoji, .bag-option:focus-visible .twinkle { animation: none; }
+  .bag-option:hover .twinkle, .bag-option:focus-visible .twinkle { animation: none; }
   .bag-option:hover .twinkle, .bag-option:focus-visible .twinkle { opacity: 1; }
 }
 .error { margin: 0; color: var(--color-danger); font-size: 0.9rem; }

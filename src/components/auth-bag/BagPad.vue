@@ -150,6 +150,37 @@ function onWheelKey(event: KeyboardEvent) {
   focusFront()
 }
 
+// ===== Mouse wheel / trackpad over the wheel =====
+// One wheel notch turns one slot; Shift + wheel changes the colour. Trackpads send many small
+// deltas, so they are summed and each step is followed by a short pause, keeping the spin
+// controllable. The page does not scroll while the pointer is over the wheel.
+const WHEEL_STEP_PX = 60
+const WHEEL_PAUSE_MS = 110
+const WHEEL_IDLE_MS = 220
+let wheelSum = 0
+let wheelPausedUntil = 0
+let wheelLastAt = 0
+
+function onWheelScroll(event: WheelEvent) {
+  const scale = event.deltaMode === 1 ? 40 : event.deltaMode === 2 ? 400 : 1 // lines / pages → px
+  const dx = event.deltaX * scale
+  const dy = event.deltaY * scale
+  const delta = Math.abs(dx) > Math.abs(dy) ? dx : dy
+  if (!delta) return
+  event.preventDefault()
+  const now = performance.now()
+  if (now - wheelLastAt > WHEEL_IDLE_MS) wheelSum = 0
+  wheelLastAt = now
+  if (now < wheelPausedUntil) return
+  wheelSum += delta
+  if (Math.abs(wheelSum) < WHEEL_STEP_PX) return
+  const step = Math.sign(wheelSum)
+  wheelSum = 0
+  wheelPausedUntil = now + WHEEL_PAUSE_MS
+  if (event.shiftKey) setColor(colorIndex.value + step)
+  else rotate(step)
+}
+
 // ===== Pointer gestures on the wheel =====
 // Front item: mouse/pen drag after a small move; on touch, hold briefly to pick it up (so a swipe
 // can still spin the wheel). Anywhere else, or a quick horizontal swipe: spin the wheel.
@@ -285,6 +316,8 @@ function onVisibility() {
 
 onMounted(() => {
   reshuffle()
+  // Non-passive, so the page stays put while the wheel is being spun.
+  wheelEl.value?.addEventListener('wheel', onWheelScroll, { passive: false })
   document.addEventListener('visibilitychange', onVisibility)
   window.addEventListener('pointermove', onPointerMove)
   window.addEventListener('pointerup', onPointerUp)
@@ -298,6 +331,7 @@ onBeforeUnmount(() => {
   window.removeEventListener('pointerup', onPointerUp)
   window.removeEventListener('pointercancel', endGesture)
   window.removeEventListener('touchmove', onTouchMove)
+  wheelEl.value?.removeEventListener('wheel', onWheelScroll)
   endGesture()
 })
 
@@ -389,7 +423,7 @@ defineExpose({ reshuffle })
 
         <div class="wheel-nav">
           <AppButton type="button" variant="secondary" aria-label="Xoay sang trái" @click="rotate(-1)"><ChevronLeft /></AppButton>
-          <span class="hint">Xoay tới món cần chọn rồi bấm hoặc kéo vào cặp</span>
+          <span class="hint">Lăn chuột hoặc vuốt để xoay (Shift + lăn để đổi màu), rồi bấm hoặc kéo món ở giữa vào cặp</span>
           <AppButton type="button" variant="secondary" aria-label="Xoay sang phải" @click="rotate(1)"><ChevronRight /></AppButton>
         </div>
       </div>
