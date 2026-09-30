@@ -24,6 +24,8 @@ const functions = [
   'homework-media-cleanup',
   'storage-health',
   'archive-media',
+  'bag-enroll',
+  'bag-login',
 ]
 
 function copyDir(source, target) {

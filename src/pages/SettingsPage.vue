@@ -18,6 +18,8 @@ import { saveSettingsMutation } from '../features/settings/settings-mutations'
 import { legacyApi } from '../services/legacy-supabase'
 import { validateAvatarFile } from '../features/profile/avatar-image.js'
 import { appDialog } from '../features/shared/app-dialog'
+import BagSettingsCard from '../components/auth-bag/BagSettingsCard.vue'
+import { bagLoginEnabled } from '../features/auth-bag/flag'
 
 const auth=useAuthStore(),context=useContextStore(),preferences=usePreferencesStore(),createRuntime=useLegacyMutationRuntime(),route=useRoute()
 const isLearner=computed(()=>auth.currentUser?.role==='student'||auth.currentUser?.role==='monitor')
@@ -25,6 +27,7 @@ const isAdmin=computed(()=>auth.currentUser?.role==='admin')
 const isTeacher=computed(()=>auth.currentUser?.role==='teacher')
 const isPersonalSettings=computed(()=>isLearner.value||isAdmin.value||(isTeacher.value&&route.query.view==='personal'))
 const isMonitor=computed(()=>auth.currentUser?.role==='monitor')
+const bagEnabled=bagLoginEnabled()
 const activeTab=ref('general'),saving=ref(false),status=ref<InlineStatusState>('idle'),statusMessage=ref('')
 const personalStatus=ref<InlineStatusState>('idle'),personalMessage=ref(''),passwordBusy=ref(false),currentPassword=ref(''),newPassword=ref('')
 const avatarInput=ref<HTMLInputElement|null>(null),avatarEditorFile=ref<File|null>(null)
@@ -93,6 +96,8 @@ async function removeAvatar(){if(!auth.currentUser?.avatarPath)return;if(!await 
           <label class="personal-option" :class="{disabled:!preferences.owlEnabled}"><span class="option-icon sun"><Quote/></span><span><b>Luân phiên danh ngôn</b><small>Cho Cú hiển thị danh ngôn sau các lời nhắc theo ngữ cảnh.</small></span><input v-model="preferences.owlQuotesEnabled" type="checkbox" :disabled="!preferences.owlEnabled"></label>
         </div>
       </AppCard>
+
+      <BagSettingsCard v-if="isLearner&&bagEnabled"/>
 
       <AppCard v-if="isLearner" padding="lg" class="personal-card alerts-card">
         <div class="section-title"><BellRing/><div><span>CẢNH BÁO HỌC TẬP</span><h2>Luôn được bật</h2></div></div>

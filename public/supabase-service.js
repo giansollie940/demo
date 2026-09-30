@@ -123,6 +123,64 @@
     return data.user;
   }
 
+  // AUTH-BAG-001: re-confirms the password so the session carries a fresh password sign-in,
+  // which bag-enroll requires before the school-bag passcode is changed or disabled.
+  async function reauthenticateOwnPassword(password){
+    const sb=requireClient();
+    const {data:currentData,error:currentError}=await sb.auth.getUser();
+    if(currentError) throw currentError;
+    const email=currentData?.user?.email;
+    if(!email) throw new Error("Không xác định được tài khoản hiện tại.");
+    const {error}=await sb.auth.signInWithPassword({email,password:String(password||"")});
+    if(error){
+      const wrapped=new Error("Mật khẩu hiện tại không đúng.");
+      wrapped.code="CURRENT_PASSWORD_INVALID";
+      throw wrapped;
+    }
+  }
+
+  // Calls a school-bag function and keeps the server's error code (REAUTH_REQUIRED, WEAK_SEQUENCE…).
+  async function invokeBagFunction(name,body,fallback){
+    const sb=requireClient();
+    const {data,error}=await sb.functions.invoke(name,{body});
+    if(!error&&data?.ok) return data;
+    let payload=data||null;
+    try{
+      const ctx=error?.context;
+      if(ctx&&typeof ctx.clone==="function")payload=await ctx.clone().json();
+    }catch{}
+    const wrapped=new Error(payload?.error||fallback);
+    wrapped.code=String(payload?.code||"UNAVAILABLE");
+    if(payload?.issue)wrapped.issue=String(payload.issue);
+    throw wrapped;
+  }
+
+  function bagCredential(action,items){
+    const body=action==="enroll"?{action,version:1,items:[...(items||[])]}:{action};
+    return invokeBagFunction("bag-enroll",body,"Chưa lưu được. Vui lòng thử lại sau.");
+  }
+
+  async function signInBag(code,items){
+    const sb=requireClient();
+    const clean=normalizeLoginCode(code);
+    const data=await invokeBagFunction(
+      "bag-login",
+      {code:clean,version:1,items:[...(items||[])]},
+      "Không thể đăng nhập bằng cách này. Kiểm tra thông tin hoặc dùng mật khẩu."
+    );
+    // bag-login already redeemed its one-time token server-side and returns the session itself.
+    const {data:session,error}=await sb.auth.setSession({
+      access_token:String(data?.session?.access_token||""),
+      refresh_token:String(data?.session?.refresh_token||"")
+    });
+    if(error||!session?.user){
+      const wrapped=new Error("Không thể đăng nhập bằng cách này. Kiểm tra thông tin hoặc dùng mật khẩu.");
+      wrapped.code="BAG_LOGIN_FAILED";
+      throw wrapped;
+    }
+    return session.user;
+  }
+
   function avatarPathFor(userId){
     if(!isUuid(userId))throw new Error("Không xác định được tài khoản hiện tại.");
     return `${userId}/avatar.webp`;
@@ -1268,6 +1326,9 @@
     syncState,
     resetSnapshot,
     changeOwnPassword,
+    reauthenticateOwnPassword,
+    bagCredential,
+    signInBag,
     downloadAvatar,
     uploadOwnAvatar,
     deleteOwnAvatar,
