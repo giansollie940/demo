@@ -38,9 +38,9 @@ const locked = computed(() => lockedUntil.value > now.value)
 const lockSeconds = computed(() => Math.max(0, Math.ceil((lockedUntil.value - now.value) / 1000)))
 
 const heading = computed(() => ({
-  create: 'Bước 1/2 — Tạo mật mã chiếc cặp',
+  create: 'Bước 1/2 — Chọn cách xếp cặp',
   confirm: 'Bước 2/2 — Nhập lại để xác nhận',
-  login: 'Đăng nhập bằng chiếc cặp',
+  login: 'Xếp cặp đi học',
 }[phase.value]))
 
 function notify(tone: Tone, text: string) {
@@ -169,7 +169,7 @@ onBeforeUnmount(() => {
       </header>
 
       <div class="bag-title">
-        <span class="eyebrow">MẬT MÃ CHIẾC CẶP</span>
+        <span class="eyebrow">XẾP CẶP ĐI HỌC</span>
         <h1>{{ heading }}</h1>
         <p v-if="phase === 'create'">
           Chọn {{ MIN_ITEMS }}–{{ MAX_ITEMS }} món theo thứ tự bạn muốn; một món có thể chọn nhiều lần.

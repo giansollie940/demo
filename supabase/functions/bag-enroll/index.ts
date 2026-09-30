@@ -33,7 +33,7 @@ Deno.serve(async (req: Request) => {
     // requireActor validates the token with the Auth server, so its claims can be trusted below.
     const actor = await requireActor(req, admin);
     if (!ELIGIBLE.includes(actor.role)) {
-      return json(req, 403, { ok: false, code: "NOT_ELIGIBLE", error: "Tài khoản này chưa dùng được đăng nhập bằng chiếc cặp." });
+      return json(req, 403, { ok: false, code: "NOT_ELIGIBLE", error: "Tài khoản này chưa dùng được \"Xếp cặp đi học\"." });
     }
 
     const body = await readJson(req);

@@ -391,7 +391,7 @@ async function submit() {
           <template v-if="bagEnabled">
             <div class="or-divider" aria-hidden="true"><span>hoặc</span></div>
             <button type="button" class="bag-option" @click="openBagLogin">
-              <Backpack aria-hidden="true" />Đăng nhập bằng chiếc cặp
+              <Backpack aria-hidden="true" />Xếp cặp đi học
             </button>
           </template>
         </form>

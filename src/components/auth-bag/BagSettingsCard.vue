@@ -67,7 +67,7 @@ async function loadStatus() {
   } catch (error) {
     phase.value = 'unavailable'
     notify('error', errorCode(error) === 'NOT_ELIGIBLE'
-      ? 'Tài khoản này chưa dùng được đăng nhập bằng chiếc cặp.'
+      ? 'Tài khoản này chưa dùng được "Xếp cặp đi học".'
       : 'Chưa tải được trạng thái. Hãy thử lại sau.')
   }
 }
@@ -133,13 +133,13 @@ function goConfirm(sequence: string[]) {
   draft.value = []
   pad.value?.reshuffle()
   phase.value = 'confirm'
-  notify('info', 'Nhập lại toàn bộ chuỗi vào chiếc cặp trống.')
+  notify('info', 'Giờ xếp lại đúng như vậy vào chiếc cặp trống.')
 }
 
 // ===== Step 2: confirm and save =====
 async function confirmAndSave() {
   if (!pending.value || !sameSequence(pending.value, draft.value)) {
-    return toCreate('Hai lần nhập không khớp. Hãy tạo lại từ bước 1.')
+    return toCreate('Hai lần xếp không khớp. Hãy xếp lại từ bước 1.')
   }
   draft.value = []
   await save(pending.value)
@@ -153,7 +153,7 @@ async function save(sequence: string[]) {
     enabled.value = result.enabled
     updatedAt.value = new Date().toISOString()
     phase.value = 'idle'
-    notify('success', 'Đã lưu mật mã chiếc cặp. Mật khẩu của bạn vẫn giữ nguyên.')
+    notify('success', 'Đã lưu cách xếp cặp của bạn. Mật khẩu vẫn giữ nguyên.')
   } catch (error) {
     const code = errorCode(error)
     if (code === 'REAUTH_REQUIRED') {
@@ -179,7 +179,7 @@ async function disable() {
     await legacyApi.bagCredential('disable')
     enabled.value = false
     updatedAt.value = new Date().toISOString()
-    notify('success', 'Đã tắt đăng nhập bằng chiếc cặp.')
+    notify('success', 'Đã tắt "Xếp cặp đi học".')
   } catch (error) {
     notify('error', errorText(error, 'Chưa tắt được. Vui lòng thử lại sau.'))
   } finally {
@@ -208,14 +208,14 @@ onBeforeUnmount(() => {
     <div class="section-title">
       <Backpack />
       <div>
-        <span>ĐĂNG NHẬP PHỤ</span>
-        <h2>Mật mã chiếc cặp</h2>
+        <span>CÁCH VÀO LỚP VUI HƠN</span>
+        <h2>Xếp cặp đi học</h2>
       </div>
     </div>
 
     <p class="intro">
-      Cách đăng nhập phụ bên cạnh mật khẩu: bỏ {{ MIN_ITEMS }}–{{ MAX_ITEMS }} dụng cụ học tập vào cặp theo đúng loại, màu,
-      số lượng và thứ tự. Mật khẩu của bạn không thay đổi và vẫn luôn dùng được.
+      Chọn {{ MIN_ITEMS }}–{{ MAX_ITEMS }} dụng cụ học tập và thứ tự xếp vào cặp của riêng bạn. Lần sau chỉ cần xếp cặp
+      đúng như vậy là vào lớp, không cần gõ mật khẩu. Đây là cách phụ: mật khẩu không thay đổi và vẫn luôn dùng được.
     </p>
 
     <p v-if="message" class="message" :class="message.tone" role="status">{{ message.text }}</p>
@@ -233,7 +233,7 @@ onBeforeUnmount(() => {
       </div>
       <div class="actions">
         <AppButton type="button" :loading="phase === 'saving'" @click="start('enroll')">
-          <KeyRound />{{ enabled ? 'Đổi mật mã' : 'Thiết lập' }}
+          <KeyRound />{{ enabled ? 'Đổi cách xếp' : 'Thiết lập' }}
         </AppButton>
         <AppButton v-if="enabled" type="button" variant="danger" :disabled="phase === 'saving'" @click="start('disable')">Tắt</AppButton>
       </div>
@@ -241,7 +241,7 @@ onBeforeUnmount(() => {
 
     <form v-else-if="phase === 'password'" class="password-step" novalidate @submit.prevent="confirmPassword">
       <label>
-        <span>{{ intent === 'disable' ? 'Nhập mật khẩu để tắt đăng nhập bằng chiếc cặp' : 'Nhập mật khẩu hiện tại để tiếp tục' }}</span>
+        <span>{{ intent === 'disable' ? 'Nhập mật khẩu để tắt "Xếp cặp đi học"' : 'Nhập mật khẩu hiện tại để tiếp tục' }}</span>
         <input v-model="password" type="password" autocomplete="current-password" />
       </label>
       <div class="actions">
@@ -253,10 +253,10 @@ onBeforeUnmount(() => {
     </form>
 
     <div v-else class="enroll-step">
-      <h3>{{ phase === 'create' ? 'Bước 1/2 — Tạo mật mã' : 'Bước 2/2 — Nhập lại để xác nhận' }}</h3>
+      <h3>{{ phase === 'create' ? 'Bước 1/2 — Xếp cặp lần đầu' : 'Bước 2/2 — Xếp lại để xác nhận' }}</h3>
       <p class="muted">
         <template v-if="phase === 'create'">Một món có thể chọn nhiều lần. Đừng tạo khi có người đang nhìn.</template>
-        <template v-else>Nhập lại đúng chuỗi vừa tạo. Hai lần phải khớp hoàn toàn.</template>
+        <template v-else>Xếp lại đúng như lần đầu. Hai lần phải khớp hoàn toàn.</template>
       </p>
       <BagPad
         ref="pad"
@@ -282,7 +282,7 @@ onBeforeUnmount(() => {
           </div>
         </template>
         <template v-else>
-          <AppButton type="button" @click="confirmAndSave">Lưu mật mã</AppButton>
+          <AppButton type="button" @click="confirmAndSave">Lưu cách xếp</AppButton>
         </template>
         <AppButton type="button" variant="secondary" @click="cancel">Huỷ</AppButton>
       </BagPad>

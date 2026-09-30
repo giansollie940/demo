@@ -66,9 +66,9 @@ onBeforeUnmount(() => { draft.value = [] })
       </header>
 
       <div class="bag-title">
-        <span class="eyebrow">MẬT MÃ CHIẾC CẶP</span>
-        <h1>Đăng nhập bằng chiếc cặp</h1>
-        <p>Nhập mã đăng nhập, bỏ đồ vào cặp đúng loại, đúng màu, đúng số lượng và đúng thứ tự rồi đóng cặp. Đừng nhập khi có người đang nhìn.</p>
+        <span class="eyebrow">CHUẨN BỊ VÀO LỚP</span>
+        <h1>Xếp cặp đi học</h1>
+        <p>Nhập mã đăng nhập, xếp đồ vào cặp đúng loại, đúng màu, đúng số lượng và đúng thứ tự như bạn đã chọn, rồi đóng cặp để vào lớp. Đừng xếp khi có người đang nhìn.</p>
       </div>
 
       <form class="bag-form" novalidate @submit.prevent="submit">
@@ -85,14 +85,14 @@ onBeforeUnmount(() => { draft.value = [] })
           @cleared="notify('info', 'Đã xoá các món trong cặp khi bạn rời tab.')"
         >
           <p v-if="message" class="message" :class="message.tone" role="alert">{{ message.text }}</p>
-          <AppButton type="submit" :loading="busy"><KeyRound />Đóng cặp — Đăng nhập</AppButton>
+          <AppButton type="submit" :loading="busy"><KeyRound />Đóng cặp — Vào lớp</AppButton>
           <RouterLink :to="{ path: '/login' }" class="alt">Dùng mật khẩu</RouterLink>
         </BagPad>
       </form>
 
       <p class="privacy">
-        Chưa có mật mã chiếc cặp? Đăng nhập bằng mật khẩu rồi thiết lập trong Cài đặt.
-        Chiếc cặp không chống được người quay lại toàn bộ thao tác của bạn.
+        Chưa chọn cách xếp cặp? Đăng nhập bằng mật khẩu rồi thiết lập "Xếp cặp đi học" trong Cài đặt.
+        Cách này không chống được người quay lại toàn bộ thao tác của bạn.
       </p>
     </section>
   </AuthLayout>

@@ -1,4 +1,8 @@
-# AUTH-BAG-001 — Đăng nhập bằng chiếc cặp: triển khai
+# AUTH-BAG-001 — "Xếp cặp đi học": triển khai
+
+Tên hiển thị cho học sinh là **"Xếp cặp đi học"** (nút "Xếp cặp đi học", trang "Chuẩn bị vào lớp", nút "Đóng cặp — Vào lớp").
+Trong code và database vẫn dùng tên kỹ thuật `auth-bag` / `bag_auth_*`.
+Các bước triển khai từng mục có ô đánh dấu nằm trong **`DEPLOY-CHECKLIST.md`**.
 
 Cách đăng nhập **phụ** cho Học sinh và Cán sự lớp. Mật khẩu vẫn là cách chính, không bao giờ bị đọc hay đổi.
 Chuỗi dụng cụ là một credential thứ hai: server chỉ lưu bcrypt (cost 10) của input gọn `[version, code…]`
@@ -21,7 +25,7 @@ Chuỗi dụng cụ là một credential thứ hai: server chỉ lưu bcrypt (co
 - **Thiết lập, đổi:** Cài đặt → nhập mật khẩu hiện tại → tạo chuỗi 10–20 món → nhập lại → lưu.
   Nếu quá 5 phút kể từ lúc nhập mật khẩu, app hỏi lại mật khẩu rồi lưu chuỗi đã xác nhận.
 - **Tắt:** Cài đặt → Tắt → nhập mật khẩu.
-- **Đăng nhập:** trang đăng nhập → "Đăng nhập bằng chiếc cặp" → mã đăng nhập và chuỗi → phiên Supabase bình thường.
+- **Đăng nhập:** trang đăng nhập → "Xếp cặp đi học" → mã đăng nhập và chuỗi → phiên Supabase bình thường.
   Refresh, đăng xuất và RLS giữ nguyên.
 - Mọi lỗi đăng nhập (sai chuỗi, tài khoản không có, chưa bật, bị khoá, không đủ quyền) trả **cùng một thông báo**.
 - **Giới hạn thử:** 5 lần sai trong 15 phút thì khoá tài khoản 15 phút; mỗi IP tối đa 30 lần sai trong 15 phút.
