@@ -1,19 +1,20 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
-import { RotateCcw, Undo2 } from 'lucide-vue-next'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
+import { ChevronLeft, ChevronRight, RotateCcw, Undo2 } from 'lucide-vue-next'
 import AppButton from '../ui/AppButton.vue'
 import BagItemIcon from './BagItemIcon.vue'
-import { itemById, type BagItem } from '../../features/auth-bag/catalog'
+import { ITEM_COLORS, ITEM_KINDS, itemById, type BagItem, type ItemColor, type ItemKind } from '../../features/auth-bag/catalog'
 import { MAX_ITEMS, shuffledCatalog } from '../../features/auth-bag/sequence'
 
 /*
- * AUTH-BAG-001 input pad: the desk of school supplies and the closed bag they go into.
- * The sequence lives only in the parent's v-model (memory); nothing here writes it to storage,
- * the URL or logs. Tap/click, keyboard (buttons) and drag-and-drop each add exactly one item.
+ * AUTH-BAG-001 input pad: a spinning wheel of school supplies in one of four colour themes, and
+ * the closed bag they go into. Only the item at the front of the wheel can be added: tap/click it
+ * or drag it into the bag. The sequence lives only in the parent's v-model (memory); nothing here
+ * writes it to storage, the URL or logs.
  */
 const props = withDefaults(defineProps<{ modelValue: string[]; max?: number; label?: string }>(), {
   max: MAX_ITEMS,
-  label: 'Bàn dụng cụ học tập',
+  label: 'Ổ xoay dụng cụ học tập',
 })
 const emit = defineEmits<{
   'update:modelValue': [value: string[]]
@@ -23,22 +24,80 @@ const emit = defineEmits<{
   cleared: []
 }>()
 
-const desk = ref<BagItem[]>(shuffledCatalog())
+const COLOR_NAME: Record<ItemColor, string> = { red: 'Đỏ', blue: 'Xanh dương', yellow: 'Vàng', green: 'Xanh lá' }
+const THEME: Record<ItemColor, { fill: string; soft: string; deep: string }> = {
+  red: { fill: '#e5484d', soft: '#ffd9da', deep: '#a8262b' },
+  blue: { fill: '#3b82f6', soft: '#d6e6ff', deep: '#1e4fae' },
+  yellow: { fill: '#f5b400', soft: '#ffefbf', deep: '#a87600' },
+  green: { fill: '#22a06b', soft: '#cdf3e0', deep: '#146b46' },
+}
+const SLOTS = ITEM_KINDS.length
+const STEP_DEG = 360 / SLOTS
+
+function randomBelow(n: number) {
+  const buf = new Uint32Array(1)
+  crypto.getRandomValues(buf)
+  return (buf[0] ?? 0) % n
+}
+
+// ===== Wheel state (all of it re-randomised for every attempt) =====
+const kindOrder = ref<ItemKind[]>([...ITEM_KINDS])
+const colorIndex = ref(0)
+const turn = ref(0) // unbounded, so the wheel always animates the short way round
+const spinKey = ref(0)
+
+const color = computed<ItemColor>(() => ITEM_COLORS[colorIndex.value]!)
+const theme = computed(() => THEME[color.value])
+const frontSlot = computed(() => ((turn.value % SLOTS) + SLOTS) % SLOTS)
+
+function itemAt(slot: number): BagItem {
+  return itemById(`${kindOrder.value[slot]}_${color.value}`)!
+}
+const frontItem = computed(() => itemAt(frontSlot.value))
+
+/** Signed distance of a slot from the front, in -4..4. */
+function offsetOf(slot: number) {
+  let d = (((slot - turn.value) % SLOTS) + SLOTS) % SLOTS
+  if (d > SLOTS / 2) d -= SLOTS
+  return d
+}
+
+const wheelItems = computed(() => Array.from({ length: SLOTS }, (_, slot) => {
+  const d = offsetOf(slot)
+  const angle = (d * STEP_DEG * Math.PI) / 180
+  const depth = (Math.cos(angle) + 1) / 2 // 1 at the front, 0 at the back
+  return {
+    slot,
+    item: itemAt(slot),
+    front: d === 0,
+    style: {
+      '--sin': Math.sin(angle).toFixed(4),
+      '--lift': (1 - depth).toFixed(4),
+      '--scale': (0.46 + 0.54 * depth).toFixed(4),
+      opacity: (0.3 + 0.7 * depth).toFixed(3),
+      zIndex: String(Math.round(depth * 20)),
+    },
+  }
+}))
+
+/** New random kind order, colour and position for the next attempt (never part of the secret). */
+function reshuffle() {
+  const seen = new Set<ItemKind>()
+  kindOrder.value = shuffledCatalog().map(item => item.kind).filter(kind => !seen.has(kind) && seen.add(kind))
+  colorIndex.value = randomBelow(ITEM_COLORS.length)
+  turn.value = randomBelow(SLOTS)
+}
+
 const hideCount = ref(false)
 const live = ref('')
 const bump = ref(0)
 const bagEl = ref<HTMLElement | null>(null)
+const wheelEl = ref<HTMLElement | null>(null)
 const count = computed(() => props.modelValue.length)
 
 function say(text: string) {
-  // Re-announce identical text by clearing first.
   live.value = ''
   requestAnimationFrame(() => { live.value = text })
-}
-
-/** New desk order for the next attempt (positions are never part of the secret). */
-function reshuffle() {
-  desk.value = shuffledCatalog()
 }
 
 function add(id: string) {
@@ -62,49 +121,89 @@ function reset() {
   say('Đã làm lại, cặp trống')
 }
 
-// ===== Drag and drop =====
-// Mouse and pen start a drag after a small movement. On touch screens a plain swipe has to keep
-// scrolling the page (the desk fills most of a phone screen), so a finger first holds an item for
-// a moment to pick it up; from then on the page stops scrolling and the item follows the finger.
+function rotate(steps: number) {
+  turn.value += steps
+}
+
+function setColor(index: number) {
+  const next = ((index % ITEM_COLORS.length) + ITEM_COLORS.length) % ITEM_COLORS.length
+  if (next === colorIndex.value) return
+  colorIndex.value = next
+  spinKey.value++
+}
+
+function focusFront() {
+  nextTick(() => wheelEl.value?.querySelector<HTMLButtonElement>('.wheel-item.front')?.focus())
+}
+
+function onWheelKey(event: KeyboardEvent) {
+  const actions: Record<string, () => void> = {
+    ArrowLeft: () => rotate(-1),
+    ArrowRight: () => rotate(1),
+    ArrowUp: () => setColor(colorIndex.value - 1),
+    ArrowDown: () => setColor(colorIndex.value + 1),
+  }
+  const action = actions[event.key]
+  if (!action) return
+  event.preventDefault()
+  action()
+  focusFront()
+}
+
+// ===== Pointer gestures on the wheel =====
+// Front item: mouse/pen drag after a small move; on touch, hold briefly to pick it up (so a swipe
+// can still spin the wheel). Anywhere else, or a quick horizontal swipe: spin the wheel.
 const TOUCH_HOLD_MS = 300
 const MOVE_SLOP = 8
+const SWIPE_STEP_PX = 56
 
-interface Press {
-  id: string
+interface Gesture {
+  pointerId: number
   x: number
   y: number
-  pointerId: number
+  onFront: boolean
   touch: boolean
+  mode: 'pending' | 'drag' | 'swipe'
   held: boolean
   moved: boolean
+  steps: number
   timer?: ReturnType<typeof setTimeout>
 }
 
-let press: Press | null = null
+let gesture: Gesture | null = null
 const drag = ref<{ id: string; x: number; y: number } | null>(null)
 const overBag = ref(false)
 let suppressClick = false
 
-function endPress() {
-  if (press?.timer) clearTimeout(press.timer)
-  press = null
+function swallowNextClick() {
+  // The browser dispatches its synthetic click straight after pointerup, before any timer runs.
+  suppressClick = true
+  setTimeout(() => { suppressClick = false })
+}
+
+function endGesture() {
+  if (gesture?.timer) clearTimeout(gesture.timer)
+  gesture = null
   drag.value = null
   overBag.value = false
 }
 
-function onItemPointerDown(item: BagItem, event: PointerEvent) {
+function onWheelPointerDown(event: PointerEvent) {
   if (event.button !== 0) return
-  endPress()
+  endGesture()
+  const target = (event.target as HTMLElement).closest<HTMLElement>('.wheel-item')
+  const onFront = !!target?.classList.contains('front')
   const touch = event.pointerType === 'touch'
-  const current: Press = { id: item.id, x: event.clientX, y: event.clientY, pointerId: event.pointerId, touch, held: !touch, moved: false }
-  if (touch) {
+  const current: Gesture = { pointerId: event.pointerId, x: event.clientX, y: event.clientY, onFront, touch, mode: 'pending', held: false, moved: false, steps: 0 }
+  if (onFront && touch) {
     current.timer = setTimeout(() => {
-      if (press !== current) return
+      if (gesture !== current || current.mode !== 'pending') return
+      current.mode = 'drag'
       current.held = true
-      drag.value = { id: current.id, x: current.x, y: current.y }
+      drag.value = { id: frontItem.value.id, x: current.x, y: current.y }
     }, TOUCH_HOLD_MS)
   }
-  press = current
+  gesture = current
 }
 
 function insideBag(x: number, y: number) {
@@ -113,50 +212,68 @@ function insideBag(x: number, y: number) {
 }
 
 function onPointerMove(event: PointerEvent) {
-  if (!press || event.pointerId !== press.pointerId) return
-  const far = Math.hypot(event.clientX - press.x, event.clientY - press.y) >= MOVE_SLOP
-  if (!press.held) {
-    // A finger moving before the hold completes is scrolling the page, not dragging.
-    if (far) endPress()
+  const g = gesture
+  if (!g || event.pointerId !== g.pointerId) return
+  const dx = event.clientX - g.x
+  const dy = event.clientY - g.y
+  const far = Math.hypot(dx, dy) >= MOVE_SLOP
+
+  if (g.mode === 'pending') {
+    if (g.onFront && !g.touch && far) {
+      g.mode = 'drag'
+    } else if (Math.abs(dx) >= 10 && Math.abs(dx) > Math.abs(dy)) {
+      if (g.timer) clearTimeout(g.timer)
+      g.mode = 'swipe'
+    } else if (g.touch && Math.abs(dy) >= 10) {
+      endGesture() // a vertical finger move scrolls the page
+      return
+    } else {
+      return
+    }
+  }
+
+  if (g.mode === 'swipe') {
+    const steps = Math.round(-dx / SWIPE_STEP_PX)
+    if (steps !== g.steps) {
+      rotate(steps - g.steps)
+      g.steps = steps
+    }
     return
   }
-  if (!drag.value && !far) return
-  if (far) press.moved = true
-  drag.value = { id: press.id, x: event.clientX, y: event.clientY }
+
+  if (far) g.moved = true
+  drag.value = { id: frontItem.value.id, x: event.clientX, y: event.clientY }
   overBag.value = insideBag(event.clientX, event.clientY)
 }
 
-// While a held item is being dragged, keep the page from scrolling under the finger (without
-// this the browser takes the gesture over and cancels the drag).
+// Keep the page still under a finger that is dragging an item or spinning the wheel.
 function onTouchMove(event: TouchEvent) {
-  if (press?.touch && press.held && event.cancelable) event.preventDefault()
+  if (gesture?.touch && gesture.mode !== 'pending' && event.cancelable) event.preventDefault()
 }
 
 function onPointerUp(event: PointerEvent) {
-  if (!press || event.pointerId !== press.pointerId) return
-  if (press.touch && press.held && !press.moved) {
-    // Held but not moved: a slow tap. Add it here, since a long press may not produce a click.
-    add(press.id)
-    suppressClick = true
-    setTimeout(() => { suppressClick = false })
-  } else if (drag.value) {
-    // One drop adds exactly one item; a drop outside the bag adds nothing.
-    if (insideBag(event.clientX, event.clientY)) add(drag.value.id)
-    // The browser dispatches its synthetic click straight after this pointerup, before any
-    // timer runs; swallow only that one, so quick taps right after a drag still count.
-    suppressClick = true
-    setTimeout(() => { suppressClick = false })
+  const g = gesture
+  if (!g || event.pointerId !== g.pointerId) return
+  if (g.mode === 'drag') {
+    if (g.moved && drag.value) {
+      // One drop adds exactly one item; a drop outside the bag adds nothing.
+      if (insideBag(event.clientX, event.clientY)) add(drag.value.id)
+    } else if (g.held) {
+      // Held but not moved: a slow tap on the front item.
+      add(frontItem.value.id)
+    }
+    swallowNextClick()
+  } else if (g.mode === 'swipe') {
+    swallowNextClick()
   }
-  endPress()
+  endGesture()
 }
 
-function onPointerCancel() {
-  endPress()
-}
-
-function onItemClick(item: BagItem) {
+function onItemClick(slot: number) {
   if (suppressClick) return
-  add(item.id)
+  const d = offsetOf(slot)
+  if (d === 0) add(itemAt(slot).id)
+  else rotate(d) // a side item comes round to the front first
 }
 
 // Leaving the tab empties the bag.
@@ -167,10 +284,11 @@ function onVisibility() {
 }
 
 onMounted(() => {
+  reshuffle()
   document.addEventListener('visibilitychange', onVisibility)
   window.addEventListener('pointermove', onPointerMove)
   window.addEventListener('pointerup', onPointerUp)
-  window.addEventListener('pointercancel', onPointerCancel)
+  window.addEventListener('pointercancel', endGesture)
   window.addEventListener('touchmove', onTouchMove, { passive: false })
 })
 
@@ -178,9 +296,9 @@ onBeforeUnmount(() => {
   document.removeEventListener('visibilitychange', onVisibility)
   window.removeEventListener('pointermove', onPointerMove)
   window.removeEventListener('pointerup', onPointerUp)
-  window.removeEventListener('pointercancel', onPointerCancel)
+  window.removeEventListener('pointercancel', endGesture)
   window.removeEventListener('touchmove', onTouchMove)
-  endPress()
+  endGesture()
 })
 
 const dragItem = computed(() => (drag.value ? itemById(drag.value.id) : undefined))
@@ -223,20 +341,57 @@ defineExpose({ reshuffle })
         </label>
       </div>
 
-      <div class="desk" role="group" :aria-label="label">
-        <button
-          v-for="item in desk"
-          :key="item.id"
-          type="button"
-          class="desk-item"
-          :aria-label="item.label"
-          @pointerdown="onItemPointerDown(item, $event)"
-          @contextmenu.prevent
-          @click="onItemClick(item)"
+      <div
+        class="wheel-area"
+        :style="{ '--theme': theme.fill, '--theme-soft': theme.soft, '--theme-deep': theme.deep }"
+      >
+        <div class="color-chips" role="radiogroup" aria-label="Chọn màu">
+          <button
+            v-for="(c, index) in ITEM_COLORS"
+            :key="c"
+            type="button"
+            role="radio"
+            class="chip"
+            :class="c"
+            :aria-checked="index === colorIndex"
+            @click="setColor(index)"
+          >
+            <span class="dot" aria-hidden="true"></span>{{ COLOR_NAME[c] }}
+          </button>
+        </div>
+
+        <div
+          ref="wheelEl"
+          class="wheel"
+          role="group"
+          :aria-label="`${label}. Mũi tên trái phải để xoay, lên xuống để đổi màu.`"
+          @pointerdown="onWheelPointerDown"
+          @keydown="onWheelKey"
         >
-          <span class="icon"><BagItemIcon :kind="item.kind" :color="item.color" /></span>
-          <span class="label">{{ item.label }}</span>
-        </button>
+          <div :key="spinKey" class="wheel-ring" :class="{ spun: spinKey > 0 }" aria-hidden="true"></div>
+          <button
+            v-for="entry in wheelItems"
+            :key="entry.slot"
+            type="button"
+            class="wheel-item"
+            :class="{ front: entry.front }"
+            :style="entry.style"
+            :tabindex="entry.front ? 0 : -1"
+            :aria-hidden="entry.front ? undefined : 'true'"
+            :aria-label="entry.front ? `${entry.item.label} — bấm hoặc kéo vào cặp` : entry.item.label"
+            @click="onItemClick(entry.slot)"
+            @contextmenu.prevent
+          >
+            <span class="icon"><BagItemIcon :kind="entry.item.kind" :color="entry.item.color" /></span>
+          </button>
+          <div class="front-label" aria-hidden="true">{{ frontItem.label }}</div>
+        </div>
+
+        <div class="wheel-nav">
+          <AppButton type="button" variant="secondary" aria-label="Xoay sang trái" @click="rotate(-1)"><ChevronLeft /></AppButton>
+          <span class="hint">Xoay tới món cần chọn rồi bấm hoặc kéo vào cặp</span>
+          <AppButton type="button" variant="secondary" aria-label="Xoay sang phải" @click="rotate(1)"><ChevronRight /></AppButton>
+        </div>
       </div>
 
       <div class="bag-actions">
@@ -262,47 +417,127 @@ defineExpose({ reshuffle })
   display: grid;
   grid-template-columns: minmax(0, 1.55fr) minmax(250px, 1fr);
   grid-template-rows: auto 1fr;
-  grid-template-areas: 'desk box' 'desk actions';
+  grid-template-areas: 'wheel box' 'wheel actions';
   gap: 12px 22px;
 }
 .bag-box { grid-area: box; display: grid; align-content: start; gap: 12px; }
 .bag-actions { grid-area: actions; display: grid; align-content: start; gap: 12px; }
 
-.desk {
-  grid-area: desk;
+/* ===== Wheel ===== */
+.wheel-area {
+  grid-area: wheel;
+  container-type: inline-size;
   display: grid;
-  grid-template-columns: repeat(6, minmax(0, 1fr));
-  align-content: start;
   gap: 10px;
   padding: 14px;
-  border-radius: 20px;
+  border-radius: 22px;
   background:
-    repeating-linear-gradient(90deg, transparent 0 58px, color-mix(in srgb, #8b5a2b 10%, transparent) 58px 60px),
-    color-mix(in srgb, #c68b4f 22%, var(--surface));
+    radial-gradient(circle at 50% 62%, color-mix(in srgb, var(--theme-soft) 85%, transparent) 0 34%, transparent 70%),
+    linear-gradient(160deg, color-mix(in srgb, var(--theme-soft) 55%, var(--surface)), color-mix(in srgb, var(--theme) 14%, var(--surface)));
+  border: 1px solid color-mix(in srgb, var(--theme) 28%, var(--border));
+  transition: background 320ms ease, border-color 320ms ease;
 }
 
-.desk-item {
-  display: grid;
-  justify-items: center;
-  gap: 4px;
-  padding: 8px 4px;
-  border: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
-  border-radius: 14px;
-  background: color-mix(in srgb, var(--surface-raised) 88%, transparent);
+.color-chips { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
+.chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 36px;
+  padding: 4px 6px;
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--surface) 88%, transparent);
   color: var(--text);
-  cursor: grab;
-  touch-action: manipulation;
+  font: inherit;
+  font-size: .78rem;
+  font-weight: 800;
+  cursor: pointer;
+  transition: transform 120ms ease, border-color 120ms ease, box-shadow 120ms ease;
+}
+.chip .dot { width: 14px; height: 14px; border-radius: 50%; flex: none; box-shadow: inset 0 -2px 0 rgb(0 0 0 / .18); }
+.chip.red .dot { background: #e5484d; }
+.chip.blue .dot { background: #3b82f6; }
+.chip.yellow .dot { background: #f5b400; }
+.chip.green .dot { background: #22a06b; }
+.chip:hover { transform: translateY(-1px); }
+.chip[aria-checked='true'] { border-color: var(--theme); box-shadow: 0 4px 14px color-mix(in srgb, var(--theme) 35%, transparent); }
+.chip:focus-visible { outline: 3px solid var(--color-primary); outline-offset: 2px; }
+
+.wheel {
+  --ring: min(40cqw, 230px);
+  position: relative;
+  height: clamp(190px, 46cqw, 260px);
+  touch-action: pan-y;
   user-select: none;
   -webkit-user-select: none;
-  -webkit-touch-callout: none;
-  transition: transform 80ms ease, background 80ms ease;
+  cursor: grab;
 }
-/* Only a brief press state: no lasting highlight that tells an onlooker what was picked. */
-.desk-item:active { transform: scale(.94); }
-.desk-item:focus-visible { outline: 3px solid var(--color-primary); outline-offset: 2px; }
-.desk-item .icon { width: 46px; height: 46px; pointer-events: none; }
-.desk-item .label { font-size: .7rem; line-height: 1.2; text-align: center; pointer-events: none; }
+.wheel-ring {
+  position: absolute;
+  left: 50%;
+  top: 58%;
+  width: calc(var(--ring) * 2.1);
+  height: calc(var(--ring) * .62);
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+  border: 3px dashed color-mix(in srgb, var(--theme) 45%, transparent);
+  background: radial-gradient(ellipse at center, color-mix(in srgb, var(--theme) 16%, transparent), transparent 70%);
+  pointer-events: none;
+}
+.wheel-ring.spun { animation: ring-spin 520ms cubic-bezier(.3, 1.4, .5, 1); }
 
+.wheel-item {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 78px;
+  height: 78px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 2px solid color-mix(in srgb, var(--theme) 30%, var(--border));
+  border-radius: 22px;
+  background: var(--surface-raised, var(--surface));
+  box-shadow: 0 6px 16px rgb(0 0 0 / .12);
+  cursor: pointer;
+  touch-action: pan-y;
+  -webkit-touch-callout: none;
+  transform:
+    translate(-50%, -50%)
+    translate(calc(var(--ring) * var(--sin)), calc(var(--lift) * -30px + 8px))
+    scale(var(--scale));
+  transition: transform 360ms cubic-bezier(.3, 1.25, .5, 1), opacity 360ms ease, box-shadow 200ms ease, border-color 200ms ease;
+}
+.wheel-item .icon { width: 58px; height: 58px; pointer-events: none; }
+.wheel-item.front {
+  border-color: var(--theme);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--theme) 22%, transparent), 0 12px 26px color-mix(in srgb, var(--theme-deep) 30%, transparent);
+  cursor: grab;
+}
+.wheel-item.front:active { cursor: grabbing; }
+.wheel-item:focus-visible { outline: 3px solid var(--color-primary); outline-offset: 3px; }
+.front-label {
+  position: absolute;
+  left: 50%;
+  bottom: 2px;
+  transform: translateX(-50%);
+  padding: 3px 12px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--surface) 90%, transparent);
+  color: var(--theme-deep);
+  font-size: .82rem;
+  font-weight: 900;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.wheel-nav { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 8px; }
+.wheel-nav :deep(.app-button) { min-width: 44px; padding-inline: 10px; }
+.hint { text-align: center; color: var(--text-muted); font-size: .78rem; line-height: 1.3; }
+
+/* ===== Bag ===== */
 .bag {
   position: relative;
   display: grid;
@@ -327,19 +562,19 @@ defineExpose({ reshuffle })
 .bag-drag-ghost {
   position: fixed;
   z-index: 60;
-  width: 52px;
-  height: 52px;
+  width: 56px;
+  height: 56px;
   pointer-events: none;
   transform: translate(-50%, -50%);
   filter: drop-shadow(0 6px 10px rgb(0 0 0 / .25));
 }
 
 @keyframes bag-bump { 40% { transform: scale(1.06) rotate(-2deg); } }
+@keyframes ring-spin { 0% { transform: translate(-50%, -50%) rotate(0) scale(.92); } 100% { transform: translate(-50%, -50%) rotate(360deg) scale(1); } }
 
-/* Narrow: the bag sits above the desk and stays pinned while the desk scrolls, so the bag and
-   its undo/reset are always in view; the submit actions follow the desk. */
+/* Narrow: the bag sits above the wheel and stays pinned while the page scrolls. */
 @container (max-width: 780px) {
-  .bag-stage { grid-template-columns: 1fr; grid-template-rows: none; grid-template-areas: 'box' 'desk' 'actions'; }
+  .bag-stage { grid-template-columns: 1fr; grid-template-rows: none; grid-template-areas: 'box' 'wheel' 'actions'; }
   .bag-box {
     position: sticky;
     top: 8px;
@@ -362,13 +597,17 @@ defineExpose({ reshuffle })
   .toggle { font-size: .78rem; }
 }
 
-@container (max-width: 500px) {
-  .desk { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; padding: 10px; }
-  .desk-item .icon { width: 40px; height: 40px; }
+@container (max-width: 420px) {
+  .wheel { --ring: 41cqw; height: 200px; }
+  .wheel-item { width: 60px; height: 60px; border-radius: 18px; }
+  .wheel-item.front { width: 68px; height: 68px; }
+  .wheel-item .icon { width: 44px; height: 44px; }
+  .wheel-item.front .icon { width: 52px; height: 52px; }
+  .chip { font-size: .7rem; gap: 4px; }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .bag-art.bumped { animation: none; }
-  .desk-item { transition: none; }
+  .bag-art.bumped, .wheel-ring.spun { animation: none; }
+  .wheel-item, .wheel-area { transition: none; }
 }
 </style>

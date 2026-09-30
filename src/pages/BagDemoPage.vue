@@ -40,7 +40,7 @@ const lockSeconds = computed(() => Math.max(0, Math.ceil((lockedUntil.value - no
 const heading = computed(() => ({
   create: 'Bước 1/2 — Chọn cách xếp cặp',
   confirm: 'Bước 2/2 — Nhập lại để xác nhận',
-  login: 'Xếp cặp đi học',
+  login: '🎒 Hành trang tự học',
 }[phase.value]))
 
 function notify(tone: Tone, text: string) {
@@ -125,7 +125,7 @@ function closeBag() {
   newAttempt()
   if (ok) {
     fails.value = 0
-    notify('success', 'Đúng mật mã. (Bản thử: không có phiên đăng nhập nào được tạo.)')
+    notify('success', 'Hành trang đã sẵn sàng. Cùng học thôi! (Bản thử: không có phiên đăng nhập nào được tạo.)')
     return
   }
   fails.value++
@@ -169,7 +169,7 @@ onBeforeUnmount(() => {
       </header>
 
       <div class="bag-title">
-        <span class="eyebrow">XẾP CẶP ĐI HỌC</span>
+        <span class="eyebrow">HÀNH TRANG TỰ HỌC</span>
         <h1>{{ heading }}</h1>
         <p v-if="phase === 'create'">
           Chọn {{ MIN_ITEMS }}–{{ MAX_ITEMS }} món theo thứ tự bạn muốn; một món có thể chọn nhiều lần.
@@ -208,7 +208,7 @@ onBeforeUnmount(() => {
             <AppButton variant="secondary" @click="startOver">Tạo lại từ đầu</AppButton>
           </template>
           <template v-else>
-            <AppButton :disabled="locked" @click="closeBag"><KeyRound />{{ locked ? `Tạm ngưng ${lockSeconds}s` : 'Đóng cặp — Đăng nhập' }}</AppButton>
+            <AppButton :disabled="locked" @click="closeBag"><KeyRound />{{ locked ? `Tạm ngưng ${lockSeconds}s` : 'Bắt đầu tự học' }}</AppButton>
             <RouterLink to="/login" class="alt">Dùng mật khẩu</RouterLink>
             <button type="button" class="link" @click="startOver">Tạo lại mật mã thử</button>
           </template>

@@ -76,6 +76,6 @@ Deno.serve(async (req: Request) => {
     });
   } catch (error) {
     console.error("bag-login failed", (error as Error)?.message);
-    return json(req, 503, { ok: false, code: "UNAVAILABLE", error: "Chưa vào lớp bằng cách xếp cặp được lúc này. Hãy dùng mật khẩu." });
+    return json(req, 503, { ok: false, code: "UNAVAILABLE", error: "Chưa mở được hành trang tự học lúc này. Hãy dùng mật khẩu." });
   }
 });
