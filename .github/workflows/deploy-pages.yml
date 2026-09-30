@@ -74,6 +74,8 @@ jobs:
           # AUTH-BAG-001: set the repository variable to "true" only after database upgrade 18
           # and the bag-enroll / bag-login Edge Functions are live.
           AUTH_BAG_ENABLED: ${{ vars.AUTH_BAG_ENABLED }}
+          # "Xếp cặp theo đề" server high scores: "true" only after the bag_game migration is live.
+          BAG_GAME_ENABLED: ${{ vars.BAG_GAME_ENABLED }}
         run: |
           node <<'NODE'
           const fs = require('node:fs')
@@ -95,6 +97,7 @@ jobs:
             loginDomain: loginDomain || 'users.example.com',
             fallbackRefreshSeconds: 180,
             authBag: String(process.env.AUTH_BAG_ENABLED || '').trim() === 'true',
+            bagGame: String(process.env.BAG_GAME_ENABLED || '').trim() === 'true',
           }
 
           fs.writeFileSync(

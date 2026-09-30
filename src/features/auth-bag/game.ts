@@ -8,6 +8,13 @@ import { CATALOG } from './catalog'
  * High scores are kept only in this browser, under a nickname the player types.
  */
 
+/**
+ * Rules season. Bump it together with bag_game.config.season whenever the rules change enough
+ * that old and new scores cannot be compared: the all-time board then starts a new season and
+ * older clients are asked to reload.
+ */
+export const GAME_RULES_VERSION = 1
+
 export const GAME_START_LENGTH = 3
 export const GAME_MAX_LENGTH = 8
 /** From this level on the list is hidden once the first item goes in: a memory round. */

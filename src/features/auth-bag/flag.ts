@@ -6,3 +6,12 @@
 export function bagLoginEnabled(): boolean {
   return window.APP_CONFIG?.authBag === true
 }
+
+/**
+ * Server high scores for the practice game (personal settings). Off unless config.js sets
+ * `bagGame: true` (repository variable BAG_GAME_ENABLED=true), i.e. after the bag_game
+ * migration is live.
+ */
+export function bagGameEnabled(): boolean {
+  return window.APP_CONFIG?.bagGame === true
+}
