@@ -69,6 +69,24 @@ Kết quả: **34/34 pass**. Bộ test gồm các mục của vòng 1, cộng th
 Ghi chú môi trường thử: bảng `profiles` giả lập chỉ có `id, role, active, deleted_at`, nên bản `auth.ts` deploy lên project
 thử chỉ select các cột đó. Logic kiểm tra không đổi.
 
+## Vòng 3: sửa theo review PR #26
+
+| Vấn đề | Trước khi sửa | Sau khi sửa |
+|---|---|---|
+| 20 request sai gửi **song song** (`pg_net`) | 14 lần đoán được kiểm tra bcrypt (giới hạn là 5) | **đúng 5**, tài khoản bị khoá, cả 20 nhận 401 |
+| `token_hash` trả về trình duyệt còn dùng được tới hết hạn OTP, kể cả sau khi tắt mật mã | có | không còn: token được đổi ngay trên server, trình duyệt chỉ nhận phiên |
+| Mật mã bị tắt đúng lúc phiên vừa được tạo (giả lập `bag_auth_still_valid` trả false) | phiên vẫn được trả | 401 chung, phiên mới bị huỷ (không còn phiên nào trong `auth.sessions`) |
+
+Hồi quy sau khi sửa: 8/8 pass. Gồm:
+
+- phiên đúng người;
+- RLS;
+- phiên từ cặp vẫn cần mật khẩu mới được tắt;
+- refresh;
+- chuỗi sai và tài khoản không tồn tại nhận 401 giống hệt nhau;
+- khoá sau 5 lần sai;
+- mật khẩu vẫn dùng được khi đang bị khoá.
+
 ## Bước tiếp theo (vòng 1)
 
 - Viết migration chính thức (đã review) cho production (migration 18). (Đã làm.)

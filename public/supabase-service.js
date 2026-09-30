@@ -168,7 +168,11 @@
       {code:clean,version:1,items:[...(items||[])]},
       "Không thể đăng nhập bằng cách này. Kiểm tra thông tin hoặc dùng mật khẩu."
     );
-    const {data:session,error}=await sb.auth.verifyOtp({type:"magiclink",token_hash:data.token_hash});
+    // bag-login already redeemed its one-time token server-side and returns the session itself.
+    const {data:session,error}=await sb.auth.setSession({
+      access_token:String(data?.session?.access_token||""),
+      refresh_token:String(data?.session?.refresh_token||"")
+    });
     if(error||!session?.user){
       const wrapped=new Error("Không thể đăng nhập bằng cách này. Kiểm tra thông tin hoặc dùng mật khẩu.");
       wrapped.code="BAG_LOGIN_FAILED";

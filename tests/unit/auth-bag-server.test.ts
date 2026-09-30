@@ -76,6 +76,16 @@ describe('database upgrade 18', () => {
     for (const header of headers) expect(header).toContain("set search_path = ''")
   })
 
+  test('an attempt is reserved (IP, then account) before the bcrypt check', () => {
+    const body = sql.slice(sql.indexOf('create or replace function public.bag_auth_attempt('), sql.indexOf('create or replace function public.bag_auth_still_valid('))
+    const ip = body.indexOf('auth_bag.reserve(v_ip_scope')
+    const account = body.indexOf('auth_bag.reserve(v_scope')
+    const bcrypt = body.indexOf('extensions.crypt(')
+    expect(ip).toBeGreaterThan(0)
+    expect(account).toBeGreaterThan(ip)
+    expect(bcrypt).toBeGreaterThan(account)
+  })
+
   test('stores only a salted bcrypt verifier, never the sequence', () => {
     expect(sql).toContain("extensions.crypt(encode(v_input, 'hex'), extensions.gen_salt('bf', 10))")
     expect(sql).not.toMatch(/\b(items|sequence|plaintext)\s+(text|jsonb|bytea)/i)

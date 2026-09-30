@@ -10,7 +10,7 @@ Chuỗi dụng cụ là một credential thứ hai: server chỉ lưu bcrypt (co
 |---|---|
 | Database | `database/upgrade/18-AUTH-BAG-001-SCHOOL-BAG-LOGIN.sql`: schema riêng `auth_bag` và các hàm `public.bag_auth_*` (SECURITY DEFINER, chỉ `service_role` được gọi) |
 | Edge Function | `supabase/functions/bag-enroll`: xem trạng thái, thiết lập hoặc đổi, tắt (cần đăng nhập mật khẩu trong 5 phút gần nhất) |
-| Edge Function | `supabase/functions/bag-login`: kiểm tra chuỗi, trả `token_hash` magic-link dùng một lần; trình duyệt đổi lấy phiên Supabase thật bằng `verifyOtp` |
+| Edge Function | `supabase/functions/bag-login`: kiểm tra chuỗi, tạo token magic-link dùng một lần và **đổi ngay trên server**, kiểm tra lại rồi mới trả phiên Supabase cho trình duyệt (trình duyệt không bao giờ cầm token) |
 | Danh mục server | `supabase/functions/_shared/bag-catalog.ts`, phải khớp `src/features/auth-bag/` (có test so sánh) |
 | Trình duyệt | `public/supabase-service.js`: `reauthenticateOwnPassword`, `bagCredential`, `signInBag` |
 | Giao diện | `BagPad.vue` (bàn dụng cụ và cặp, dùng chung), `BagSettingsCard.vue` (Cài đặt), `BagLoginPage.vue` (`/#/login/bag`), nút phụ trên trang đăng nhập |
@@ -26,7 +26,11 @@ Chuỗi dụng cụ là một credential thứ hai: server chỉ lưu bcrypt (co
 - Mọi lỗi đăng nhập (sai chuỗi, tài khoản không có, chưa bật, bị khoá, không đủ quyền) trả **cùng một thông báo**.
 - **Giới hạn thử:** 5 lần sai trong 15 phút thì khoá tài khoản 15 phút; mỗi IP tối đa 30 lần sai trong 15 phút.
   Khoá chỉ áp dụng cho cặp, mật khẩu vẫn dùng được.
-- Mỗi lần đổi hoặc tắt đều tăng `credential_version`. Lượt đăng nhập nào đã khớp chuỗi cũ sẽ bị từ chối ngay trước khi cấp phiên.
+  - Mỗi lượt **giữ chỗ** một lần thử (tăng bộ đếm, khoá dòng) **trước** khi chạy bcrypt. Vì vậy request song song cũng chỉ được kiểm tra tối đa 5 lần.
+  - Các lượt từ cùng một IP phải xếp hàng qua bước bcrypt (vài chục ms mỗi lượt), nên cả lớp đăng nhập cùng lúc có thể chờ thêm khoảng 1–2 giây.
+- Mỗi lần đổi hoặc tắt đều tăng `credential_version`.
+  - `bag-login` kiểm tra lại **sau khi** phiên đã được tạo; nếu mật mã vừa bị đổi hoặc tắt thì huỷ phiên đó và từ chối.
+  - Token magic-link được dùng ngay trên server, không có token nào còn "treo" sau khi tắt mật mã.
 
 ## Triển khai lên production (theo thứ tự)
 
@@ -37,7 +41,7 @@ Chuỗi dụng cụ là một credential thứ hai: server chỉ lưu bcrypt (co
    supabase functions deploy bag-login --no-verify-jwt   # người gọi chưa có phiên
    ```
    Dùng chung `ALLOWED_ORIGINS`, `LOGIN_DOMAIN` và khoá server như các function khác.
-3. Nên rút ngắn **Auth → Email OTP expiry**, vì token magic-link được đổi ngay trong vài giây.
+3. (Tuỳ chọn) Rút ngắn **Auth → Email OTP expiry**: token được đổi ngay trên server nên không cần hạn dài.
 4. Bật cờ: repo **Settings → Secrets and variables → Actions → Variables**, đặt `AUTH_BAG_ENABLED = true`, rồi chạy lại workflow Pages.
 
 Tắt khẩn cấp: xoá biến hoặc đặt khác `true`, rồi deploy lại (nút và thẻ Cài đặt biến mất, `/login/bag` chuyển về `/login`).
@@ -47,7 +51,7 @@ Muốn chặn hẳn ở server thì undeploy `bag-login`.
 
 - `tests/unit/auth-bag-server.test.ts`: danh mục server khớp trình duyệt, payload hỏng bị chặn, policy giống nhau,
   quyền trong SQL (không cấp cho anon/authenticated, `search_path` rỗng), cờ bật/tắt.
-- E2E trên project thử (không phải production): 34/34, xem `GATE-AUTH-SPIKE.md`.
+- E2E trên project thử (không phải production): 34/34, cộng vòng sửa theo review (bắn song song, huỷ phiên khi bị tắt giữa chừng, 8 bài hồi quy); xem `GATE-AUTH-SPIKE.md`.
 - Trình duyệt Chromium (dùng `supabase-service.js` giả lập): 24/24.
   Gồm: cờ tắt thì ẩn hết; mật khẩu sai hoặc đúng; chặn chuỗi yếu; nhập lại không khớp; hỏi lại mật khẩu khi quá hạn;
   không lưu món nào vào storage; đăng nhập sai (thông báo chung, cặp được làm trống); đăng nhập đúng; tắt;
@@ -57,5 +61,4 @@ Muốn chặn hẳn ở server thì undeploy `bag-login`.
 
 - Chưa có nonce theo từng lượt; chuỗi đi qua HTTPS như mật khẩu.
 - IP lấy từ `x-forwarded-for`, có thể bị giả; lớp bảo vệ chính là giới hạn theo tài khoản.
-- Hạn token magic-link là cài đặt chung của project.
 - Không chống được người quay lại toàn bộ thao tác nhập. Bàn được xáo mỗi lượt và có chế độ kín đáo để giảm rủi ro nhìn trộm.

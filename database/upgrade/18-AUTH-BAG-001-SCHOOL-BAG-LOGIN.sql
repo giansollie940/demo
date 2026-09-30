@@ -74,30 +74,58 @@ returns boolean language sql stable set search_path = '' as $$
   )
 $$;
 
-create or replace function auth_bag.is_locked(p_scope text)
-returns boolean language sql stable set search_path = '' as $$
-  select exists (select 1 from auth_bag.attempts where scope = p_scope and locked_until > now())
-$$;
-
--- Atomically counts a failure inside a window; locks the scope once it reaches p_max.
-create or replace function auth_bag.record_failure(p_scope text, p_max int, p_window_seconds int, p_lock_seconds int)
-returns void language plpgsql set search_path = '' as $$
+-- Reserves one attempt on a scope BEFORE the slow bcrypt check. The upsert holds the row lock
+-- until the transaction ends, so parallel attempts on the same account or IP queue up behind it
+-- and see the raised count: at most p_max guesses per window get checked, however many requests
+-- arrive at once. Returns false when the scope is locked or already at its limit.
+create or replace function auth_bag.reserve(p_scope text, p_max int, p_window_seconds int, p_lock_seconds int)
+returns boolean language plpgsql set search_path = '' as $$
+declare v_row auth_bag.attempts;
 begin
   insert into auth_bag.attempts as a (scope, window_start, failures)
   values (p_scope, now(), 1)
   on conflict (scope) do update
-    set failures = case when a.window_start < now() - make_interval(secs => p_window_seconds) then 1 else a.failures + 1 end,
-        window_start = case when a.window_start < now() - make_interval(secs => p_window_seconds) then now() else a.window_start end;
+    set failures = case
+          when a.locked_until > now() then a.failures
+          when a.window_start < now() - make_interval(secs => p_window_seconds) then 1
+          else a.failures + 1 end,
+        window_start = case
+          when a.locked_until > now() then a.window_start
+          when a.window_start < now() - make_interval(secs => p_window_seconds) then now()
+          else a.window_start end
+  returning * into v_row;
+  if v_row.locked_until > now() then
+    return false;
+  end if;
+  if v_row.failures > p_max then
+    update auth_bag.attempts
+       set locked_until = now() + make_interval(secs => p_lock_seconds), failures = 0, window_start = now()
+     where scope = p_scope;
+    return false;
+  end if;
+  return true;
+end $$;
+
+-- After a failed check the reservation stays counted; lock once the limit is reached.
+create or replace function auth_bag.lock_if_reached(p_scope text, p_max int, p_lock_seconds int)
+returns void language sql set search_path = '' as $$
   update auth_bag.attempts
      set locked_until = now() + make_interval(secs => p_lock_seconds), failures = 0, window_start = now()
-   where scope = p_scope and failures >= p_max;
-end $$;
+   where scope = p_scope and failures >= p_max and (locked_until is null or locked_until <= now())
+$$;
+
+-- Gives back a reservation that did not end in a failed check.
+create or replace function auth_bag.refund(p_scope text)
+returns void language sql set search_path = '' as $$
+  update auth_bag.attempts set failures = greatest(failures - 1, 0) where scope = p_scope
+$$;
 
 revoke all on function auth_bag.valid_input(bytea, smallint, int) from public, anon, authenticated;
 revoke all on function auth_bag.decode_input(text) from public, anon, authenticated;
 revoke all on function auth_bag.eligible(uuid) from public, anon, authenticated;
-revoke all on function auth_bag.is_locked(text) from public, anon, authenticated;
-revoke all on function auth_bag.record_failure(text, int, int, int) from public, anon, authenticated;
+revoke all on function auth_bag.reserve(text, int, int, int) from public, anon, authenticated;
+revoke all on function auth_bag.lock_if_reached(text, int, int) from public, anon, authenticated;
+revoke all on function auth_bag.refund(text) from public, anon, authenticated;
 
 -- ===== Service-role API =====
 
@@ -144,10 +172,10 @@ begin
 end $$;
 
 -- One sign-in attempt, decided in one transaction:
---   locks (IP, then account) → bcrypt verify → eligibility → failure counting / reset → audit.
+--   reserve an attempt (IP, then account) → bcrypt verify → eligibility → lock / reset → audit.
 -- Returns {ok:true, user_id, credential_version} or {ok:false}. Every refusal looks the same to
--- the caller; unknown accounts pay for one bcrypt round too, and locks key on the login code
--- for them, so neither timing nor lock behaviour reveals which accounts exist or are enrolled.
+-- the caller; unknown accounts pay for one bcrypt round too, and their attempts count against the
+-- login code, so neither timing nor lock behaviour reveals which accounts exist or are enrolled.
 create or replace function public.bag_auth_attempt(
   p_email text, p_code text, p_input_hex text, p_ip text,
   p_catalog smallint, p_catalog_size int,
@@ -164,13 +192,15 @@ declare
   v_match boolean := false;
   v_reason text;
 begin
-  if auth_bag.is_locked(v_ip_scope) then
+  -- Always IP first, then account: one lock order, so parallel attempts cannot deadlock.
+  if not auth_bag.reserve(v_ip_scope, p_ip_max, p_ip_window, p_ip_lock) then
     return jsonb_build_object('ok', false);
   end if;
 
   select id into v_user from auth.users where lower(email) = lower(p_email) and deleted_at is null limit 1;
   v_scope := 'account:' || coalesce(v_user::text, 'code:' || lower(coalesce(p_code, '')));
-  if auth_bag.is_locked(v_scope) then
+  if not auth_bag.reserve(v_scope, p_account_max, p_account_window, p_account_lock) then
+    perform auth_bag.refund(v_ip_scope);
     return jsonb_build_object('ok', false);
   end if;
 
@@ -190,18 +220,20 @@ begin
   end;
 
   if v_reason is not null then
-    perform auth_bag.record_failure(v_scope, p_account_max, p_account_window, p_account_lock);
-    perform auth_bag.record_failure(v_ip_scope, p_ip_max, p_ip_window, p_ip_lock);
+    perform auth_bag.lock_if_reached(v_scope, p_account_max, p_account_lock);
+    perform auth_bag.lock_if_reached(v_ip_scope, p_ip_max, p_ip_lock);
     insert into auth_bag.audit (event, user_id, reason) values ('login', v_user, v_reason);
     return jsonb_build_object('ok', false);
   end if;
 
-  delete from auth_bag.attempts where scope = v_scope;
+  -- Success clears the account counter (never an active lock) and hands the IP slot back.
+  delete from auth_bag.attempts where scope = v_scope and (locked_until is null or locked_until <= now());
+  perform auth_bag.refund(v_ip_scope);
   insert into auth_bag.audit (event, user_id, reason) values ('login', v_user, 'ok');
   return jsonb_build_object('ok', true, 'user_id', v_user, 'credential_version', v_row.credential_version);
 end $$;
 
--- Final re-check right before the session is issued: a change or disable racing the login wins.
+-- Re-checked by bag-login after the session exists: a change or disable racing the login wins.
 create or replace function public.bag_auth_still_valid(p_user uuid, p_version integer)
 returns boolean language sql stable security definer set search_path = '' as $$
   select exists (select 1 from auth_bag.credentials where user_id = p_user and enabled and credential_version = p_version)
