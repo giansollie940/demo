@@ -1,11 +1,14 @@
 <script setup lang="ts">
-import { onBeforeUnmount, ref } from 'vue'
+import { computed, onBeforeUnmount, ref } from 'vue'
 import { RouterLink, useRoute, useRouter } from 'vue-router'
-import { KeyRound } from 'lucide-vue-next'
+import { Gamepad2, KeyRound } from 'lucide-vue-next'
 import AuthLayout from '../layouts/AuthLayout.vue'
 import AppButton from '../components/ui/AppButton.vue'
 import BagPad from '../components/auth-bag/BagPad.vue'
 import BagMark from '../components/auth-bag/BagMark.vue'
+import BagItemIcon from '../components/auth-bag/BagItemIcon.vue'
+import { itemById } from '../features/auth-bag/catalog'
+import { firstMismatch, gameRound, GAME_MEMORY_FROM_LEVEL } from '../features/auth-bag/game'
 import { MAX_ITEMS, MIN_ITEMS } from '../features/auth-bag/sequence'
 import { useAuthStore } from '../stores/auth'
 import { useContextStore } from '../stores/context'
@@ -35,8 +38,64 @@ function notify(tone: Tone, text: string) {
   message.value = { tone, text }
 }
 
+/** Enter in the code field with an empty bag moves on to the wheel instead of failing. */
+function onCodeEnter(event: KeyboardEvent) {
+  if (!code.value.trim() || draft.value.length) return
+  event.preventDefault()
+  pad.value?.focus()
+}
+
+// ===== Practice game (only offered while the code field is empty; never sent anywhere) =====
+const playing = ref(false)
+const level = ref(1)
+const streak = ref(0)
+const target = ref<string[]>([])
+const memoryRound = computed(() => level.value >= GAME_MEMORY_FROM_LEVEL)
+const listHidden = computed(() => memoryRound.value && draft.value.length > 0)
+
+function nextAttempt() {
+  draft.value = []
+  pad.value?.reshuffle()
+}
+
+function startGame() {
+  playing.value = true
+  level.value = 1
+  streak.value = 0
+  target.value = gameRound(1)
+  nextAttempt()
+  notify('info', 'Xếp đúng các món theo đề rồi bấm "Kiểm tra". Chỉ để chơi: không gửi gì lên máy chủ, không tính lượt thử.')
+  pad.value?.focus()
+}
+
+function exitGame() {
+  playing.value = false
+  target.value = []
+  nextAttempt()
+  message.value = null
+}
+
+function checkGame() {
+  if (!draft.value.length) return notify('error', 'Cặp đang trống.')
+  const wrongAt = firstMismatch(target.value, draft.value)
+  const packed = draft.value.length
+  nextAttempt()
+  if (wrongAt === -1) {
+    streak.value++
+    level.value++
+    target.value = gameRound(level.value)
+    const memo = level.value === GAME_MEMORY_FROM_LEVEL ? ' Từ giờ đề sẽ ẩn khi bạn bắt đầu xếp: thử trí nhớ nhé!' : ''
+    return notify('success', `Chính xác! Lên cấp ${level.value}.${memo}`)
+  }
+  streak.value = 0
+  if (wrongAt >= packed) return notify('error', `Còn thiếu món thứ ${wrongAt + 1}. Xếp lại nào!`)
+  if (wrongAt >= target.value.length) return notify('error', 'Cặp bị thừa món. Xếp lại nào!')
+  notify('error', `Món thứ ${wrongAt + 1} chưa đúng. Xếp lại nào!`)
+}
+
 async function submit() {
   if (busy.value) return
+  if (playing.value) return checkGame()
   if (!code.value.trim()) return notify('error', 'Hãy nhập mã đăng nhập.')
   if (!draft.value.length) return notify('error', 'Cặp đang trống.')
   const items = [...draft.value]
@@ -81,10 +140,30 @@ onBeforeUnmount(() => { draft.value = [] })
       </div>
 
       <form class="bag-form" novalidate @submit.prevent="submit">
-        <label class="code-field">
+        <label v-if="!playing" class="code-field">
           <span>Mã đăng nhập</span>
-          <input v-model.trim="code" autocomplete="username" autocapitalize="none" spellcheck="false" placeholder="Ví dụ: hs-01" />
+          <input v-model.trim="code" autocomplete="username" autocapitalize="none" spellcheck="false" placeholder="Ví dụ: hs-01" @keydown.enter="onCodeEnter" />
         </label>
+
+        <p v-if="!playing && !code" class="play-invite">
+          <span>Chưa nhập mã? Tập tay với trò chơi, không tính lượt thử.</span>
+          <button type="button" class="play-button" @click="startGame"><Gamepad2 aria-hidden="true" />Chơi "Xếp cặp theo đề"</button>
+        </p>
+
+        <section v-if="playing" class="game-card" aria-label="Trò chơi Xếp cặp theo đề">
+          <div class="game-head">
+            <strong>Xếp cặp theo đề</strong>
+            <span class="game-stats">Cấp {{ level }} · Chuỗi đúng {{ streak }}</span>
+          </div>
+          <p v-if="listHidden" class="game-hidden">Đề đã ẩn. Nhớ lại và xếp tiếp nhé! (Bấm "Làm lại" để xem đề.)</p>
+          <ol v-else class="game-list">
+            <li v-for="(id, index) in target" :key="index">
+              <span class="n">{{ index + 1 }}.</span>
+              <span class="mini"><BagItemIcon :kind="itemById(id)!.kind" :color="itemById(id)!.color" /></span>
+              {{ itemById(id)!.label }}
+            </li>
+          </ol>
+        </section>
 
         <BagPad
           ref="pad"
@@ -96,8 +175,14 @@ onBeforeUnmount(() => { draft.value = [] })
           <p v-if="message" class="message" :class="message.tone" role="alert">
             <span v-if="message.tone === 'success'" class="sparkles" aria-hidden="true">✨</span>{{ message.text }}
           </p>
-          <AppButton type="submit" :loading="busy || ready" :disabled="ready"><KeyRound />Bắt đầu tự học</AppButton>
-          <RouterLink :to="{ path: '/login' }" class="alt">Dùng mật khẩu</RouterLink>
+          <template v-if="playing">
+            <AppButton type="submit"><Gamepad2 />Kiểm tra</AppButton>
+            <button type="button" class="alt link" @click="exitGame">Thoát trò chơi</button>
+          </template>
+          <template v-else>
+            <AppButton type="submit" :loading="busy || ready" :disabled="ready"><KeyRound />Bắt đầu tự học</AppButton>
+            <RouterLink :to="{ path: '/login' }" class="alt">Dùng mật khẩu</RouterLink>
+          </template>
         </BagPad>
       </form>
 
@@ -142,6 +227,34 @@ onBeforeUnmount(() => { draft.value = [] })
 }
 
 .stage { margin-top: 18px; }
+
+.link { padding: 0; border: 0; background: none; font: inherit; cursor: pointer; }
+.play-invite { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin: 10px 0 0; color: var(--text-muted); font-size: .85rem; }
+.play-button {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 6px 12px;
+  border: 1px dashed color-mix(in srgb, var(--color-primary) 45%, var(--border));
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--color-primary) 8%, var(--surface));
+  color: var(--color-primary);
+  font: inherit; font-weight: 800;
+  cursor: pointer;
+}
+.play-button:hover { background: color-mix(in srgb, var(--color-primary) 14%, var(--surface)); }
+.play-button svg { width: 16px; height: 16px; }
+.game-card {
+  margin-top: 16px; padding: 12px 14px;
+  border: 1px dashed color-mix(in srgb, var(--color-primary) 35%, var(--border));
+  border-radius: 16px;
+  background: color-mix(in srgb, #f5b400 7%, var(--surface));
+}
+.game-head { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.game-stats { color: var(--text-muted); font-size: .82rem; font-weight: 800; }
+.game-list { display: flex; flex-wrap: wrap; gap: 6px 14px; margin: 8px 0 0; padding: 0; list-style: none; font-size: .88rem; }
+.game-list li { display: flex; align-items: center; gap: 6px; }
+.game-list .n { font-weight: 800; color: var(--text-muted); }
+.game-hidden { margin: 8px 0 0; color: var(--text-muted); font-size: .88rem; }
+.mini { display: inline-block; width: 22px; height: 22px; }
 
 .message { margin: 0; padding: 10px 12px; border-radius: 12px; font-size: .9rem; line-height: 1.45; }
 .message.info { background: color-mix(in srgb, var(--color-sky, #3b82f6) 12%, var(--surface)); }
