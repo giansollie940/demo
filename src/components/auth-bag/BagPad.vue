@@ -123,6 +123,9 @@ function reset() {
 
 function rotate(steps: number) {
   turn.value += steps
+  // Keyboard focus follows the front slot, whatever turned the wheel (mouse wheel, arrows, drag),
+  // so Space / Enter always act on the item in the middle.
+  if (wheelEl.value?.contains(document.activeElement)) focusFront()
 }
 
 function setColor(index: number) {
@@ -144,11 +147,15 @@ function onWheelKey(event: KeyboardEvent) {
     ArrowDown: () => setColor(colorIndex.value + 1),
     Backspace: undo,
     Delete: undo,
+    // Handled here rather than by the focused button's own click, so they add the front item
+    // even if focus is on another slot for a moment.
+    ' ': () => add(frontItem.value.id),
+    Enter: () => add(frontItem.value.id),
   }
-  // Space / Enter need nothing here: the front item is a focused <button>, so they click it.
   const action = actions[event.key]
   if (!action) return
   event.preventDefault()
+  if (event.repeat && (event.key === ' ' || event.key === 'Enter')) return // holding the key adds once
   action()
   focusFront()
 }
@@ -404,6 +411,7 @@ defineExpose({ reshuffle, focus: focusFront })
           :aria-label="`${label}. Mũi tên trái phải để xoay, lên xuống để đổi màu, phím cách để bỏ vào cặp, Backspace để trả lại.`"
           @pointerdown="onWheelPointerDown"
           @keydown="onWheelKey"
+          @keyup.space.prevent
         >
           <div :key="spinKey" class="wheel-ring" :class="{ spun: spinKey > 0 }" aria-hidden="true"></div>
           <button

@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'vitest'
 import { itemById } from '../../src/features/auth-bag/catalog'
 import {
-  addScore, BOARD_SIZE, cleanName, firstMismatch, gameRound, GAME_MAX_LENGTH, GAME_START_LENGTH, loadBoard, NAME_MAX, qualifies, roundLength, saveBoard, type ScoreEntry,
+  addScore, BOARD_SIZE, cleanName, firstMismatch, gameRound, GAME_MAX_LENGTH, GAME_START_LENGTH, loadBoard, NAME_MAX, qualifies, roundLength, roundSeconds, saveBoard, type ScoreEntry,
 } from '../../src/features/auth-bag/game'
 
 describe('practice game', () => {
@@ -9,6 +9,12 @@ describe('practice game', () => {
     expect(roundLength(1)).toBe(GAME_START_LENGTH)
     expect(roundLength(2)).toBe(GAME_START_LENGTH + 1)
     expect(roundLength(99)).toBe(GAME_MAX_LENGTH)
+  })
+
+  test('time per round grows with the number of items', () => {
+    expect(roundSeconds(1)).toBe(8 + 3 * GAME_START_LENGTH)
+    expect(roundSeconds(99)).toBe(8 + 3 * GAME_MAX_LENGTH)
+    expect(roundSeconds(3)).toBeGreaterThan(roundSeconds(2))
   })
 
   test('a round is made of catalog items', () => {

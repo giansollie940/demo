@@ -5,7 +5,7 @@ import AppButton from '../ui/AppButton.vue'
 import BagPad from './BagPad.vue'
 import BagItemIcon from './BagItemIcon.vue'
 import { itemById } from '../../features/auth-bag/catalog'
-import { firstMismatch, gameRound, GAME_LIVES, GAME_MEMORY_FROM_LEVEL } from '../../features/auth-bag/game'
+import { firstMismatch, gameRound, GAME_LIVES, GAME_MEMORY_FROM_LEVEL, roundSeconds } from '../../features/auth-bag/game'
 import { MAX_ITEMS } from '../../features/auth-bag/sequence'
 
 /*
@@ -42,13 +42,53 @@ function nextAttempt() {
   pad.value?.reshuffle()
 }
 
+// ===== Round timer =====
+// Each round (and each retry) gets roundSeconds(level). Running out costs a life and deals a
+// fresh list at the same level. The clock pauses while the tab is hidden (the bag is emptied
+// then anyway) and stops when the game is over.
+const TICK_MS = 100
+const limitMs = ref(0)
+const leftMs = ref(0)
+let lastTick = 0
+let timer: ReturnType<typeof setInterval> | undefined
+const secondsLeft = computed(() => Math.ceil(leftMs.value / 1000))
+const timeRatio = computed(() => (limitMs.value ? leftMs.value / limitMs.value : 0))
+
+function startClock() {
+  limitMs.value = roundSeconds(level.value) * 1000
+  leftMs.value = limitMs.value
+  lastTick = performance.now()
+  clearInterval(timer)
+  timer = setInterval(tick, TICK_MS)
+}
+
+function stopClock() {
+  clearInterval(timer)
+  timer = undefined
+}
+
+function tick() {
+  const now = performance.now()
+  const elapsed = now - lastTick
+  lastTick = now
+  if (document.hidden || over.value) return
+  leftMs.value = Math.max(0, leftMs.value - elapsed)
+  if (leftMs.value === 0) timeUp()
+}
+
+function timeUp() {
+  nextAttempt()
+  loseLife('Hết giờ!', true)
+}
+
 function start() {
   over.value = false
   level.value = 1
   lives.value = GAME_LIVES
   target.value = gameRound(1)
   nextAttempt()
-  notify('info', `Xếp đúng các món theo đề rồi bấm "Kiểm tra". Bạn có ${GAME_LIVES} mạng.`)
+  startClock()
+  notify('info', `Xếp đúng các món theo đề rồi bấm "Kiểm tra" trước khi hết giờ. Bạn có ${GAME_LIVES} mạng.`)
   pad.value?.focus()
   emit('start')
 }
@@ -61,15 +101,26 @@ function check() {
   if (wrongAt === -1) {
     level.value++
     target.value = gameRound(level.value)
+    startClock()
     const memo = level.value === GAME_MEMORY_FROM_LEVEL ? ' Từ giờ đề sẽ ẩn khi bạn bắt đầu xếp: thử trí nhớ nhé!' : ''
     return notify('success', `Chính xác! Lên cấp ${level.value}.${memo}`)
   }
-  lives.value--
   const why = wrongAt >= packed ? `Còn thiếu món thứ ${wrongAt + 1}.`
     : wrongAt >= target.value.length ? 'Cặp bị thừa món.'
     : `Món thứ ${wrongAt + 1} chưa đúng.`
-  if (lives.value > 0) return notify('error', `${why} Còn ${lives.value} mạng, xếp lại nào!`)
+  loseLife(why, false)
+}
+
+/** A miss or a timeout. A timeout moves on to a fresh list; a wrong bag retries the same one. */
+function loseLife(why: string, newList: boolean) {
+  lives.value--
+  if (lives.value > 0) {
+    if (newList) target.value = gameRound(level.value)
+    startClock()
+    return notify('error', newList ? `${why} Còn ${lives.value} mạng, sang đề mới nào!` : `${why} Còn ${lives.value} mạng, xếp lại nào!`)
+  }
   over.value = true
+  stopClock()
   notify('info', `${why} Hết mạng rồi! Điểm của bạn: ${score.value}.`)
   emit('over', { score: score.value, level: level.value })
 }
@@ -80,7 +131,7 @@ function submit() {
 }
 
 onMounted(start)
-onBeforeUnmount(() => { draft.value = [] })
+onBeforeUnmount(() => { stopClock(); draft.value = [] })
 defineExpose({ start, notify })
 </script>
 
@@ -93,6 +144,11 @@ defineExpose({ start, notify })
           Cấp {{ level }} · Điểm {{ score }}<template v-if="props.best"> · Kỷ lục {{ props.best }}</template> ·
           <span class="lives" :aria-label="`Còn ${lives} mạng`"><span v-for="n in GAME_LIVES" :key="n" :class="{ lost: n > lives }" aria-hidden="true">♥</span></span>
         </span>
+      </div>
+
+      <div v-if="!over" class="timer" :class="{ low: secondsLeft <= 5 }" role="timer" :aria-label="`Còn ${secondsLeft} giây`">
+        <span class="timer-bar"><span :style="{ transform: `scaleX(${timeRatio})` }"></span></span>
+        <span class="timer-text" aria-hidden="true">⏱ {{ secondsLeft }}s</span>
       </div>
 
       <template v-if="over">
@@ -144,6 +200,12 @@ defineExpose({ start, notify })
 .lives { color: #e5484d; letter-spacing: 1px; }
 .lives .lost { color: var(--border); }
 .game-over { margin: 8px 0 0; font-size: 1rem; }
+.timer { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
+.timer-bar { flex: 1; height: 8px; overflow: hidden; border-radius: 999px; background: color-mix(in srgb, var(--color-primary) 12%, var(--surface)); }
+.timer-bar span { display: block; height: 100%; background: linear-gradient(90deg, #22a06b, #f5b400); transform-origin: left; transition: transform 100ms linear; }
+.timer.low .timer-bar span { background: #e5484d; }
+.timer-text { min-width: 3.2em; font-size: .82rem; font-weight: 800; font-variant-numeric: tabular-nums; color: var(--text-muted); }
+.timer.low .timer-text { color: #e5484d; }
 .stage { margin-top: 18px; }
 .link { justify-self: start; padding: 0; border: 0; background: none; color: var(--color-primary); font: inherit; font-weight: 700; cursor: pointer; }
 .link:hover { text-decoration: underline; }

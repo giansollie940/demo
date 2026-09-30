@@ -37,6 +37,13 @@ export function roundLength(level: number): number {
   return Math.min(GAME_START_LENGTH + Math.max(0, level - 1), GAME_MAX_LENGTH)
 }
 
+/** Time allowed for one round: a fixed start plus a few seconds per item to pack. */
+export const ROUND_BASE_SECONDS = 8
+export const ROUND_SECONDS_PER_ITEM = 3
+export function roundSeconds(level: number): number {
+  return ROUND_BASE_SECONDS + ROUND_SECONDS_PER_ITEM * roundLength(level)
+}
+
 /** A random packing list for the given level (1-based); repeats allowed, like the real thing. */
 export function gameRound(level: number, random: RandomSource = cryptoRandom): string[] {
   return Array.from({ length: roundLength(level) }, () => CATALOG[randomBelow(CATALOG.length, random)]!.id)
