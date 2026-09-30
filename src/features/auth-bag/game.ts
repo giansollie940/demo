@@ -38,8 +38,8 @@ export function roundLength(level: number): number {
 }
 
 /** Time allowed for one round: a fixed start plus a few seconds per item to pack. */
-export const ROUND_BASE_SECONDS = 8
-export const ROUND_SECONDS_PER_ITEM = 3
+export const ROUND_BASE_SECONDS = 15
+export const ROUND_SECONDS_PER_ITEM = 5
 export function roundSeconds(level: number): number {
   return ROUND_BASE_SECONDS + ROUND_SECONDS_PER_ITEM * roundLength(level)
 }
