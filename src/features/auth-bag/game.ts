@@ -5,6 +5,7 @@ import { CATALOG } from './catalog'
  * is empty. Each round shows a random packing list to copy into the bag. It runs entirely in
  * the browser: nothing is sent to the server, so it never counts as a failed attempt, and it
  * never touches the student's real sequence.
+ * High scores are kept only in this browser, under a nickname the player types.
  */
 
 export const GAME_START_LENGTH = 3
@@ -39,4 +40,64 @@ export function firstMismatch(target: readonly string[], packed: readonly string
   const length = Math.max(target.length, packed.length)
   for (let i = 0; i < length; i++) if (target[i] !== packed[i]) return i
   return -1
+}
+
+// ===== Lives and the high-score board =====
+export const GAME_LIVES = 3
+export const BOARD_SIZE = 10
+export const NAME_MAX = 16
+const BOARD_KEY = 'auth-bag-game-scores-v1'
+
+/** One board entry. Score = rounds packed correctly before the last life was lost. */
+export interface ScoreEntry {
+  name: string
+  score: number
+  level: number
+  at: number
+}
+
+/** Trims, collapses spaces, drops control characters and caps the length of a typed name. */
+export function cleanName(raw: string): string {
+  return raw.replace(/[\u0000-\u001f\u007f]/g, '').replace(/\s+/g, ' ').trim().slice(0, NAME_MAX)
+}
+
+function byRank(a: ScoreEntry, b: ScoreEntry) {
+  return b.score - a.score || a.at - b.at // ties: whoever got there first stays ahead
+}
+
+/** True when a score would make it onto the board. Zero never does. */
+export function qualifies(board: readonly ScoreEntry[], score: number): boolean {
+  if (score <= 0) return false
+  return board.length < BOARD_SIZE || score > board[board.length - 1]!.score
+}
+
+export function addScore(board: readonly ScoreEntry[], entry: ScoreEntry): ScoreEntry[] {
+  return [...board, entry].sort(byRank).slice(0, BOARD_SIZE)
+}
+
+function isEntry(value: unknown): value is ScoreEntry {
+  const e = value as ScoreEntry
+  return !!e && typeof e.name === 'string' && Number.isInteger(e.score) && e.score > 0
+    && Number.isInteger(e.level) && typeof e.at === 'number'
+}
+
+/** The board lives only in this browser (localStorage); anything unreadable counts as empty. */
+// Even reading globalThis.localStorage can throw (blocked site data), so it is looked up inside try.
+export function loadBoard(storage?: Pick<Storage, 'getItem'>): ScoreEntry[] {
+  try {
+    const parsed: unknown = JSON.parse((storage ?? globalThis.localStorage).getItem(BOARD_KEY) ?? '[]')
+    if (!Array.isArray(parsed)) return []
+    return parsed.filter(isEntry).map(e => ({ ...e, name: cleanName(e.name) || 'Bạn nhỏ' })).sort(byRank).slice(0, BOARD_SIZE)
+  } catch {
+    return []
+  }
+}
+
+export function saveBoard(board: readonly ScoreEntry[], storage?: Pick<Storage, 'setItem'>): boolean {
+  try {
+    ;(storage ?? globalThis.localStorage).setItem(BOARD_KEY, JSON.stringify(board))
+    return true
+  } catch {
+    return false
+  }
 }

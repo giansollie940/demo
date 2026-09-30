@@ -1,14 +1,16 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref } from 'vue'
 import { RouterLink, useRoute, useRouter } from 'vue-router'
-import { Gamepad2, KeyRound } from 'lucide-vue-next'
+import { Gamepad2, KeyRound, Trophy } from 'lucide-vue-next'
 import AuthLayout from '../layouts/AuthLayout.vue'
 import AppButton from '../components/ui/AppButton.vue'
 import BagPad from '../components/auth-bag/BagPad.vue'
 import BagMark from '../components/auth-bag/BagMark.vue'
 import BagItemIcon from '../components/auth-bag/BagItemIcon.vue'
 import { itemById } from '../features/auth-bag/catalog'
-import { firstMismatch, gameRound, GAME_MEMORY_FROM_LEVEL } from '../features/auth-bag/game'
+import {
+  addScore, cleanName, firstMismatch, gameRound, GAME_LIVES, GAME_MEMORY_FROM_LEVEL, loadBoard, NAME_MAX, qualifies, saveBoard, type ScoreEntry,
+} from '../features/auth-bag/game'
 import { MAX_ITEMS, MIN_ITEMS } from '../features/auth-bag/sequence'
 import { useAuthStore } from '../stores/auth'
 import { useContextStore } from '../stores/context'
@@ -48,10 +50,19 @@ function onCodeEnter(event: KeyboardEvent) {
 // ===== Practice game (only offered while the code field is empty; never sent anywhere) =====
 const playing = ref(false)
 const level = ref(1)
-const streak = ref(0)
+const lives = ref(GAME_LIVES)
+const over = ref(false)
 const target = ref<string[]>([])
+const score = computed(() => level.value - 1) // rounds packed correctly
 const memoryRound = computed(() => level.value >= GAME_MEMORY_FROM_LEVEL)
 const listHidden = computed(() => memoryRound.value && draft.value.length > 0)
+
+// High scores: this browser only, under a typed nickname.
+const board = ref<ScoreEntry[]>(loadBoard())
+const playerName = ref('')
+const savedAt = ref<number | null>(null)
+const best = computed(() => board.value[0]?.score ?? 0)
+const canSave = computed(() => over.value && savedAt.value === null && qualifies(board.value, score.value))
 
 function nextAttempt() {
   draft.value = []
@@ -60,16 +71,20 @@ function nextAttempt() {
 
 function startGame() {
   playing.value = true
+  over.value = false
   level.value = 1
-  streak.value = 0
+  lives.value = GAME_LIVES
+  savedAt.value = null
+  board.value = loadBoard()
   target.value = gameRound(1)
   nextAttempt()
-  notify('info', 'Xếp đúng các món theo đề rồi bấm "Kiểm tra". Chỉ để chơi: không gửi gì lên máy chủ, không tính lượt thử.')
+  notify('info', `Xếp đúng các món theo đề rồi bấm "Kiểm tra". Bạn có ${GAME_LIVES} mạng. Chỉ để chơi: không gửi gì lên máy chủ, không tính lượt thử.`)
   pad.value?.focus()
 }
 
 function exitGame() {
   playing.value = false
+  over.value = false
   target.value = []
   nextAttempt()
   message.value = null
@@ -81,21 +96,34 @@ function checkGame() {
   const packed = draft.value.length
   nextAttempt()
   if (wrongAt === -1) {
-    streak.value++
     level.value++
     target.value = gameRound(level.value)
     const memo = level.value === GAME_MEMORY_FROM_LEVEL ? ' Từ giờ đề sẽ ẩn khi bạn bắt đầu xếp: thử trí nhớ nhé!' : ''
     return notify('success', `Chính xác! Lên cấp ${level.value}.${memo}`)
   }
-  streak.value = 0
-  if (wrongAt >= packed) return notify('error', `Còn thiếu món thứ ${wrongAt + 1}. Xếp lại nào!`)
-  if (wrongAt >= target.value.length) return notify('error', 'Cặp bị thừa món. Xếp lại nào!')
-  notify('error', `Món thứ ${wrongAt + 1} chưa đúng. Xếp lại nào!`)
+  lives.value--
+  const why = wrongAt >= packed ? `Còn thiếu món thứ ${wrongAt + 1}.`
+    : wrongAt >= target.value.length ? 'Cặp bị thừa món.'
+    : `Món thứ ${wrongAt + 1} chưa đúng.`
+  if (lives.value > 0) return notify('error', `${why} Còn ${lives.value} mạng, xếp lại nào!`)
+  over.value = true
+  notify('info', `${why} Hết mạng rồi! Điểm của bạn: ${score.value}.${canSave.value ? ' Bạn lọt vào bảng xếp hạng, gõ tên để lưu nhé!' : ''}`)
+}
+
+function saveScore() {
+  const name = cleanName(playerName.value)
+  if (!name) return notify('error', 'Hãy gõ tên để lưu điểm.')
+  const entry: ScoreEntry = { name, score: score.value, level: level.value, at: Date.now() }
+  board.value = addScore(loadBoard(), entry)
+  savedAt.value = entry.at
+  notify('success', saveBoard(board.value)
+    ? `Đã lưu điểm của ${name} vào bảng xếp hạng!`
+    : 'Trình duyệt này không cho lưu dữ liệu, nên điểm chỉ hiện đến khi rời trang.')
 }
 
 async function submit() {
   if (busy.value) return
-  if (playing.value) return checkGame()
+  if (playing.value) return over.value ? (canSave.value ? saveScore() : startGame()) : checkGame()
   if (!code.value.trim()) return notify('error', 'Hãy nhập mã đăng nhập.')
   if (!draft.value.length) return notify('error', 'Cặp đang trống.')
   const items = [...draft.value]
@@ -153,9 +181,34 @@ onBeforeUnmount(() => { draft.value = [] })
         <section v-if="playing" class="game-card" aria-label="Trò chơi Xếp cặp theo đề">
           <div class="game-head">
             <strong>Xếp cặp theo đề</strong>
-            <span class="game-stats">Cấp {{ level }} · Chuỗi đúng {{ streak }}</span>
+            <span class="game-stats">
+              Cấp {{ level }} · Điểm {{ score }}<template v-if="best"> · Kỷ lục {{ best }}</template> ·
+              <span class="lives" :aria-label="`Còn ${lives} mạng`"><span v-for="n in GAME_LIVES" :key="n" :class="{ lost: n > lives }" aria-hidden="true">♥</span></span>
+            </span>
           </div>
-          <p v-if="listHidden" class="game-hidden">Đề đã ẩn. Nhớ lại và xếp tiếp nhé! (Bấm "Làm lại" để xem đề.)</p>
+
+          <template v-if="over">
+            <p class="game-over">Hết mạng! Điểm: <strong>{{ score }}</strong></p>
+            <div v-if="canSave" class="save-row">
+              <label class="name-field">
+                <span>Tên trên bảng xếp hạng</span>
+                <input v-model="playerName" :maxlength="NAME_MAX" autocomplete="off" placeholder="Biệt danh, ví dụ: Mèo Ú" />
+              </label>
+              <AppButton type="submit"><Trophy />Lưu điểm</AppButton>
+            </div>
+            <div class="board">
+              <strong class="board-title"><Trophy aria-hidden="true" />Bảng xếp hạng trên máy này</strong>
+              <ol v-if="board.length" class="board-list">
+                <li v-for="(entry, index) in board" :key="entry.at" :class="{ mine: entry.at === savedAt }">
+                  <span class="rank">{{ index + 1 }}</span>
+                  <span class="who">{{ entry.name }}</span>
+                  <span class="pts">{{ entry.score }} điểm</span>
+                </li>
+              </ol>
+              <p v-else class="board-empty">Chưa có ai. Hãy là người đầu tiên!</p>
+            </div>
+          </template>
+          <p v-else-if="listHidden" class="game-hidden">Đề đã ẩn. Nhớ lại và xếp tiếp nhé! (Bấm "Làm lại" để xem đề.)</p>
           <ol v-else class="game-list">
             <li v-for="(id, index) in target" :key="index">
               <span class="n">{{ index + 1 }}.</span>
@@ -176,7 +229,8 @@ onBeforeUnmount(() => { draft.value = [] })
             <span v-if="message.tone === 'success'" class="sparkles" aria-hidden="true">✨</span>{{ message.text }}
           </p>
           <template v-if="playing">
-            <AppButton type="submit"><Gamepad2 />Kiểm tra</AppButton>
+            <AppButton v-if="!over" type="submit"><Gamepad2 />Kiểm tra</AppButton>
+            <AppButton v-else type="button" :variant="canSave ? 'secondary' : undefined" @click="startGame"><Gamepad2 />Chơi lại</AppButton>
             <button type="button" class="alt link" @click="exitGame">Thoát trò chơi</button>
           </template>
           <template v-else>
@@ -255,6 +309,25 @@ onBeforeUnmount(() => { draft.value = [] })
 .game-list .n { font-weight: 800; color: var(--text-muted); }
 .game-hidden { margin: 8px 0 0; color: var(--text-muted); font-size: .88rem; }
 .mini { display: inline-block; width: 22px; height: 22px; }
+.lives { color: #e5484d; letter-spacing: 1px; }
+.lives .lost { color: var(--border); }
+.game-over { margin: 8px 0 0; font-size: 1rem; }
+.save-row { display: flex; flex-wrap: wrap; align-items: end; gap: 8px 10px; margin-top: 10px; }
+.name-field { display: grid; gap: 4px; flex: 1 1 220px; max-width: 320px; font-weight: 800; font-size: .82rem; }
+.name-field input { height: 42px; padding: 0 12px; border: 1px solid var(--border); border-radius: 12px; background: var(--input); color: var(--text); font-size: .95rem; }
+.board { margin-top: 12px; }
+.board-title { display: flex; align-items: center; gap: 6px; font-size: .9rem; }
+.board-title svg { width: 16px; height: 16px; color: #f5b400; }
+.board-list { display: grid; gap: 4px; margin: 8px 0 0; padding: 0; list-style: none; max-width: 420px; }
+.board-list li { display: grid; grid-template-columns: 26px 1fr auto; align-items: center; gap: 8px; padding: 5px 10px; border-radius: 10px; background: var(--surface); font-size: .88rem; }
+.board-list li:nth-child(1) .rank { background: #f5b400; color: #fff; }
+.board-list li:nth-child(2) .rank { background: #a3acb9; color: #fff; }
+.board-list li:nth-child(3) .rank { background: #c07a3e; color: #fff; }
+.board-list li.mine { outline: 2px solid var(--color-primary); font-weight: 800; }
+.rank { display: grid; place-items: center; width: 24px; height: 24px; border-radius: 50%; background: color-mix(in srgb, var(--color-primary) 10%, var(--surface)); font-weight: 900; font-size: .78rem; }
+.who { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pts { color: var(--text-muted); font-weight: 800; }
+.board-empty { margin: 6px 0 0; color: var(--text-muted); font-size: .85rem; }
 
 .message { margin: 0; padding: 10px 12px; border-radius: 12px; font-size: .9rem; line-height: 1.45; }
 .message.info { background: color-mix(in srgb, var(--color-sky, #3b82f6) 12%, var(--surface)); }
