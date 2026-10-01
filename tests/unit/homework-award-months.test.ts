@@ -19,3 +19,23 @@ describe('homework awards by month', () => {
     expect(awardMonthOptions(undefined, '')).toEqual([])
   })
 })
+
+describe('award period (month / week / year)', async () => {
+  const { awardPayload, awardPeriodLabel, awardWeekLabel, defaultAwardPeriod } = await import('../../src/features/homework/award-months')
+  test('payload sends exactly one window, or none for the school year', () => {
+    expect(awardPayload({ mode: 'month', month: '2026-10', week: 'w1' })).toEqual({ month: '2026-10' })
+    expect(awardPayload({ mode: 'week', month: '2026-10', week: 'w1' })).toEqual({ week_id: 'w1' })
+    expect(awardPayload({ mode: 'year', month: '2026-10', week: 'w1' })).toEqual({})
+    expect(awardPayload({ mode: 'week', month: '', week: '' })).toEqual({})
+  })
+  test('week labels with and without dates', () => {
+    expect(awardWeekLabel(9, '2026-09-28', '2026-10-04')).toBe('Tuần 9 (28/9–4/10)')
+    expect(awardWeekLabel(9)).toBe('Tuần 9')
+  })
+  test('default is the current month; labels read naturally', () => {
+    expect(defaultAwardPeriod(new Date('2026-09-30T18:00:00Z'))).toEqual({ mode: 'month', month: '2026-10', week: '' })
+    expect(awardPeriodLabel({ mode: 'month', month: '2026-10', week: '' })).toBe('tháng 10/2026')
+    expect(awardPeriodLabel({ mode: 'week', month: '', week: 'w' }, [{ id: 'w', label: 'Tuần 9 (28/9–4/10)' }])).toBe('tuần 9 (28/9–4/10)')
+    expect(awardPeriodLabel({ mode: 'year', month: '', week: '' })).toBe('trong năm học')
+  })
+})

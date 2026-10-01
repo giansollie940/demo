@@ -22,3 +22,35 @@ export function awardMonthOptions(serverMonths: readonly string[] | undefined, s
   if (selected) months.add(selected)
   return [...months].sort().reverse()
 }
+
+// ===== Kỳ xem tuyên dương: tháng, tuần hoặc cả năm học =====
+export type AwardMode = 'month' | 'week' | 'year'
+export interface AwardPeriod { mode: AwardMode; month: string; week: string }
+export interface AwardWeekOption { id: string; label: string }
+
+export function defaultAwardPeriod(now: Date = new Date()): AwardPeriod {
+  return { mode: 'month', month: currentAwardMonth(now), week: '' }
+}
+
+/** What `load` gets: one month, one week, or nothing (= the whole school year). */
+export function awardPayload(period: AwardPeriod): { month?: string; week_id?: string } {
+  if (period.mode === 'month' && period.month) return { month: period.month }
+  if (period.mode === 'week' && period.week) return { week_id: period.week }
+  return {}
+}
+
+/** "Tuần 9 (28/9–4/10)" when the dates are known, otherwise "Tuần 9". */
+export function awardWeekLabel(number: number, start?: string | null, end?: string | null): string {
+  const day = (iso?: string | null) => {
+    const m = /^\d{4}-(\d{2})-(\d{2})/.exec(iso ?? '')
+    return m ? `${Number(m[2])}/${Number(m[1])}` : ''
+  }
+  const range = day(start) && day(end) ? ` (${day(start)}–${day(end)})` : ''
+  return `Tuần ${number}${range}`
+}
+
+export function awardPeriodLabel(period: AwardPeriod, weeks: readonly AwardWeekOption[] = []): string {
+  if (period.mode === 'month' && period.month) return awardMonthLabel(period.month).toLowerCase()
+  if (period.mode === 'week' && period.week) return (weeks.find(w => w.id === period.week)?.label ?? 'tuần đã chọn').toLowerCase()
+  return 'trong năm học'
+}
