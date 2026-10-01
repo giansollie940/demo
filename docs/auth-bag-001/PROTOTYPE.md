@@ -2,7 +2,7 @@
 
 **Trạng thái:** PROTOTYPE — không cấp phiên, không gọi server. Spec gốc vẫn DRAFT; D-02…D-06 và GATE-AUTH chưa đạt.
 
-**Đường dẫn:** `/#/bag-demo` (không có liên kết từ trang đăng nhập).
+**Đường dẫn:** ~~`/#/bag-demo`~~ — đã gỡ ngày 01/10/2026. Tính năng thật đã chạy (`/#/login/bag`, thẻ "Hành trang tự học" trong Cài đặt), và trò chơi "Xếp cặp theo đề" ở trang đăng nhập thay chỗ cho việc thử tay. Mã nguồn prototype còn trong lịch sử git.
 
 ## Đã có trong prototype
 

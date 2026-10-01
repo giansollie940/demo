@@ -19,7 +19,6 @@ const CommentsPage = () => import('../../pages/CommentsPage.vue')
 const SettingsPage = () => import('../../pages/SettingsPage.vue')
 const IssuesPage = () => import('../../pages/IssuesPage.vue')
 // AUTH-BAG-001 interaction prototype: no server calls, no session. Not linked from the login page.
-const BagDemoPage = () => import('../../pages/BagDemoPage.vue')
 // AUTH-BAG-001 secondary sign-in; only reachable while the rollout flag is on.
 const BagLoginPage = () => import('../../pages/BagLoginPage.vue')
 const HomeworkPage = () => import('../../pages/HomeworkPage.vue')
@@ -31,7 +30,6 @@ const classUsers: UserRole[] = ['student', 'monitor', 'teacher']
 export const routes: RouteRecordRaw[] = [
   { path: '/login', component: LoginPage, meta: { public: true, title: 'Đăng nhập' } },
   { path: '/login/bag', component: BagLoginPage, beforeEnter: () => bagLoginEnabled() || '/login', meta: { public: true, title: 'Hành trang tự học' } },
-  { path: '/bag-demo', component: BagDemoPage, meta: { public: true, title: 'Hành trang tự học (bản thử)' } },
   {
     path: '/',
     component: AppShell,

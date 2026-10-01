@@ -38,7 +38,6 @@ function issueStatus(row:RegistrationRecord){
 const unapprovedCount=computed(()=>reports.value.filter(row=>issueStatus(row)==='not_approved').length)
 const overdueCount=computed(()=>reports.value.length-unapprovedCount.value)
 function student(row:RegistrationRecord){return auth.legacyState?.users.find(user=>user.id===row.studentId)??null}
-function period(row:RegistrationRecord){return periods.value.find(item=>Number(item.n)===Number(row.period))??null}
 function reportTime(row:RegistrationRecord){
   // Đăng ký "Không duyệt" không có mốc ghi nhận trong DB (không ai bấm gì cả),
   // nên mốc chính là giờ bắt đầu buổi tự học.
