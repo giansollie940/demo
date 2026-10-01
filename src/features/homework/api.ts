@@ -91,6 +91,8 @@ export interface HomeworkData {
     seed_threshold: number;
 
   };
+  /** Tháng của năm học (YYYY-MM) có thể xem tuyên dương, tới tháng hiện tại. */
+  award_months?: string[];
   leaderboard: Array<{
     id: string;
     full_name: string;

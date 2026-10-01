@@ -8,13 +8,15 @@ import AppCard from '../ui/AppCard.vue';
 import AppButton from '../ui/AppButton.vue';
 import {homeworkRpc,dateLabel,stateLabels,type HomeworkContext,type HomeworkData,type CatalogSubject,type Notice} from '../../features/homework/api';
 import {homeworkTabs,useHomeworkViewStore,resolveHomeworkTab}from '../../features/homework/view-context';
+import {awardPayload,awardWeekLabel,defaultAwardPeriod,type AwardWeekOption} from '../../features/homework/award-months';
+import AwardPeriodPicker from './AwardPeriodPicker.vue';
 
 const view=useHomeworkViewStore();
 const tab=computed({get:()=>resolveHomeworkTab('admin',view.selectedTab).id,set:(v:string)=>{view.selectedTab=v;}});
 const context=ref<HomeworkContext>({classes:[],grades:[6,7,8,9,10,11,12]});
-const grade=ref<number|''>(''),classId=ref(''),week=ref('');
+const grade=ref<number|''>(''),classId=ref(''),period=ref(defaultAwardPeriod());
+const awardWeeks=computed<AwardWeekOption[]>(()=>(context.value.weeks||[]).filter(w=>w.school_year_id===context.value.classes.find(c=>c.id===classId.value)?.school_year_id).sort((a,b)=>b.week_number-a.week_number).map(w=>({id:w.id,label:awardWeekLabel(w.week_number)})));
 const classes=computed(()=>context.value.classes.filter(c=>grade.value===''||c.grade===grade.value));
-const weeks=computed(()=>(context.value.weeks||[]).filter(w=>w.school_year_id===context.value.classes.find(c=>c.id===classId.value)?.school_year_id));
 interface Audit {id:string;class_id?:string;actor_id:string;event_type:string;created_at:string;before_data:unknown;after_data:unknown}
 interface Oversight {metrics:Record<string,number>;hearts:number;history:Array<Notice & {marker?:string;hard_deleted_at?:string}>;audit:Audit[];catalog_audit:Audit[];trash:Notice[];people:Array<{id:string;name:string}>}
 const result=ref<Oversight|null>(null),classData=ref<HomeworkData|null>(null),catalog=ref<CatalogSubject[]>([]);
@@ -29,16 +31,16 @@ async function load(){const seq=++generation;loading.value=true;error.value='';r
  try{const [data,items,local]=await Promise.all([
  homeworkRpc<Oversight>('oversight',classId.value,{grade:grade.value||null,...filters,from:filters.from?`${filters.from}T00:00:00+07:00`:null,to:filters.to?`${filters.to}T00:00:00+07:00`:null,offset:offset.value}),
  homeworkRpc<CatalogSubject[]>('catalog_list','',{grade:grade.value||null}),
- classId.value&&['awards','settings'].includes(tab.value)?homeworkRpc<HomeworkData>('load',classId.value,{week_id:week.value||null}):Promise.resolve(null)]);
+ classId.value&&['awards','settings'].includes(tab.value)?homeworkRpc<HomeworkData>('load',classId.value,awardPayload(period.value)):Promise.resolve(null)]);
  if(seq!==generation)return;result.value=data;catalog.value=items;classData.value=local;
  if(local){seed.value=local.settings.seed_threshold;alert.value=local.alert_level||'system';}
  }catch(e){if(seq===generation)error.value=fail(e);}finally{if(seq===generation)loading.value=false;}}
 async function initialize(){loading.value=true;try{context.value=await homeworkRpc<HomeworkContext>('context','');await load();}catch(e){error.value=fail(e);loading.value=false;}}
-function resetScope(){generation++;offset.value=0;week.value='';filters.actor_id='';target.value=null;message.value='';Object.assign(form,defaults());}
+function resetScope(){generation++;offset.value=0;period.value=defaultAwardPeriod();filters.actor_id='';target.value=null;message.value='';Object.assign(form,defaults());}
 watch(grade,()=>{classId.value='';resetScope();void load();});
 watch(classId,()=>{view.scopeClassId=classId.value;resetScope();void load();});
 view.scopeClassId='';
-watch([tab,week],()=>{offset.value=0;target.value=null;message.value='';void load();});
+watch([tab,period],()=>{offset.value=0;target.value=null;message.value='';void load();});
 watch(()=>({...filters}),()=>{offset.value=0;void load();});
 watch(offset,()=>void load());
 async function mutation(action:string,payload:Record<string,unknown>,scope=classId.value){if(busy.value)return;busy.value=true;error.value='';message.value='';const seq=generation;
@@ -64,7 +66,7 @@ onMounted(initialize);onUnmounted(()=>{generation++;});
  <template v-if="tab==='history'"><article v-for="n in result.history" :key="n.id"><h3>{{ n.marker||n.title }}</h3><p>{{classLabel(n.class_id)}} · {{n.author_name||n.author_id}} · {{stateLabels[n.status]||n.status}}</p><template v-if="!n.marker"><p>{{n.content}}</p><HomeworkImage v-if="n.attachment_id" :class-id="n.class_id" :attachment-id="n.attachment_id" /><small>{{dateLabel(n.created_at)}}</small></template><p v-else>Đã xóa vĩnh viễn · {{dateLabel(n.hard_deleted_at!)}}</p></article><p v-if="!result.history.length">Không có hoạt động khớp bộ lọc.</p></template>
  <template v-else><article v-for="e in [...result.audit,...result.catalog_audit]" :key="e.id"><strong>{{e.event_type==='submit'?(e.before_data?'Sửa Báo bài':'Đăng Báo bài'):(events[e.event_type]||e.event_type)}}</strong><p>{{e.class_id?classLabel(e.class_id):'Danh mục khối'}} · {{result.people.find(p=>p.id===e.actor_id)?.name||e.actor_id}} · {{dateLabel(e.created_at)}}</p><details><summary>Chi tiết nhật ký</summary><pre>{{JSON.stringify({before:e.before_data,after:e.after_data},null,2)}}</pre></details></article><p v-if="!result.audit.length&&!result.catalog_audit.length">Không có nhật ký khớp bộ lọc.</p></template>
  </AppCard>
- <AppCard v-if="tab==='awards'"><h2>Tuyên dương theo lớp</h2><p v-if="!classId">Chọn một lớp để xem tuyên dương.</p><template v-else-if="classData"><label>Thời gian<select v-model="week"><option value="">Năm học của lớp</option><option v-for="w in weeks" :key="w.id" :value="w.id">Tuần {{w.week_number}}</option></select></label><div class="form-grid"><section><h3>🐦 Chim sẻ đưa tin</h3><p v-for="p in classData.leaderboard.filter(p=>p.notices>0).sort((a,b)=>a.notice_rank-b.notice_rank)" :key="p.id">#{{p.notice_rank}} · {{p.full_name}} · {{p.notices}} bài</p></section><section><h3>⭐ Ngôi sao dẫn đường</h3><p v-for="p in classData.leaderboard.filter(p=>p.hearts>0).sort((a,b)=>a.heart_rank-b.heart_rank)" :key="p.id">#{{p.heart_rank}} · {{p.full_name}} · {{p.hearts}} tim</p></section><section><h3>🌱 Mầm xanh đóng góp</h3><p v-for="p in classData.leaderboard.filter(p=>p.seed_at)" :key="p.id">{{p.full_name}} · {{p.year_notices}} bài</p></section></div><p v-if="!classData.leaderboard.some(p=>p.notices||p.hearts)">Chưa có đóng góp hợp lệ trong thời gian này.</p></template></AppCard>
+ <AppCard v-if="tab==='awards'"><h2>Tuyên dương theo lớp</h2><p v-if="!classId">Chọn một lớp để xem tuyên dương.</p><template v-else-if="classData"><AwardPeriodPicker v-model="period" :months="classData.award_months" :weeks="awardWeeks" /><p class="hint">Tính theo thời điểm bài được duyệt.</p><div class="form-grid"><section><h3>🐦 Chim sẻ đưa tin</h3><p v-for="p in classData.leaderboard.filter(p=>p.notices>0).sort((a,b)=>a.notice_rank-b.notice_rank)" :key="p.id">#{{p.notice_rank}} · {{p.full_name}} · {{p.notices}} bài</p></section><section><h3>⭐ Ngôi sao dẫn đường</h3><p v-for="p in classData.leaderboard.filter(p=>p.hearts>0).sort((a,b)=>a.heart_rank-b.heart_rank)" :key="p.id">#{{p.heart_rank}} · {{p.full_name}} · {{p.hearts}} tim</p></section><section><h3>🌱 Mầm xanh đóng góp</h3><p v-for="p in classData.leaderboard.filter(p=>p.seed_at)" :key="p.id">{{p.full_name}} · {{p.year_notices}} bài</p></section></div><p v-if="!classData.leaderboard.some(p=>p.notices||p.hearts)">Chưa có đóng góp hợp lệ trong thời gian này.</p></template></AppCard>
 <AppCard v-if="tab==='trash'"><h2>Thùng rác theo lớp</h2><p>Xóa vĩnh viễn từng bài đã xóa. Không thể hoàn tác.</p><article v-for="n in result.trash" :key="n.id"><h3>{{n.title}}</h3><p>{{classLabel(n.class_id)}} · {{n.delete_reason}}</p><p>Người gỡ: {{n.deleted_actor_type==='system'?'System':n.deleted_by}}</p><AppButton variant="danger" :disabled="busy" @click="selectDelete(n)">Xóa vĩnh viễn</AppButton></article><p v-if="!result.trash.length">Thùng rác trống trong phạm vi này.</p></AppCard>
  <HomeworkHardDeleteDialog v-if="target" :key="target.id" :notice="target" :class-label="classLabel(target.class_id)" :busy="busy" :error="error" @confirm="hardDelete" @close="target=null" />
  <AppCard v-if="tab==='settings'"><h2>Cấu hình quản trị</h2><p v-if="!classData">Chọn một lớp để cấu hình tuyên dương.</p><template v-else><form @submit.prevent="mutation('settings',{seed_threshold:seed})"><label>Số bài để nhận Mầm xanh<input v-model.number="seed" type="number" min="1" max="100" required></label><AppButton type="submit" :disabled="busy">Lưu cấu hình</AppButton></form><form @submit.prevent="mutation('alert_settings',{alert_level:alert})"><label>Cảnh báo Admin<select v-model="alert"><option value="system">Chỉ lỗi hệ thống</option><option value="backlog">Lỗi hệ thống + tồn đọng</option><option value="all">Tất cả cảnh báo</option></select></label><AppButton type="submit" :disabled="busy">Lưu cảnh báo</AppButton></form></template></AppCard>
@@ -73,6 +75,7 @@ onMounted(initialize);onUnmounted(()=>{generation++;});
 </section>
 </template>
 <style scoped>
+.hint{margin:4px 0 12px;color:var(--text-muted);font-size:.85rem}
 .oversight-banner h1{margin:8px 0;font-size:clamp(2rem,4vw,3rem)}.oversight-banner p{margin:0;color:var(--text-muted)}.oversight-banner .eyebrow{color:var(--color-primary);font-weight:850;font-size:var(--font-size-ui-min);letter-spacing:.08em}
 .oversight{display:grid;gap:20px;min-width:0}.toolbar,.tabs,.catalog-list{display:flex;flex-wrap:wrap;align-items:end;gap:12px}.tabs{align-items:center}.toolbar label{flex:1;min-width:180px}.form-grid,.metrics{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(240px,100%),1fr));gap:16px}.metrics strong{font-size:2rem}label{display:grid;gap:8px;margin-block:10px}.check{display:flex;align-items:center}.check input{width:20px;min-height:20px}input,select,textarea{width:100%;min-width:0;min-height:44px;border:1px solid var(--border);border-radius:var(--radius-md,12px);padding:10px;background:var(--surface-raised);color:var(--text)}.catalog-list button{padding:12px;border:1px solid var(--border);border-radius:12px;background:var(--surface-raised);color:var(--text);text-align:left}article{padding:16px 0;border-bottom:1px solid var(--border);overflow-wrap:anywhere}pre{white-space:pre-wrap;overflow-wrap:anywhere}.error{color:var(--color-danger)}@media(max-width:640px){.toolbar{align-items:stretch}.toolbar label{min-width:0;flex-basis:100%}.tabs :deep(button){white-space:normal}header h1{font-size:1.6rem}}
 </style>

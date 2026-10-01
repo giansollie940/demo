@@ -25,7 +25,8 @@
     "test:feat-002": "FEAT002_UPGRADE=1 node --test tests/homework/*.test.mjs tests/feat-002/*.test.mjs",
     "test:feat-003": "vitest run --config tests/feat-003/vitest.config.ts",
     "test:feat-004": "node --test tests/feat-004/*.test.mjs && vitest run --config tests/feat-004/vitest.config.ts",
-    "test:feat-004:regression": "FEAT002_UPGRADE=1 FEAT004_UPGRADE=1 node --test tests/homework/database.test.mjs tests/feat-002/database.test.mjs"
+    "test:feat-004:regression": "FEAT002_UPGRADE=1 FEAT004_UPGRADE=1 node --test tests/homework/database.test.mjs tests/feat-002/database.test.mjs",
+    "test:homework:awards-month": "FEAT002_UPGRADE=1 FEAT004_UPGRADE=1 node --test tests/homework/awards-month.test.mjs"
   },
   "dependencies": {
     "@tanstack/vue-query": "^5.0.0",

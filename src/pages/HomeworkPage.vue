@@ -29,13 +29,21 @@ import {
   type Correction,
 } from "../features/homework/api";
 import { homeworkTabs, resolveHomeworkTab, useHomeworkViewStore } from "../features/homework/view-context";
+import { awardPayload, awardPeriodLabel, awardWeekLabel, defaultAwardPeriod, type AwardWeekOption } from "../features/homework/award-months";
+import AwardPeriodPicker from "../components/homework/AwardPeriodPicker.vue";
 const view = useHomeworkViewStore();
 const auth = useAuthStore(),
   ctx = useContextStore();
 const assigned = ref<HomeworkContext['classes']>([]);
 const selectedClass = ref('');
 const assignedWeeks = ref<NonNullable<HomeworkContext['weeks']>>([]);
-const weekOptions = computed(() => auth.role === 'teacher' ? assignedWeeks.value.filter(w=>w.school_year_id===assigned.value.find(c=>c.id===selectedClass.value)?.school_year_id).map(w=>({id:w.id,number:w.week_number})) : ctx.weeks);
+// Tuần cho Góc tuyên dương, mới nhất trước. Giáo viên lấy theo lớp được phân công (không có ngày).
+const awardWeeks = computed<AwardWeekOption[]>(() => {
+  const list = auth.role === 'teacher'
+    ? assignedWeeks.value.filter(w=>w.school_year_id===assigned.value.find(c=>c.id===selectedClass.value)?.school_year_id).map(w=>({id:w.id,number:w.week_number,label:awardWeekLabel(w.week_number)}))
+    : ctx.weeks.map(w=>({id:w.id,number:w.number,label:awardWeekLabel(w.number,w.startDate,w.endDate)}));
+  return list.sort((a,b)=>b.number-a.number).map(({id,label})=>({id,label}));
+});
 const classId = computed(() => auth.role === 'teacher' ? selectedClass.value : auth.currentUser?.classId || ctx.selectedClassId || '');
 let contextRequest = 0;
 async function loadContext() {
@@ -62,6 +70,8 @@ const data = ref<HomeworkData | null>(null),
   message = ref(""),
   subject = ref(""),
   week = ref(ctx.selectedWeekId || ""),
+  // Góc tuyên dương: theo tháng / tuần / cả năm học, tính theo lúc bài được duyệt.
+  awardPeriod = ref(defaultAwardPeriod()),
   now = ref(Date.now());
 const timer = setInterval(() => (now.value = Date.now()), 60000);
 let loadId = 0;
@@ -171,6 +181,7 @@ const birds = computed(() =>
     .filter((r) => r.notices > 0)
     .sort((a, b) => a.notice_rank - b.notice_rank),
 );
+const periodLabel = computed(() => awardPeriodLabel(awardPeriod.value, awardWeeks.value));
 const stars = computed(() =>
   [...(data.value?.leaderboard || [])]
     .filter((r) => r.hearts > 0)
@@ -183,7 +194,7 @@ async function load() {
   error.value = "";
   try {
     const result = await homeworkRpc<HomeworkData>("load", classId.value, {
-      week_id: week.value || null,
+      ...awardPayload(awardPeriod.value),
     });
     if (id !== loadId) return;
     data.value = result;
@@ -354,8 +365,8 @@ function jump(id: string) {
   );
 }
 watch([classId,role], () => { if(!admin.value)view.scopeClassId=classId.value; },{immediate:true});
-watch(classId, () => { week.value=""; subject.value=""; editSubject(); deleteTarget.value=null; moderation.value=null;activeCorrection.value=null; Object.keys(reviewReasons).forEach(k=>delete reviewReasons[k]); });
-watch([classId, week], () => {
+watch(classId, () => { week.value=""; awardPeriod.value=defaultAwardPeriod(); subject.value=""; editSubject(); deleteTarget.value=null; moderation.value=null;activeCorrection.value=null; Object.keys(reviewReasons).forEach(k=>delete reviewReasons[k]); });
+watch([classId, week, awardPeriod], () => {
   loadId++;
   editing.value = false;
   data.value = null;
@@ -520,15 +531,15 @@ onUnmounted(() => {
       <section v-if="tab === 'awards'">
         <div class="section-heading">
           <h2>🌟 Góc tuyên dương</h2>
-          <label
-            >Thời gian<select v-model="week">
-              <option value="">Toàn năm học</option>
-              <option v-for="w in weekOptions" :key="w.id" :value="w.id">
-                Tuần {{ w.number }}
-              </option>
-            </select></label
-          >
+          <AwardPeriodPicker v-model="awardPeriod" :months="data.award_months" :weeks="awardWeeks" :default-week="ctx.selectedWeekId" />
         </div>
+        <p class="award-note">
+          Tính theo thời điểm bài được duyệt {{ awardPeriod.mode === "year" ? periodLabel : `trong ${periodLabel}` }}.
+        </p>
+        <p v-if="personal && awardPeriod.mode !== 'year'" class="personal">
+          Của tôi {{ periodLabel }}:
+          <strong>{{ personal.notices }} bài</strong> · ❤️ {{ personal.hearts }}
+        </p>
         <p v-if="personal" class="personal">
           Của tôi trong năm học:
           <strong>{{ personal.year_notices }} bài hợp lệ</strong
@@ -546,7 +557,7 @@ onUnmounted(() => {
                 ><span>{{ r.notices }} bài</span>
               </li>
             </ol>
-            <p v-if="!birds.length">Chưa có bài hợp lệ trong thời gian này.</p>
+            <p v-if="!birds.length">Chưa có bài được duyệt trong thời gian này.</p>
           </article>
           <article class="panel star">
             <h3>⭐ Ngôi sao dẫn đường</h3>
@@ -557,7 +568,7 @@ onUnmounted(() => {
                 ><span>❤️ {{ r.hearts }}</span>
               </li>
             </ol>
-            <p v-if="!stars.length">Chưa có tim trong thời gian này.</p>
+            <p v-if="!stars.length">Chưa có tim cho bài được duyệt trong thời gian này.</p>
           </article>
           <article class="panel seed">
             <h3>🌱 Mầm xanh đóng góp</h3>
@@ -1003,6 +1014,14 @@ onUnmounted(() => {
 }
 .seed {
   border-top: 5px solid #81b69b;
+}
+.award-note {
+  margin: 0 0 10px;
+  color: var(--text-muted);
+  font-size: 0.88rem;
+}
+.personal + .personal {
+  margin-top: 8px;
 }
 .personal {
   padding: 16px;
