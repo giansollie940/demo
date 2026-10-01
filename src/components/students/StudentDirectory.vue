@@ -3,7 +3,7 @@ import { Copy, KeyRound, Pencil, RotateCcw, Trash2 } from 'lucide-vue-next'
 import AppButton from '../ui/AppButton.vue'
 import RemoteUserAvatar from '../profile/RemoteUserAvatar.vue'
 import type { DirectoryUser } from '../../types/legacy'
-const props=defineProps<{users:DirectoryUser[];busyId:string|null}>()
+defineProps<{users:DirectoryUser[];busyId:string|null}>()
 const emit=defineEmits<{copy:[user:DirectoryUser];edit:[user:DirectoryUser];reset:[user:DirectoryUser];delete:[user:DirectoryUser];restore:[user:DirectoryUser]}>()
 </script>
 <template>

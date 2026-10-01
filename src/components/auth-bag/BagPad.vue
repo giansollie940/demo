@@ -475,7 +475,8 @@ defineExpose({ reshuffle, focus: focusFront })
 
         <div class="wheel-nav">
           <AppButton type="button" variant="secondary" aria-label="Xoay sang trái" @click="rotate(-1)"><ChevronLeft /></AppButton>
-          <span class="hint">Lăn chuột hoặc vuốt để xoay (Shift + lăn để đổi màu), rồi bấm hoặc kéo món ở giữa vào cặp</span>
+          <span class="hint hint-mouse">Lăn chuột để xoay (Shift + lăn để đổi màu), rồi bấm hoặc kéo món ở giữa vào cặp</span>
+          <span class="hint hint-touch">Vuốt để xoay, rồi chạm hoặc kéo món ở giữa vào cặp</span>
           <AppButton type="button" variant="secondary" aria-label="Xoay sang phải" @click="rotate(1)"><ChevronRight /></AppButton>
         </div>
         <p class="key-hint"><kbd>←</kbd><kbd>→</kbd> xoay · <kbd>↑</kbd><kbd>↓</kbd> đổi màu · <kbd>Space</kbd> bỏ vào cặp · <kbd>⌫</kbd> trả lại</p>
@@ -623,6 +624,9 @@ defineExpose({ reshuffle, focus: focusFront })
 .wheel-nav { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 8px; }
 .wheel-nav :deep(.app-button) { min-width: 44px; padding-inline: 10px; }
 .hint { text-align: center; color: var(--text-muted); font-size: .78rem; line-height: 1.3; }
+/* Mouse wording only where there is a mouse; touch screens get the short swipe hint. */
+.hint-mouse { display: none; }
+@media (hover: hover) and (pointer: fine) { .hint-mouse { display: block; } .hint-touch { display: none; } }
 /* Keyboard shortcuts: only where there is a real keyboard and mouse. */
 .key-hint { display: none; margin: 0; text-align: center; color: var(--text-muted); font-size: .74rem; }
 .key-hint kbd { display: inline-block; min-width: 1.6em; margin: 0 1px; padding: 1px 5px; border: 1px solid var(--border); border-bottom-width: 2px; border-radius: 6px; background: var(--surface); font: inherit; font-weight: 800; }
@@ -684,7 +688,8 @@ defineExpose({ reshuffle, focus: focusFront })
   .bag-art { width: 64px; height: 64px; }
   .bag-count { font-size: .85rem; }
   .bag-tools { grid-template-columns: 1fr 1fr; }
-  .bag-tools :deep(.app-button) { min-height: 38px; padding-inline: 8px; font-size: .8rem; white-space: normal; line-height: 1.15; }
+  .bag-tools :deep(.app-button) { min-height: 38px; gap: 4px; padding-inline: 8px; font-size: .8rem; white-space: nowrap; }
+  .bag-tools :deep(.app-button svg) { width: 16px; height: 16px; flex: none; }
   .toggle { font-size: .78rem; }
 }
 
@@ -694,7 +699,9 @@ defineExpose({ reshuffle, focus: focusFront })
   .wheel-item.front { width: 68px; height: 68px; }
   .wheel-item .icon { width: 44px; height: 44px; }
   .wheel-item.front .icon { width: 52px; height: 52px; }
-  .chip { font-size: .7rem; gap: 4px; }
+  /* Two by two, so "Xanh dương" / "Xanh lá" stay on one line. */
+  .color-chips { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .chip { min-height: 32px; font-size: .74rem; gap: 5px; white-space: nowrap; }
 }
 
 @media (prefers-reduced-motion: reduce) {

@@ -66,7 +66,7 @@ export function createRealtimeSupervisor<TChange = unknown>({
     try {
       await Promise.resolve(unsubscribe())
       if (!active || token !== generation) return
-      await Promise.resolve(subscribe(onChange, (status, error) => handleStatus(token, status)))
+      await Promise.resolve(subscribe(onChange, status => handleStatus(token, status)))
     } catch {
       if (active && token === generation) await recover(token)
     }

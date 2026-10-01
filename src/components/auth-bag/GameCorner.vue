@@ -28,10 +28,13 @@ const game = ref<InstanceType<typeof BagGame> | null>(null)
 let ticket: string | null = null
 let ticketRequest: Promise<void> | null = null
 
-const tabs = computed(() => [
-  { id: 'year', label: state.value?.year_name ? `Năm ${state.value.year_name} · lớp mình` : 'Năm nay · lớp mình' },
-  { id: 'all', label: 'Mọi thời đại · toàn trường' },
-])
+const tabs = [
+  { id: 'year', label: 'Năm nay' },
+  { id: 'all', label: 'Mọi thời đại' },
+]
+const scopeNote = computed(() => scope.value === 'year'
+  ? `Các bạn trong lớp, năm học ${state.value?.year_name ?? 'hiện tại'}.`
+  : 'Toàn trường, qua các năm học.')
 const pastSeasons = computed(() => (state.value?.seasons ?? []).filter(s => s !== state.value?.current_season))
 const best = computed(() => state.value?.my_all_best ?? 0)
 const rows = computed<BoardRow[]>(() => (state.value?.board ?? []).map((row, index) => ({
@@ -140,6 +143,7 @@ onMounted(() => { void load('year') })
 
     <div v-if="showBoards" class="boards">
       <AppTabs :model-value="scope" :items="tabs" label="Bảng xếp hạng" @update:model-value="id => load(id as 'year' | 'all', undefined)" />
+      <p class="scope-note">{{ scopeNote }}</p>
       <div v-if="scope === 'all' && pastSeasons.length" class="seasons">
         <span>Mùa:</span>
         <button type="button" :class="{ active: !season }" @click="load('all', undefined)">Hiện tại</button>
@@ -161,14 +165,15 @@ onMounted(() => { void load('year') })
 .intro { margin: 0 0 12px; color: var(--text-muted); line-height: 1.5; }
 .summary { display: grid; grid-template-columns: auto auto 1fr; gap: 10px 22px; align-items: center; }
 .summary > div { display: grid; }
-.summary small { color: var(--text-muted); font-size: .78rem; }
-.summary b { font-size: 1.3rem; }
+.summary > div small { color: var(--text-muted); font-size: .78rem; }
+.summary > div b { font-size: 1.3rem; }
 .toggle { display: flex; gap: 10px; align-items: flex-start; justify-self: end; cursor: pointer; }
 .toggle input { margin-top: 4px; }
 .toggle span { display: grid; }
 .toggle small { color: var(--text-muted); font-size: .8rem; }
 .actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
 .boards { margin-top: 14px; }
+.scope-note { margin: 8px 0 0; color: var(--text-muted); font-size: .82rem; }
 .seasons { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 10px; font-size: .82rem; color: var(--text-muted); }
 .seasons button { padding: 3px 10px; border: 1px solid var(--border); border-radius: 999px; background: var(--surface); color: var(--text); font: inherit; cursor: pointer; }
 .seasons button.active { border-color: var(--color-primary); color: var(--color-primary); font-weight: 800; }

@@ -58,5 +58,16 @@ watch(() => props.weeks, weeks => {
 .modes button { min-height: 34px; padding: 0 12px; border: 1px solid transparent; border-radius: 9px; background: transparent; color: var(--text-muted); font: inherit; font-weight: 800; cursor: pointer; }
 .modes button.active { background: var(--surface); border-color: var(--border); color: var(--color-primary); }
 .modes button:disabled { opacity: .45; cursor: not-allowed; }
-select { min-height: 38px; }
+select {
+  min-height: 38px;
+  max-width: 100%;
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-weight: 700;
+}
+select:focus-visible { outline: 3px solid color-mix(in srgb, var(--color-primary) 40%, transparent); outline-offset: 2px; }
 </style>
