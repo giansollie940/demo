@@ -29,13 +29,13 @@ import {
   type Correction,
 } from "../features/homework/api";
 import { homeworkTabs, resolveHomeworkTab, useHomeworkViewStore } from "../features/homework/view-context";
+import { awardMonthLabel, awardMonthOptions, currentAwardMonth } from "../features/homework/award-months";
 const view = useHomeworkViewStore();
 const auth = useAuthStore(),
   ctx = useContextStore();
 const assigned = ref<HomeworkContext['classes']>([]);
 const selectedClass = ref('');
 const assignedWeeks = ref<NonNullable<HomeworkContext['weeks']>>([]);
-const weekOptions = computed(() => auth.role === 'teacher' ? assignedWeeks.value.filter(w=>w.school_year_id===assigned.value.find(c=>c.id===selectedClass.value)?.school_year_id).map(w=>({id:w.id,number:w.week_number})) : ctx.weeks);
 const classId = computed(() => auth.role === 'teacher' ? selectedClass.value : auth.currentUser?.classId || ctx.selectedClassId || '');
 let contextRequest = 0;
 async function loadContext() {
@@ -62,6 +62,8 @@ const data = ref<HomeworkData | null>(null),
   message = ref(""),
   subject = ref(""),
   week = ref(ctx.selectedWeekId || ""),
+  // Góc tuyên dương: '' = cả năm học, 'YYYY-MM' = một tháng (theo lúc bài được duyệt).
+  awardMonth = ref(currentAwardMonth()),
   now = ref(Date.now());
 const timer = setInterval(() => (now.value = Date.now()), 60000);
 let loadId = 0;
@@ -171,6 +173,7 @@ const birds = computed(() =>
     .filter((r) => r.notices > 0)
     .sort((a, b) => a.notice_rank - b.notice_rank),
 );
+const awardMonths = computed(() => awardMonthOptions(data.value?.award_months, awardMonth.value));
 const stars = computed(() =>
   [...(data.value?.leaderboard || [])]
     .filter((r) => r.hearts > 0)
@@ -183,7 +186,7 @@ async function load() {
   error.value = "";
   try {
     const result = await homeworkRpc<HomeworkData>("load", classId.value, {
-      week_id: week.value || null,
+      month: awardMonth.value || null,
     });
     if (id !== loadId) return;
     data.value = result;
@@ -354,8 +357,8 @@ function jump(id: string) {
   );
 }
 watch([classId,role], () => { if(!admin.value)view.scopeClassId=classId.value; },{immediate:true});
-watch(classId, () => { week.value=""; subject.value=""; editSubject(); deleteTarget.value=null; moderation.value=null;activeCorrection.value=null; Object.keys(reviewReasons).forEach(k=>delete reviewReasons[k]); });
-watch([classId, week], () => {
+watch(classId, () => { week.value=""; awardMonth.value=currentAwardMonth(); subject.value=""; editSubject(); deleteTarget.value=null; moderation.value=null;activeCorrection.value=null; Object.keys(reviewReasons).forEach(k=>delete reviewReasons[k]); });
+watch([classId, week, awardMonth], () => {
   loadId++;
   editing.value = false;
   data.value = null;
@@ -521,14 +524,21 @@ onUnmounted(() => {
         <div class="section-heading">
           <h2>🌟 Góc tuyên dương</h2>
           <label
-            >Thời gian<select v-model="week">
-              <option value="">Toàn năm học</option>
-              <option v-for="w in weekOptions" :key="w.id" :value="w.id">
-                Tuần {{ w.number }}
+            >Thời gian<select v-model="awardMonth">
+              <option v-for="m in awardMonths" :key="m" :value="m">
+                {{ awardMonthLabel(m) }}
               </option>
+              <option value="">Toàn năm học</option>
             </select></label
           >
         </div>
+        <p class="award-note">
+          Tính theo thời điểm bài được duyệt{{ awardMonth ? ` trong ${awardMonthLabel(awardMonth).toLowerCase()}` : " trong năm học" }}.
+        </p>
+        <p v-if="personal && awardMonth" class="personal">
+          Của tôi {{ awardMonthLabel(awardMonth).toLowerCase() }}:
+          <strong>{{ personal.notices }} bài</strong> · ❤️ {{ personal.hearts }}
+        </p>
         <p v-if="personal" class="personal">
           Của tôi trong năm học:
           <strong>{{ personal.year_notices }} bài hợp lệ</strong
@@ -546,7 +556,7 @@ onUnmounted(() => {
                 ><span>{{ r.notices }} bài</span>
               </li>
             </ol>
-            <p v-if="!birds.length">Chưa có bài hợp lệ trong thời gian này.</p>
+            <p v-if="!birds.length">Chưa có bài được duyệt trong thời gian này.</p>
           </article>
           <article class="panel star">
             <h3>⭐ Ngôi sao dẫn đường</h3>
@@ -557,7 +567,7 @@ onUnmounted(() => {
                 ><span>❤️ {{ r.hearts }}</span>
               </li>
             </ol>
-            <p v-if="!stars.length">Chưa có tim trong thời gian này.</p>
+            <p v-if="!stars.length">Chưa có tim cho bài được duyệt trong thời gian này.</p>
           </article>
           <article class="panel seed">
             <h3>🌱 Mầm xanh đóng góp</h3>
@@ -1003,6 +1013,14 @@ onUnmounted(() => {
 }
 .seed {
   border-top: 5px solid #81b69b;
+}
+.award-note {
+  margin: 0 0 10px;
+  color: var(--text-muted);
+  font-size: 0.88rem;
+}
+.personal + .personal {
+  margin-top: 8px;
 }
 .personal {
   padding: 16px;
