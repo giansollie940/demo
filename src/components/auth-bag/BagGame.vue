@@ -219,6 +219,8 @@ defineExpose({ start, notify })
   --game-ambient: rgb(104 117 218 / .10);
   --game-track: #a5b3d7;
   --game-card: #ffffff;
+  --game-card-bottom: #f3f6ff;
+  --game-control: #ffffff;
   --game-card-edge: #c3cfe4;
   --game-card-shadow: rgb(45 64 109 / .12);
   --game-label: #26364f;
@@ -226,14 +228,16 @@ defineExpose({ start, notify })
   --game-focus: #6846dc;
 }
 [data-theme='dark'] .stage {
-  --game-panel-start: #171e32;
-  --game-panel-end: #242b43;
-  --game-panel-edge: #465b8d;
-  --game-ambient: rgb(105 126 238 / .13);
-  --game-track: #4e6599;
-  --game-card: #303b52;
-  --game-card-edge: #617399;
-  --game-card-shadow: rgb(0 0 0 / .24);
+  --game-panel-start: #141c31;
+  --game-panel-end: #17213b;
+  --game-panel-edge: #5873ef;
+  --game-ambient: rgb(66 105 255 / .25);
+  --game-track: #4769d9;
+  --game-card: #293e61;
+  --game-card-bottom: #17243d;
+  --game-control: #151d30;
+  --game-card-edge: #5276b0;
+  --game-card-shadow: rgb(0 0 0 / .30);
   --game-label: #f2f5ff;
   --game-hint: #c4cee3;
   --game-focus: #b6a7ff;
@@ -248,36 +252,54 @@ defineExpose({ start, notify })
   border-color: var(--game-panel-edge);
   box-shadow: inset 0 1px 0 rgb(255 255 255 / .08), 0 8px 24px var(--game-card-shadow);
 }
-[data-theme='dark'] .stage :deep(.wheel-area) { --game-accent: var(--theme); }
+[data-theme='dark'] .stage :deep(.wheel-area) {
+  --game-accent: color-mix(in srgb, var(--theme) 84%, white);
+  background:
+    radial-gradient(ellipse at 50% 62%, color-mix(in srgb, var(--theme) 12%, transparent), transparent 46%),
+    radial-gradient(ellipse at 50% 45%, rgb(42 79 171 / .36), transparent 72%),
+    radial-gradient(ellipse at 0 0, var(--game-ambient), transparent 55%),
+    radial-gradient(ellipse at 100% 100%, var(--game-ambient), transparent 50%),
+    linear-gradient(150deg, var(--game-panel-start), var(--game-panel-end));
+  box-shadow: inset 0 0 0 1px rgb(125 149 255 / .22),
+    inset 0 0 22px rgb(72 84 255 / .26), 0 10px 28px var(--game-card-shadow);
+}
 .stage :deep(.chip) {
-  background: var(--game-card);
+  background: var(--game-control);
   color: var(--game-label);
   border: 1px solid var(--game-card-edge);
 }
 .stage :deep(.chip[aria-checked='true']) {
   border-color: var(--game-accent);
-  box-shadow: inset 0 0 0 1px var(--game-accent), 0 3px 12px color-mix(in srgb, var(--theme) 16%, transparent);
+  box-shadow: inset 0 0 0 1px var(--game-accent), 0 4px 16px color-mix(in srgb, var(--theme) 25%, transparent);
 }
 .stage :deep(.wheel-ring) {
-  border: 2px dashed var(--game-track);
+  border: 1px dashed var(--game-track);
   background: radial-gradient(ellipse at center, var(--game-ambient), transparent 72%);
 }
 .stage :deep(.wheel-item) {
-  background: var(--game-card);
+  background: linear-gradient(145deg, var(--game-card), var(--game-card-bottom));
   border-color: var(--game-card-edge);
-  box-shadow: 0 6px 16px var(--game-card-shadow);
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / .10), 0 6px 16px var(--game-card-shadow);
+  /* BagPad sets depth opacity inline. Keep the game cards visible while
+   * preserving depth through their existing size and position. */
+  opacity: calc(1 - var(--lift) * .45) !important;
 }
 .stage :deep(.wheel-item.front) {
+  width: 96px;
+  height: 96px;
+  border-width: 3px;
   border-color: var(--game-accent);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--theme) 18%, transparent),
-    0 10px 24px var(--game-card-shadow), 0 6px 20px color-mix(in srgb, var(--theme) 18%, transparent);
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / .10),
+    0 0 0 1px color-mix(in srgb, var(--game-accent) 55%, transparent),
+    0 12px 28px var(--game-card-shadow), 0 9px 28px color-mix(in srgb, var(--theme) 32%, transparent);
 }
+.stage :deep(.wheel-item.front .icon) { width: 68px; height: 68px; }
 .stage :deep(.wheel-item.front::after) {
   content: '';
   position: absolute;
   left: 24%;
   right: 24%;
-  bottom: -9px;
+  bottom: -15px;
   height: 3px;
   border-radius: 999px;
   background: var(--game-accent);
@@ -285,24 +307,31 @@ defineExpose({ start, notify })
   pointer-events: none;
 }
 .stage :deep(.front-label) {
-  background: var(--game-card);
+  padding: 5px 16px;
+  background: var(--game-control);
   color: var(--game-label);
-  border: 1px solid var(--game-card-edge);
+  border: 1px solid var(--game-panel-edge);
+  font-size: .9rem;
   box-shadow: 0 2px 8px var(--game-card-shadow);
 }
 .stage :deep(.hint), .stage :deep(.key-hint) { color: var(--game-hint); }
 .stage :deep(.key-hint kbd) {
-  background: var(--game-card);
+  background: var(--game-control);
   border-color: var(--game-card-edge);
   color: var(--game-label);
 }
 .stage :deep(.wheel-nav .app-button) {
-  background: var(--game-card);
+  background: var(--game-control);
   border-color: var(--game-card-edge);
   color: var(--game-label);
 }
 .stage :deep(.wheel-item:focus-visible), .stage :deep(.chip:focus-visible) {
   outline-color: var(--game-focus);
+}
+@container (max-width: 420px) {
+  .stage :deep(.wheel-item.front) { width: 72px; height: 72px; }
+  .stage :deep(.wheel-item.front .icon) { width: 52px; height: 52px; }
+  .stage :deep(.front-label) { padding: 4px 12px; font-size: .82rem; }
 }
 .link { justify-self: start; padding: 0; border: 0; background: none; color: var(--color-primary); font: inherit; font-weight: 700; cursor: pointer; }
 .link:hover { text-decoration: underline; }
