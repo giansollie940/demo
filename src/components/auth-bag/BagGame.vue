@@ -208,7 +208,102 @@ defineExpose({ start, notify })
 .timer.low .timer-bar span { background: #e5484d; }
 .timer-text { min-width: 3.2em; font-size: .82rem; font-weight: 800; font-variant-numeric: tabular-nums; color: var(--text-muted); }
 .timer.low .timer-text { color: #e5484d; }
-.stage { margin-top: 18px; }
+/* Game-only palette: BagPad also handles secret sign-in, so keep its shared
+ * appearance and input behaviour intact. The neutral stage lets all four
+ * stationery colours stand out without washing out the instructions. */
+.stage {
+  margin-top: 18px;
+  --game-panel-start: #f6f7ff;
+  --game-panel-end: #eaf0fb;
+  --game-panel-edge: #c6d0e8;
+  --game-ambient: rgb(104 117 218 / .10);
+  --game-track: #a5b3d7;
+  --game-card: #ffffff;
+  --game-card-edge: #c3cfe4;
+  --game-card-shadow: rgb(45 64 109 / .12);
+  --game-label: #26364f;
+  --game-hint: #4c5972;
+  --game-focus: #6846dc;
+}
+[data-theme='dark'] .stage {
+  --game-panel-start: #171e32;
+  --game-panel-end: #242b43;
+  --game-panel-edge: #465b8d;
+  --game-ambient: rgb(105 126 238 / .13);
+  --game-track: #4e6599;
+  --game-card: #303b52;
+  --game-card-edge: #617399;
+  --game-card-shadow: rgb(0 0 0 / .24);
+  --game-label: #f2f5ff;
+  --game-hint: #c4cee3;
+  --game-focus: #b6a7ff;
+}
+.stage :deep(.wheel-area) {
+  --game-accent: var(--theme-deep);
+  background:
+    radial-gradient(ellipse at 50% 64%, color-mix(in srgb, var(--theme) 8%, transparent), transparent 48%),
+    radial-gradient(ellipse at 0 0, var(--game-ambient), transparent 58%),
+    radial-gradient(ellipse at 100% 100%, var(--game-ambient), transparent 52%),
+    linear-gradient(155deg, var(--game-panel-start), var(--game-panel-end));
+  border-color: var(--game-panel-edge);
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / .08), 0 8px 24px var(--game-card-shadow);
+}
+[data-theme='dark'] .stage :deep(.wheel-area) { --game-accent: var(--theme); }
+.stage :deep(.chip) {
+  background: var(--game-card);
+  color: var(--game-label);
+  border: 1px solid var(--game-card-edge);
+}
+.stage :deep(.chip[aria-checked='true']) {
+  border-color: var(--game-accent);
+  box-shadow: inset 0 0 0 1px var(--game-accent), 0 3px 12px color-mix(in srgb, var(--theme) 16%, transparent);
+}
+.stage :deep(.wheel-ring) {
+  border: 2px dashed var(--game-track);
+  background: radial-gradient(ellipse at center, var(--game-ambient), transparent 72%);
+}
+.stage :deep(.wheel-item) {
+  background: var(--game-card);
+  border-color: var(--game-card-edge);
+  box-shadow: 0 6px 16px var(--game-card-shadow);
+}
+.stage :deep(.wheel-item.front) {
+  border-color: var(--game-accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--theme) 18%, transparent),
+    0 10px 24px var(--game-card-shadow), 0 6px 20px color-mix(in srgb, var(--theme) 18%, transparent);
+}
+.stage :deep(.wheel-item.front::after) {
+  content: '';
+  position: absolute;
+  left: 24%;
+  right: 24%;
+  bottom: -9px;
+  height: 3px;
+  border-radius: 999px;
+  background: var(--game-accent);
+  box-shadow: 0 0 12px color-mix(in srgb, var(--theme) 35%, transparent);
+  pointer-events: none;
+}
+.stage :deep(.front-label) {
+  background: var(--game-card);
+  color: var(--game-label);
+  border: 1px solid var(--game-card-edge);
+  box-shadow: 0 2px 8px var(--game-card-shadow);
+}
+.stage :deep(.hint), .stage :deep(.key-hint) { color: var(--game-hint); }
+.stage :deep(.key-hint kbd) {
+  background: var(--game-card);
+  border-color: var(--game-card-edge);
+  color: var(--game-label);
+}
+.stage :deep(.wheel-nav .app-button) {
+  background: var(--game-card);
+  border-color: var(--game-card-edge);
+  color: var(--game-label);
+}
+.stage :deep(.wheel-item:focus-visible), .stage :deep(.chip:focus-visible) {
+  outline-color: var(--game-focus);
+}
 .link { justify-self: start; padding: 0; border: 0; background: none; color: var(--color-primary); font: inherit; font-weight: 700; cursor: pointer; }
 .link:hover { text-decoration: underline; }
 
