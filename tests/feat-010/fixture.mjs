@@ -105,6 +105,11 @@ export async function createFixture({ migrate = true, mutate = null } = {}) {
     if (mutate) text = mutate(text);
     await db.exec(text);
   }
+  // Opt-in runs the existing device/RLS regression suite against the security
+  // upgrade too, while retaining an unpatched baseline for red-green evidence.
+  if (process.env.SEC_REGISTRATION_UPGRADE === '1') {
+    await db.exec(await readFile(new URL('../../supabase/migrations/20261002015022_sec_registration_insert_001.sql', import.meta.url), 'utf8'));
+  }
   return db;
 }
 
