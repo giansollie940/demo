@@ -75,7 +75,7 @@ const wheelItems = computed(() => Array.from({ length: SLOTS }, (_, slot) => {
       '--sin': Math.sin(angle).toFixed(4),
       '--lift': (1 - depth).toFixed(4),
       '--scale': (0.46 + 0.54 * depth).toFixed(4),
-      opacity: (0.3 + 0.7 * depth).toFixed(3),
+      opacity: (0.55 + 0.45 * depth).toFixed(3),
       zIndex: String(Math.round(depth * 20)),
     },
   }
@@ -511,18 +511,28 @@ defineExpose({ reshuffle, focus: focusFront })
 .bag-box { grid-area: box; display: grid; align-content: start; gap: 12px; }
 .bag-actions { grid-area: actions; display: grid; align-content: start; gap: 12px; }
 
-/* ===== Wheel ===== */
+/* Shared by unlock, enrollment and practice. Keep the selected colour even
+ * when the surrounding app is dark; all foregrounds use this light palette. */
 .wheel-area {
+  --wheel-ink: #26364f;
+  --wheel-hint: #46536b;
+  --wheel-edge: color-mix(in srgb, var(--theme) 36%, white);
+  --wheel-shadow: color-mix(in srgb, var(--theme-deep) 18%, transparent);
   grid-area: wheel;
   container-type: inline-size;
   display: grid;
   gap: 10px;
   padding: 14px;
   border-radius: 22px;
+  color: var(--wheel-ink);
   background:
-    radial-gradient(circle at 50% 62%, color-mix(in srgb, var(--theme-soft) 85%, transparent) 0 34%, transparent 70%),
-    linear-gradient(160deg, color-mix(in srgb, var(--theme-soft) 55%, var(--surface)), color-mix(in srgb, var(--theme) 14%, var(--surface)));
-  border: 1px solid color-mix(in srgb, var(--theme) 28%, var(--border));
+    radial-gradient(ellipse at 50% 58%, rgb(255 255 255 / .8), transparent 60%),
+    radial-gradient(ellipse at 100% 100%, color-mix(in srgb, var(--theme) 25%, transparent), transparent 65%),
+    linear-gradient(145deg, color-mix(in srgb, var(--theme-soft) 60%, white), var(--theme-soft));
+  border: 1px solid var(--wheel-edge);
+  box-shadow: inset 0 0 0 1px rgb(255 255 255 / .7),
+    inset 0 0 24px color-mix(in srgb, var(--theme) 10%, transparent),
+    0 10px 28px var(--wheel-shadow);
   transition: background 320ms ease, border-color 320ms ease;
 }
 
@@ -534,10 +544,10 @@ defineExpose({ reshuffle, focus: focusFront })
   gap: 6px;
   min-height: 36px;
   padding: 4px 6px;
-  border: 2px solid transparent;
+  border: 2px solid var(--wheel-edge);
   border-radius: 999px;
-  background: color-mix(in srgb, var(--surface) 88%, transparent);
-  color: var(--text);
+  background: #fff;
+  color: var(--wheel-ink);
   font: inherit;
   font-size: .78rem;
   font-weight: 800;
@@ -550,8 +560,8 @@ defineExpose({ reshuffle, focus: focusFront })
 .chip.yellow .dot { background: #f5b400; }
 .chip.green .dot { background: #22a06b; }
 .chip:hover { transform: translateY(-1px); }
-.chip[aria-checked='true'] { border-color: var(--theme); box-shadow: 0 4px 14px color-mix(in srgb, var(--theme) 35%, transparent); }
-.chip:focus-visible { outline: 3px solid var(--color-primary); outline-offset: 2px; }
+.chip[aria-checked='true'] { border-color: var(--theme-deep); box-shadow: 0 4px 14px color-mix(in srgb, var(--theme) 35%, transparent); }
+.chip:focus-visible { outline: 3px solid var(--wheel-ink); outline-offset: 2px; }
 
 .wheel {
   --ring: min(40cqw, 230px);
@@ -570,7 +580,7 @@ defineExpose({ reshuffle, focus: focusFront })
   height: calc(var(--ring) * .62);
   border-radius: 50%;
   transform: translate(-50%, -50%);
-  border: 3px dashed color-mix(in srgb, var(--theme) 45%, transparent);
+  border: 1px dashed color-mix(in srgb, var(--theme-deep) 55%, transparent);
   background: radial-gradient(ellipse at center, color-mix(in srgb, var(--theme) 16%, transparent), transparent 70%);
   pointer-events: none;
 }
@@ -585,10 +595,10 @@ defineExpose({ reshuffle, focus: focusFront })
   display: grid;
   place-items: center;
   padding: 0;
-  border: 2px solid color-mix(in srgb, var(--theme) 30%, var(--border));
+  border: 2px solid var(--wheel-edge);
   border-radius: 22px;
-  background: var(--surface-raised, var(--surface));
-  box-shadow: 0 6px 16px rgb(0 0 0 / .12);
+  background: linear-gradient(145deg, #fff, color-mix(in srgb, var(--theme-soft) 28%, white));
+  box-shadow: inset 0 1px 0 #fff, 0 6px 16px var(--wheel-shadow);
   cursor: pointer;
   touch-action: pan-y;
   -webkit-touch-callout: none;
@@ -600,36 +610,61 @@ defineExpose({ reshuffle, focus: focusFront })
 }
 .wheel-item .icon { width: 58px; height: 58px; pointer-events: none; }
 .wheel-item.front {
-  border-color: var(--theme);
-  box-shadow: 0 0 0 4px color-mix(in srgb, var(--theme) 22%, transparent), 0 12px 26px color-mix(in srgb, var(--theme-deep) 30%, transparent);
+  width: 96px;
+  height: 96px;
+  border: 3px solid var(--theme-deep);
+  box-shadow: inset 0 1px 0 #fff, 0 0 0 4px color-mix(in srgb, var(--theme) 20%, transparent),
+    0 12px 28px var(--wheel-shadow);
   cursor: grab;
 }
+.wheel-item.front .icon { width: 68px; height: 68px; }
+.wheel-item.front::after {
+  content: '';
+  position: absolute;
+  left: 24%;
+  right: 24%;
+  bottom: -15px;
+  height: 3px;
+  border-radius: 999px;
+  background: var(--theme-deep);
+  box-shadow: 0 0 12px color-mix(in srgb, var(--theme) 35%, transparent);
+  pointer-events: none;
+}
 .wheel-item.front:active { cursor: grabbing; }
-.wheel-item:focus-visible { outline: 3px solid var(--color-primary); outline-offset: 3px; }
+.wheel-item:focus-visible { outline: 3px solid var(--wheel-ink); outline-offset: 3px; }
 .front-label {
   position: absolute;
   left: 50%;
   bottom: 2px;
   transform: translateX(-50%);
-  padding: 3px 12px;
+  padding: 5px 16px;
+  border: 1px solid var(--wheel-edge);
   border-radius: 999px;
-  background: color-mix(in srgb, var(--surface) 90%, transparent);
-  color: var(--theme-deep);
-  font-size: .82rem;
+  background: #fff;
+  color: var(--wheel-ink);
+  box-shadow: 0 2px 8px var(--wheel-shadow);
+  font-size: .9rem;
   font-weight: 900;
   white-space: nowrap;
   pointer-events: none;
 }
 
 .wheel-nav { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 8px; }
-.wheel-nav :deep(.app-button) { min-width: 44px; padding-inline: 10px; }
-.hint { text-align: center; color: var(--text-muted); font-size: .78rem; line-height: 1.3; }
+.wheel-nav :deep(.app-button) {
+  min-width: 44px;
+  padding-inline: 10px;
+  background: #fff;
+  border-color: var(--wheel-edge);
+  color: var(--wheel-ink);
+}
+.wheel-nav :deep(.app-button:focus-visible) { outline: 3px solid var(--wheel-ink); outline-offset: 2px; }
+.hint { text-align: center; color: var(--wheel-hint); font-size: .78rem; line-height: 1.3; }
 /* Mouse wording only where there is a mouse; touch screens get the short swipe hint. */
 .hint-mouse { display: none; }
 @media (hover: hover) and (pointer: fine) { .hint-mouse { display: block; } .hint-touch { display: none; } }
 /* Keyboard shortcuts: only where there is a real keyboard and mouse. */
-.key-hint { display: none; margin: 0; text-align: center; color: var(--text-muted); font-size: .74rem; }
-.key-hint kbd { display: inline-block; min-width: 1.6em; margin: 0 1px; padding: 1px 5px; border: 1px solid var(--border); border-bottom-width: 2px; border-radius: 6px; background: var(--surface); font: inherit; font-weight: 800; }
+.key-hint { display: none; margin: 0; text-align: center; color: var(--wheel-hint); font-size: .74rem; }
+.key-hint kbd { display: inline-block; min-width: 1.6em; margin: 0 1px; padding: 1px 5px; border: 1px solid var(--wheel-edge); border-bottom-width: 2px; border-radius: 6px; background: #fff; color: var(--wheel-ink); font: inherit; font-weight: 800; }
 @media (hover: hover) and (pointer: fine) { .key-hint { display: block; } }
 
 /* ===== Bag ===== */
@@ -696,7 +731,8 @@ defineExpose({ reshuffle, focus: focusFront })
 @container (max-width: 420px) {
   .wheel { --ring: 41cqw; height: 200px; }
   .wheel-item { width: 60px; height: 60px; border-radius: 18px; }
-  .wheel-item.front { width: 68px; height: 68px; }
+  .wheel-item.front { width: 72px; height: 72px; }
+  .front-label { padding: 4px 12px; font-size: .82rem; }
   .wheel-item .icon { width: 44px; height: 44px; }
   .wheel-item.front .icon { width: 52px; height: 52px; }
   /* Two by two, so "Xanh dương" / "Xanh lá" stay on one line. */
