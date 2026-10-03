@@ -44,11 +44,11 @@ describe('sequence identity (BR-002/003, EC-001, AC-002)', () => {
 })
 
 describe('secret policy (§8)', () => {
-  test('accepts a varied 10–20 item sequence', () => {
+  test('accepts a varied 8–20 item sequence', () => {
     expect(checkPolicy(base)).toBeNull()
   })
   test('rejects too short, too long, unknown, single item, short repeats and the guide sample', () => {
-    expect(checkPolicy(base.slice(0, 9))).toBe('too-short')
+    expect(checkPolicy(base.slice(0, 7))).toBe('too-short')
     expect(checkPolicy([...base, ...base])).toBeNull() // 20 items is the maximum
     expect(checkPolicy([...base, ...base, 'pen_blue'])).toBe('too-long')
     expect(checkPolicy([...base.slice(0, 9), 'pencil_purple'])).toBe('unknown-item')

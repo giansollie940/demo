@@ -23,7 +23,7 @@ Chuỗi dụng cụ là một credential thứ hai: server chỉ lưu bcrypt (co
 
 ## Luồng
 
-- **Thiết lập, đổi:** Cài đặt → nhập mật khẩu hiện tại → tạo chuỗi 10–20 món → nhập lại → lưu.
+- **Thiết lập, đổi:** Cài đặt → nhập mật khẩu hiện tại → tạo chuỗi 8–20 món → nhập lại → lưu.
   Nếu quá 5 phút kể từ lúc nhập mật khẩu, app hỏi lại mật khẩu rồi lưu chuỗi đã xác nhận.
 - **Tắt:** Cài đặt → Tắt → nhập mật khẩu.
 - **Đăng nhập:** trang đăng nhập → "Hành trang tự học" → mã đăng nhập và chuỗi → phiên Supabase bình thường.

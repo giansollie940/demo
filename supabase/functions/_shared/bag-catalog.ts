@@ -9,7 +9,7 @@ const IDS = KINDS.flatMap(kind => COLORS.map(color => `${kind}_${color}`))
 export const CATALOG_SIZE = IDS.length
 const CODE = new Map(IDS.map((id, code) => [id, code]))
 
-export const MIN_ITEMS = 10
+export const MIN_ITEMS = 8
 export const MAX_ITEMS = 20
 const SAMPLE = ["pencil_red", "notebook_blue", "pencil_red", "ruler_yellow"]
 

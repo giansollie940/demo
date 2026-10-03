@@ -41,7 +41,7 @@ function requestLogout(){profileOpen.value=false;emit('logout')}
       <div v-else-if="!isHomework" class="school-year-bubble static-year"><span>Năm học</span><b>{{ context.selectedSchoolYear?.name||state?.settings.schoolYear||'—' }}</b></div>
     </div>
     <div class="context-controls">
-      <HomeworkInbox v-if="auth.currentUser"/>
+      <HomeworkInbox v-if="auth.currentUser && !isAdmin"/>
       <label v-if="isTeacher&&!isHomework" class="compact control-bubble"><span>Lớp</span><select :value="context.selectedClassId??''" @change="changeClass"><option v-for="item in context.classes" :key="item.id" :value="item.id">{{ item.code }}{{ item.name&&item.name!==item.code?` · ${item.name}`:'' }}</option></select></label>
       <label v-if="!isAdmin&&!isHomework" class="compact control-bubble"><span>Tuần</span><select :value="context.selectedWeekId??''" @change="changeWeek"><option v-for="item in context.weeks" :key="item.id" :value="item.id">Tuần {{ item.number }}</option></select></label>
       <IconButton class="theme-bubble" label="Đổi giao diện" @click="preferences.toggleTheme"><Sun v-if="preferences.resolvedTheme==='dark'"/><Moon v-else/></IconButton>

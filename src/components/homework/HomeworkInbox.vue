@@ -23,10 +23,11 @@ const classId = computed(
     "",
 );
 const count = computed(() => items.value.filter((n) => !n.is_read).length);
+const enabled = computed(() => !!auth.currentUser && auth.currentUser.role !== "admin");
 let sequence = 0;
 async function refresh() {
   const id = ++sequence;
-  if (!classId.value || !auth.currentUser) {
+  if (!classId.value || !enabled.value) {
     items.value = [];
     return;
   }
@@ -54,7 +55,7 @@ async function visit(n: HomeworkNotification) {
   }
 }
 watch(
-  [classId, () => auth.currentUser?.id, () => view.refreshVersion],
+  [classId, () => auth.currentUser?.id, () => auth.currentUser?.role, () => view.refreshVersion],
   () => {
     items.value = []; open.value=false; error.value="";
     void refresh();
@@ -70,7 +71,7 @@ onUnmounted(() => {
 });
 </script>
 <template>
-  <div class="homework-inbox">
+  <div v-if="enabled" class="homework-inbox">
     <button
       class="bell"
       :aria-expanded="open"
