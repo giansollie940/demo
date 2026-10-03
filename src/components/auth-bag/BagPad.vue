@@ -511,9 +511,14 @@ defineExpose({ reshuffle, focus: focusFront })
 .bag-box { grid-area: box; display: grid; align-content: start; gap: 12px; }
 .bag-actions { grid-area: actions; display: grid; align-content: start; gap: 12px; }
 
-/* Shared by unlock, enrollment and practice. Keep the selected colour even
- * when the surrounding app is dark; all foregrounds use this light palette. */
+/* Shared by unlock, enrollment and practice. Both themes retain the selected
+ * colour; dark mode uses a subdued stage and brighter text and selection. */
 .wheel-area {
+  --wheel-control: #fff;
+  --wheel-card-top: #fff;
+  --wheel-card-bottom: color-mix(in srgb, var(--theme-soft) 28%, white);
+  --wheel-highlight: #fff;
+  --wheel-accent: var(--theme-deep);
   --wheel-ink: #26364f;
   --wheel-hint: #46536b;
   --wheel-edge: color-mix(in srgb, var(--theme) 36%, white);
@@ -536,6 +541,26 @@ defineExpose({ reshuffle, focus: focusFront })
   transition: background 320ms ease, border-color 320ms ease;
 }
 
+/* The attribute is on the app root, outside this scoped component. */
+[data-theme='dark'] .wheel-area {
+  --wheel-control: color-mix(in srgb, var(--theme) 12%, #18202e);
+  --wheel-card-top: color-mix(in srgb, var(--theme-soft) 16%, #243247);
+  --wheel-card-bottom: color-mix(in srgb, var(--theme-soft) 8%, #1a2536);
+  --wheel-highlight: rgb(255 255 255 / .14);
+  --wheel-accent: color-mix(in srgb, var(--theme) 62%, white);
+  --wheel-ink: #f2f5fa;
+  --wheel-hint: #d4ddea;
+  --wheel-edge: color-mix(in srgb, var(--theme) 42%, #44516a);
+  --wheel-shadow: rgb(0 0 0 / .28);
+  background:
+    radial-gradient(ellipse at 50% 58%, color-mix(in srgb, var(--theme) 18%, transparent), transparent 60%),
+    radial-gradient(ellipse at 100% 100%, color-mix(in srgb, var(--theme) 12%, transparent), transparent 65%),
+    linear-gradient(145deg, color-mix(in srgb, var(--theme) 19%, #151b29), color-mix(in srgb, var(--theme) 30%, #18202e));
+  box-shadow: inset 0 0 0 1px rgb(255 255 255 / .06),
+    inset 0 0 24px color-mix(in srgb, var(--theme) 8%, transparent),
+    0 10px 28px var(--wheel-shadow);
+}
+
 .color-chips { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
 .chip {
   display: inline-flex;
@@ -546,7 +571,7 @@ defineExpose({ reshuffle, focus: focusFront })
   padding: 4px 6px;
   border: 2px solid var(--wheel-edge);
   border-radius: 999px;
-  background: #fff;
+  background: var(--wheel-control);
   color: var(--wheel-ink);
   font: inherit;
   font-size: .78rem;
@@ -560,7 +585,7 @@ defineExpose({ reshuffle, focus: focusFront })
 .chip.yellow .dot { background: #f5b400; }
 .chip.green .dot { background: #22a06b; }
 .chip:hover { transform: translateY(-1px); }
-.chip[aria-checked='true'] { border-color: var(--theme-deep); box-shadow: 0 4px 14px color-mix(in srgb, var(--theme) 35%, transparent); }
+.chip[aria-checked='true'] { border-color: var(--wheel-accent); box-shadow: 0 4px 14px color-mix(in srgb, var(--theme) 35%, transparent); }
 .chip:focus-visible { outline: 3px solid var(--wheel-ink); outline-offset: 2px; }
 
 .wheel {
@@ -580,7 +605,7 @@ defineExpose({ reshuffle, focus: focusFront })
   height: calc(var(--ring) * .62);
   border-radius: 50%;
   transform: translate(-50%, -50%);
-  border: 1px dashed color-mix(in srgb, var(--theme-deep) 55%, transparent);
+  border: 1px dashed color-mix(in srgb, var(--wheel-accent) 55%, transparent);
   background: radial-gradient(ellipse at center, color-mix(in srgb, var(--theme) 16%, transparent), transparent 70%);
   pointer-events: none;
 }
@@ -597,8 +622,8 @@ defineExpose({ reshuffle, focus: focusFront })
   padding: 0;
   border: 2px solid var(--wheel-edge);
   border-radius: 22px;
-  background: linear-gradient(145deg, #fff, color-mix(in srgb, var(--theme-soft) 28%, white));
-  box-shadow: inset 0 1px 0 #fff, 0 6px 16px var(--wheel-shadow);
+  background: linear-gradient(145deg, var(--wheel-card-top), var(--wheel-card-bottom));
+  box-shadow: inset 0 1px 0 var(--wheel-highlight), 0 6px 16px var(--wheel-shadow);
   cursor: pointer;
   touch-action: pan-y;
   -webkit-touch-callout: none;
@@ -612,8 +637,8 @@ defineExpose({ reshuffle, focus: focusFront })
 .wheel-item.front {
   width: 96px;
   height: 96px;
-  border: 3px solid var(--theme-deep);
-  box-shadow: inset 0 1px 0 #fff, 0 0 0 4px color-mix(in srgb, var(--theme) 20%, transparent),
+  border: 3px solid var(--wheel-accent);
+  box-shadow: inset 0 1px 0 var(--wheel-highlight), 0 0 0 4px color-mix(in srgb, var(--theme) 20%, transparent),
     0 12px 28px var(--wheel-shadow);
   cursor: grab;
 }
@@ -626,7 +651,7 @@ defineExpose({ reshuffle, focus: focusFront })
   bottom: -15px;
   height: 3px;
   border-radius: 999px;
-  background: var(--theme-deep);
+  background: var(--wheel-accent);
   box-shadow: 0 0 12px color-mix(in srgb, var(--theme) 35%, transparent);
   pointer-events: none;
 }
@@ -640,7 +665,7 @@ defineExpose({ reshuffle, focus: focusFront })
   padding: 5px 16px;
   border: 1px solid var(--wheel-edge);
   border-radius: 999px;
-  background: #fff;
+  background: var(--wheel-control);
   color: var(--wheel-ink);
   box-shadow: 0 2px 8px var(--wheel-shadow);
   font-size: .9rem;
@@ -653,7 +678,7 @@ defineExpose({ reshuffle, focus: focusFront })
 .wheel-nav :deep(.app-button) {
   min-width: 44px;
   padding-inline: 10px;
-  background: #fff;
+  background: var(--wheel-control);
   border-color: var(--wheel-edge);
   color: var(--wheel-ink);
 }
@@ -664,7 +689,7 @@ defineExpose({ reshuffle, focus: focusFront })
 @media (hover: hover) and (pointer: fine) { .hint-mouse { display: block; } .hint-touch { display: none; } }
 /* Keyboard shortcuts: only where there is a real keyboard and mouse. */
 .key-hint { display: none; margin: 0; text-align: center; color: var(--wheel-hint); font-size: .74rem; }
-.key-hint kbd { display: inline-block; min-width: 1.6em; margin: 0 1px; padding: 1px 5px; border: 1px solid var(--wheel-edge); border-bottom-width: 2px; border-radius: 6px; background: #fff; color: var(--wheel-ink); font: inherit; font-weight: 800; }
+.key-hint kbd { display: inline-block; min-width: 1.6em; margin: 0 1px; padding: 1px 5px; border: 1px solid var(--wheel-edge); border-bottom-width: 2px; border-radius: 6px; background: var(--wheel-control); color: var(--wheel-ink); font: inherit; font-weight: 800; }
 @media (hover: hover) and (pointer: fine) { .key-hint { display: block; } }
 
 /* ===== Bag ===== */
