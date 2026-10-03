@@ -1,6 +1,6 @@
 import { CATALOG, CATALOG_VERSION, itemById } from './catalog'
 
-export const MIN_ITEMS = 10
+export const MIN_ITEMS = 8
 export const MAX_ITEMS = 20
 
 /** The sample sequence shown in guidance; it must never be accepted as a real secret. */

@@ -15,6 +15,18 @@ describe('server catalogue matches the browser one', () => {
     expect([server.MIN_ITEMS, server.MAX_ITEMS]).toEqual([MIN_ITEMS, MAX_ITEMS])
   })
 
+  test('accepts 8 and 9 items, rejects 7, and preserves existing 10–20 item encoding', () => {
+    for (const size of [8, 9, 10, 20]) {
+      const items = [...base, ...base].slice(0, size)
+      expect(checkPolicy(items)).toBeNull()
+      expect(server.toInputHex({ version: 1, items })).toBe(hex(toVerifierInput(items)))
+    }
+    expect(checkPolicy(base.slice(0, 7))).toBe('too-short')
+    expect(server.toInputHex({ version: 1, items: base.slice(0, 7) })).toBeNull()
+    expect(server.policyIssue(Array(8).fill('pen_red'))).toBe('single-item')
+    expect(checkPolicy(Array(8).fill('pen_red'))).toBe('single-item')
+  })
+
   test('every item encodes to the same verifier byte', () => {
     for (const item of CATALOG) {
       const sequence = Array.from({ length: MIN_ITEMS }, (_, i) => (i === 0 ? item.id : base[i]!))
@@ -30,7 +42,7 @@ describe('server catalogue matches the browser one', () => {
   test('malformed payloads are rejected', () => {
     expect(server.toInputHex({ version: 2, items: base })).toBeNull()
     expect(server.toInputHex({ version: '1', items: base })).toBeNull()
-    expect(server.toInputHex({ version: 1, items: base.slice(0, 9) })).toBeNull()
+    expect(server.toInputHex({ version: 1, items: base.slice(0, 7) })).toBeNull()
     expect(server.toInputHex({ version: 1, items: [...base, ...base, 'pen_red'] })).toBeNull()
     expect(server.toInputHex({ version: 1, items: [...base.slice(0, 9), 'laptop_red'] })).toBeNull()
     expect(server.toInputHex({ version: 1, items: [...base.slice(0, 9), 7] })).toBeNull()

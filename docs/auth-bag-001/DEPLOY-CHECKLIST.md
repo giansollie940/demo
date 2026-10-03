@@ -187,7 +187,7 @@ commit;
 > 🎒 **Mới: "Hành trang tự học"**. Một cách vào lớp vui hơn, không cần gõ mật khẩu.
 >
 > 1. Đăng nhập như bình thường → **Cài đặt** → **Hành trang tự học** → **Thiết lập**.
-> 2. Chọn 10–20 dụng cụ học tập và thứ tự xếp vào cặp *của riêng em* (một món có thể chọn nhiều lần), rồi xếp lại một lần nữa để xác nhận.
+> 2. Chọn 8–20 dụng cụ học tập và thứ tự xếp vào cặp *của riêng em* (một món có thể chọn nhiều lần), rồi xếp lại một lần nữa để xác nhận.
 > 3. Lần sau, ở trang đăng nhập bấm **Hành trang tự học**, gõ mã đăng nhập, xếp đúng cặp và **Bắt đầu tự học**.
 >
 > Lưu ý:
