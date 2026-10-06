@@ -176,10 +176,6 @@ async function resetToDefault() {
         <h1>Thời khóa biểu</h1>
         <p>{{ context.selectedClass?.name || context.selectedClass?.code || 'Lớp đang chọn' }} · Tuần {{ weekNumber }}</p>
       </div></div>
-      <div v-if="!readOnly" class="header-actions">
-        <AppButton variant="secondary" :disabled="!isDirty || status === 'saving'" @click="cancelChanges"><RotateCcw /> Hủy thay đổi</AppButton>
-        <AppButton :loading="status === 'saving'" :disabled="!isDirty || (mode === 'week' && !canEditWeek)" @click="save"><Save /> Lưu TKB</AppButton>
-      </div>
     </header>
 
     <AppCard padding="lg" class="mode-card">
@@ -189,7 +185,6 @@ async function resetToDefault() {
       <p v-else class="mode-help">Chỉ áp dụng cho Tuần {{ weekNumber }} và không ảnh hưởng tuần khác.</p>
     </AppCard>
 
-    <InlineStatus :state="status" :message="statusMessage" />
     <InlineStatus v-if="serverChanged" state="server-changed" message="Dữ liệu trên máy chủ vừa thay đổi."><div class="conflict-actions"><button type="button" @click="loadServerVersion">Tải bản mới</button><button type="button" @click="keepDraft">Tiếp tục bản đang chỉnh</button></div></InlineStatus>
 
     <AppCard v-if="!readOnly && mode === 'week' && !canEditWeek" padding="lg" class="inherit-card">
@@ -217,6 +212,17 @@ async function resetToDefault() {
       </div>
     </AppCard>
 
+    <footer v-if="!readOnly" class="schedule-save-bar" aria-label="Lưu thay đổi thời khóa biểu">
+      <div class="save-feedback">
+        <InlineStatus :state="status" :message="statusMessage" />
+        <p v-if="status === 'idle'" role="status">{{ isDirty ? 'Có thay đổi chưa lưu.' : 'Chưa có thay đổi cần lưu.' }}</p>
+      </div>
+      <div class="save-actions">
+        <AppButton variant="secondary" :disabled="!isDirty || status === 'saving'" @click="cancelChanges"><RotateCcw /> Hủy thay đổi</AppButton>
+        <AppButton :loading="status === 'saving'" :disabled="!isDirty || (mode === 'week' && !canEditWeek)" @click="save"><Save /> Lưu TKB</AppButton>
+      </div>
+    </footer>
+
     <ConfirmDialog
       :open="confirmReset"
       title="Xóa TKB riêng?"
@@ -232,7 +238,10 @@ async function resetToDefault() {
 </template>
 
 <style scoped>
-.schedule-page{max-width:1500px;margin:0 auto}.schedule-header{display:flex;align-items:flex-start;justify-content:space-between;gap:20px}.schedule-header h1{font-size:clamp(2rem,4vw,3rem);margin:8px 0}.schedule-header p,.mode-help,.grid-heading p,.inherit-card p{margin:0;color:var(--text-muted)}.page-context{display:flex;align-items:center;gap:8px;color:var(--color-primary);font-size:.86rem;font-weight:800}.page-context svg{width:18px}.header-actions{display:flex;gap:8px;flex-wrap:wrap}.header-actions :deep(svg){width:18px}.mode-card{display:flex;align-items:center;justify-content:space-between;gap:16px}.mode-help{max-width:64ch}.inherit-card{display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;gap:16px;background:linear-gradient(135deg,color-mix(in srgb,var(--color-primary) 10%,var(--surface)),var(--surface))}.inherit-card>svg{width:38px;color:var(--color-primary)}.inherit-card h2,.grid-heading h2{margin:0 0 4px}.grid-heading{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;margin-bottom:20px}.grid-heading>strong{padding:8px 12px;border-radius:999px;background:var(--surface-soft);color:var(--color-primary)}.schedule-summary,.difference-summary{display:flex;gap:8px;flex-wrap:wrap;margin-top:20px}.schedule-summary span,.difference-summary span,.difference-summary>b{padding:8px 12px;border-radius:10px;background:var(--surface-soft);color:var(--text-muted);font-size:.83rem}.difference-summary>b{color:var(--text)}.reset-row{display:flex;justify-content:flex-end;margin-top:20px;padding-top:20px;border-top:1px solid var(--border)}@media(max-width:900px){.schedule-header,.mode-card{align-items:stretch;flex-direction:column}.header-actions{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr)}.inherit-card{grid-template-columns:auto minmax(0,1fr)}.inherit-card :deep(button){grid-column:1/-1}}@media(max-width:520px){.header-actions{grid-template-columns:1fr}.grid-heading{align-items:flex-start;flex-direction:column}.inherit-card{grid-template-columns:1fr}.inherit-card>svg{width:32px}}
+.schedule-page{max-width:1500px;margin:0 auto}.schedule-header{display:flex;align-items:flex-start;justify-content:space-between;gap:20px}.schedule-header h1{font-size:clamp(2rem,4vw,3rem);margin:8px 0}.schedule-header p,.mode-help,.grid-heading p,.inherit-card p{margin:0;color:var(--text-muted)}.page-context{display:flex;align-items:center;gap:8px;color:var(--color-primary);font-size:.86rem;font-weight:800}.page-context svg{width:18px}.mode-card{display:flex;align-items:center;justify-content:space-between;gap:16px}.mode-help{max-width:64ch}.inherit-card{display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;gap:16px;background:linear-gradient(135deg,color-mix(in srgb,var(--color-primary) 10%,var(--surface)),var(--surface))}.inherit-card>svg{width:38px;color:var(--color-primary)}.inherit-card h2,.grid-heading h2{margin:0 0 4px}.grid-heading{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;margin-bottom:20px}.grid-heading>strong{padding:8px 12px;border-radius:999px;background:var(--surface-soft);color:var(--color-primary)}.schedule-summary,.difference-summary{display:flex;gap:8px;flex-wrap:wrap;margin-top:20px}.schedule-summary span,.difference-summary span,.difference-summary>b{padding:8px 12px;border-radius:10px;background:var(--surface-soft);color:var(--text-muted);font-size:.83rem}.difference-summary>b{color:var(--text)}.reset-row{display:flex;justify-content:flex-end;margin-top:20px;padding-top:20px;border-top:1px solid var(--border)}@media(max-width:900px){.schedule-header,.mode-card{align-items:stretch;flex-direction:column}.inherit-card{grid-template-columns:auto minmax(0,1fr)}.inherit-card :deep(button){grid-column:1/-1}}@media(max-width:520px){.grid-heading{align-items:flex-start;flex-direction:column}.inherit-card{grid-template-columns:1fr}.inherit-card>svg{width:32px}}
 .conflict-actions{display:flex;gap:8px;margin-left:auto}.conflict-actions button{min-height:44px;border:1px solid currentColor;border-radius:8px;padding:8px;background:transparent;color:inherit;font-weight:800;white-space:nowrap}
 .schedule-tabs{display:flex;gap:8px;flex-wrap:wrap}.schedule-tabs button{display:flex;align-items:center;gap:8px;min-height:44px;padding:10px 16px;border:1px solid var(--border);border-radius:12px;background:var(--surface);color:var(--text);font-weight:700;cursor:pointer}.schedule-tabs button[aria-current="page"]{background:var(--color-primary);border-color:var(--color-primary);color:white}.schedule-tabs svg{width:20px;height:20px}
+.schedule-save-bar{position:sticky;bottom:calc(12px + env(safe-area-inset-bottom,0px));z-index:5;display:flex;align-items:center;justify-content:space-between;gap:16px;padding:12px 16px;border:1px solid var(--border);border-radius:16px;background:var(--surface-raised);box-shadow:0 -4px 24px rgb(54 44 104 / .1)}
+.save-feedback{flex:1;min-width:0}.save-feedback p{margin:0;color:var(--text-muted);font-size:.9rem;font-weight:700}.save-feedback :deep(.inline-status){padding:0;min-height:32px;border:0;background:transparent}.save-actions{display:flex;gap:8px;flex-shrink:0}.save-actions :deep(svg){width:18px;height:18px}.schedule-page :deep(.slot-button),.schedule-page :deep(.mobile-period){scroll-margin-bottom:150px}
+@media(max-width:640px){.schedule-save-bar{flex-direction:column;align-items:stretch;gap:8px;padding:10px 12px;bottom:calc(8px + env(safe-area-inset-bottom,0px))}.save-actions{display:grid;grid-template-columns:repeat(2,minmax(0,1fr))}.save-actions :deep(.app-button){min-width:0;padding:10px 8px;font-size:.85rem;white-space:normal}.save-feedback p{font-size:.82rem}}
 </style>
