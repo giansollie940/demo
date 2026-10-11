@@ -44,9 +44,13 @@ const OFFSET_DAYS = { past: -21, prev: -14, cur: -7, next: 7, later: 14, far: 21
 
 function isoDate(d) { return d.toISOString().slice(0, 10); }
 
-/** Monday of the current ISO week, in UTC terms. */
+/**
+ * Monday of the current week on the Vietnam calendar (UTC+7, no DST), returned as that date at
+ * 00:00Z. Deadlines are judged in Asia/Ho_Chi_Minh, so a UTC calendar would put "next week" in
+ * the current Vietnamese week between Sunday 17:00Z and midnight UTC.
+ */
 function thisMonday() {
-  const d = new Date();
+  const d = new Date(Date.now() + 7 * 3600 * 1000);
   d.setUTCHours(0, 0, 0, 0);
   const dow = (d.getUTCDay() + 6) % 7; // 0 = Monday
   d.setUTCDate(d.getUTCDate() - dow);
