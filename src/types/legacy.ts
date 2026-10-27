@@ -1,3 +1,4 @@
+import type { LateTrackingData } from '../features/tracking/late-model'
 export type UserRole = 'student' | 'monitor' | 'teacher' | 'admin'
 
 export interface CurrentUser {
@@ -292,6 +293,11 @@ export interface LegacySupabaseService {
   prepareRegistrationAiRereview(registrationId: string): Promise<boolean>
   deleteRegistration(registrationId: string): Promise<boolean>
   markNotificationsRead(ids: string[]): Promise<void>
+  loadLateTracking(classId: string | null, schoolYearId: string | null): Promise<LateTrackingData>
+  recordLateRegistration(input: { studentId: string; weekId: string; dow: number; period: number }): Promise<LateRecordResult>
+  revokeLateRegistration(lateId: string): Promise<boolean>
+  resolveConductCase(caseId: string, note?: string): Promise<boolean>
+  setLateConductThreshold(classId: string, threshold: number): Promise<number>
   resetSnapshot(state: LegacyState): void
   setActiveClassId(userId: string, classId: string): void
   getDailyQuote(): Promise<unknown>
@@ -300,4 +306,11 @@ export interface LegacySupabaseService {
     onStatus?: (status: string, error?: unknown) => void,
   ): Promise<unknown> | unknown
   unsubscribeRealtime(): Promise<void> | void
+}
+
+export interface LateRecordResult {
+  lateId: string
+  pending: number
+  threshold: number
+  conductCaseId: string | null
 }

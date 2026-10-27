@@ -32,7 +32,8 @@ const props = withDefaults(defineProps<{
 })
 
 const emit = defineEmits<{ confirm: []; cancel: []; 'update:modelValue': [value: string] }>()
-const confirmButton = ref<HTMLButtonElement | null>(null)
+// Ref trỏ tới component AppButton, không phải thẻ <button>; focus phần tử gốc của nó.
+const confirmButton = ref<{ $el?: Element } | null>(null)
 const field = ref<HTMLInputElement | HTMLTextAreaElement | null>(null)
 let returnFocus: HTMLElement | null = null
 
@@ -63,7 +64,7 @@ watch(() => props.open, async open => {
       field.value.focus()
       field.value.select?.()
     } else {
-      confirmButton.value?.focus()
+      ;(confirmButton.value?.$el as HTMLElement | undefined)?.focus()
     }
   } else {
     returnFocus?.focus()
