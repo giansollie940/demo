@@ -1316,6 +1316,110 @@
 
   function resetSnapshot(state){ snapshot=deepClone(state); }
 
+  // FEAT-LATE-001: đăng ký bù bằng miệng (trễ hạn) và lần cải thiện ý thức.
+  // Mọi thao tác ghi đi qua RPC; server tự đếm và tạo lần cải thiện ý thức.
+  const EMPTY_LATE_TRACKING=Object.freeze({available:false,threshold:3,lates:[],cases:[]});
+
+  function lateTrackingMissing(error){
+    const code=String(error?.code||"");
+    const message=String(error?.message||"");
+    return ["42P01","42703","PGRST202","PGRST204","PGRST205"].includes(code)
+      ||/(late_registrations|conduct_cases|late_conduct_threshold).*(does not exist|schema cache|could not find)/i.test(message);
+  }
+
+  function lateTrackingError(error,fallback){
+    // Các hàm RPC báo lỗi bằng câu tiếng Việt dành cho người dùng, kèm mã quen thuộc.
+    if(["42501","P0002","22023","23505"].includes(String(error?.code||""))&&error?.message){
+      return new Error(String(error.message));
+    }
+    if(lateTrackingMissing(error)){
+      return new Error("Máy chủ chưa được cập nhật cho tính năng ghi nhận trễ. Hãy báo giáo viên/quản trị.");
+    }
+    return new Error(fallback);
+  }
+
+  async function loadLateTracking(classId,schoolYearId){
+    if(!isUuid(classId)||!isUuid(schoolYearId))return {...EMPTY_LATE_TRACKING};
+    const sb=requireClient();
+    const [latesRes,casesRes,settingsRes]=await Promise.all([
+      sb.from("late_registrations")
+        .select("id,student_id,week_id,weekday,period_number,recorded_at,recorded_by,conduct_case_id")
+        .eq("class_id",classId).eq("school_year_id",schoolYearId).is("revoked_at",null)
+        .order("recorded_at",{ascending:true}),
+      sb.from("conduct_cases")
+        .select("id,student_id,threshold,created_at,resolved_at,resolved_by,resolution_note")
+        .eq("class_id",classId).eq("school_year_id",schoolYearId)
+        .order("created_at",{ascending:true}),
+      sb.from("class_settings").select("late_conduct_threshold").eq("class_id",classId).maybeSingle()
+    ]);
+    for(const res of [latesRes,casesRes,settingsRes]){
+      if(!res.error)continue;
+      if(lateTrackingMissing(res.error))return {...EMPTY_LATE_TRACKING};
+      throw lateTrackingError(res.error,"Không tải được danh sách đăng ký trễ.");
+    }
+    const threshold=Number(settingsRes.data?.late_conduct_threshold);
+    return {
+      available:true,
+      threshold:Number.isInteger(threshold)&&threshold>=1?threshold:3,
+      lates:(latesRes.data||[]).map(row=>({
+        id:row.id,studentId:row.student_id,weekId:row.week_id,
+        dow:Number(row.weekday)-1,period:Number(row.period_number),
+        recordedAt:row.recorded_at,recordedBy:row.recorded_by||null,conductCaseId:row.conduct_case_id||null
+      })),
+      cases:(casesRes.data||[]).map(row=>({
+        id:row.id,studentId:row.student_id,threshold:Number(row.threshold),createdAt:row.created_at,
+        resolvedAt:row.resolved_at||null,resolvedBy:row.resolved_by||null,resolutionNote:row.resolution_note||null
+      }))
+    };
+  }
+
+  async function recordLateRegistration({studentId,weekId,dow,period}){
+    if(!isUuid(studentId)||!isUuid(weekId))throw new Error("Học sinh hoặc tuần không hợp lệ.");
+    const weekday=Number(dow)+1,periodNumber=Number(period);
+    if(!Number.isInteger(weekday)||weekday<1||weekday>7)throw new Error("Thứ tự ngày học không hợp lệ.");
+    if(!Number.isInteger(periodNumber)||periodNumber<1||periodNumber>20)throw new Error("Tiết học không hợp lệ.");
+    const sb=requireClient();
+    const {data,error}=await sb.rpc("record_late_registration",{
+      p_student_id:studentId,p_week_id:weekId,p_weekday:weekday,p_period_number:periodNumber
+    });
+    if(error)throw lateTrackingError(error,"Không ghi nhận được lần trễ.");
+    return {
+      lateId:String(data?.late_id||""),
+      pending:Number(data?.pending||0),
+      threshold:Number(data?.threshold||3),
+      conductCaseId:data?.conduct_case_id?String(data.conduct_case_id):null
+    };
+  }
+
+  async function revokeLateRegistration(lateId){
+    if(!isUuid(lateId))throw new Error("Mã ghi nhận không hợp lệ.");
+    const sb=requireClient();
+    const {data,error}=await sb.rpc("revoke_late_registration",{p_late_id:lateId});
+    if(error)throw lateTrackingError(error,"Không hủy được lần trễ.");
+    return data===true;
+  }
+
+  async function resolveConductCase(caseId,note=""){
+    if(!isUuid(caseId))throw new Error("Mã lần cải thiện ý thức không hợp lệ.");
+    const sb=requireClient();
+    const {data,error}=await sb.rpc("resolve_conduct_case",{p_case_id:caseId,p_note:String(note||"").trim()||null});
+    if(error)throw lateTrackingError(error,"Không cập nhật được lần cải thiện ý thức.");
+    return data===true;
+  }
+
+  async function setLateConductThreshold(classId,threshold){
+    const value=Math.round(Number(threshold));
+    if(!isUuid(classId))throw new Error("Lớp không hợp lệ.");
+    if(!Number.isInteger(value)||value<1||value>20)throw new Error("Số lần trễ phải từ 1 đến 20.");
+    const sb=requireClient();
+    const {data,error}=await sb.from("class_settings")
+      .update({late_conduct_threshold:value,updated_at:new Date().toISOString()})
+      .eq("class_id",classId).select("late_conduct_threshold");
+    if(error)throw lateTrackingError(error,"Không lưu được số lần trễ.");
+    if(!data?.length)throw new Error("Chỉ giáo viên phụ trách lớp mới đổi được số lần trễ.");
+    return Number(data[0].late_conduct_threshold);
+  }
+
   window.SupabaseService=Object.freeze({
     enabled,
     init,
@@ -1355,6 +1459,11 @@
     prepareRegistrationAiRereview,
     deleteRegistration,
     markNotificationsRead,
+    loadLateTracking,
+    recordLateRegistration,
+    revokeLateRegistration,
+    resolveConductCase,
+    setLateConductThreshold,
     subscribeRealtime,
     unsubscribeRealtime,
     dateISOInTimeZone

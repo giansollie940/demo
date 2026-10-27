@@ -7,6 +7,12 @@ import InlineStatus, { type InlineStatusState } from '../components/ui/InlineSta
 import TrackingFilters from '../components/tracking/TrackingFilters.vue'
 import StudentTrackingRow from '../components/tracking/StudentTrackingRow.vue'
 import TrackingQuickReport from '../components/tracking/TrackingQuickReport.vue'
+import LateConductPanel from '../components/tracking/LateConductPanel.vue'
+import type { RowLateState } from '../components/tracking/StudentTrackingRow.vue'
+import { canRecordLate, canRevokeLate, lateForSession, studentLateSummary } from '../features/tracking/late-model'
+import { EMPTY_LATE_TRACKING, useLateTracking } from '../features/tracking/late-queries'
+import { sessionStartMs } from '../features/registrations/registration-model'
+import { useNowTicker } from '../features/shared/useNowTicker'
 import PageArtwork from '../components/ui/PageArtwork.vue'
 import PageBannerArt from '../components/ui/PageBannerArt.vue'
 import { filterTrackingRows, summarizeTrackingSession, trackingFilterCounts, trackingQuickReport, type TrackingFilter, type TrackingSort } from '../features/tracking/tracking-model'
@@ -55,6 +61,38 @@ async function remove(id:string){if(!await appDialog.confirm({title:'Xóa đăng
 async function refreshAfterAi(){if(!classId.value)return;await auth.reload(classId.value,context.selectedSchoolYearId);context.hydrate(auth.legacyState);await weekQuery.refetch()}
 function refreshedRegistration(id:string){return registrations.value.find(item=>item.id===id)??auth.legacyState?.registrations.find(item=>item.id===id)??null}
 function aiOutcomeMessage(row:RegistrationRecord|null){if(!row)return{state:'server-changed' as InlineStatusState,message:'AI đã phản hồi nhưng chưa đọc được trạng thái đăng ký mới.'};if(aiOutcomeMismatch(row))return{state:'error' as InlineStatusState,message:`${aiReviewHistoryLabel(row)}. Kết quả AI chưa được backend áp dụng vào trạng thái đăng ký; đăng ký được giữ trong hàng GV để không bỏ sót.`};if(row.status==='approved'&&row.approvalSource==='ai')return{state:'success' as InlineStatusState,message:'AI đã duyệt đăng ký.'};if(row.status==='needs_revision')return{state:'server-changed' as InlineStatusState,message:'AI yêu cầu học sinh chỉnh sửa đăng ký.'};if(needsTeacherAction(row))return{state:'server-changed' as InlineStatusState,message:'AI đã chuyển đăng ký cho giáo viên xử lý.'};return{state:'success' as InlineStatusState,message:'AI đã xử lý đăng ký.'}}
+// FEAT-LATE-001: đăng ký bù bằng miệng sau khi vào tiết -> ghi một lần trễ.
+const schoolYearId=computed(()=>context.selectedSchoolYearId)
+const lateQuery=useLateTracking(classId,schoolYearId)
+const lateData=computed(()=>lateQuery.data.value??EMPTY_LATE_TRACKING)
+const actorRole=computed(()=>auth.currentUser?.role??null),actorId=computed(()=>auth.currentUser?.id??null)
+const showLate=computed(()=>lateData.value.available&&['monitor','teacher','admin'].includes(actorRole.value??''))
+const nowMs=useNowTicker(30_000)
+const sessionStarted=computed(()=>{const summary=selectedSummary.value;if(!summary||!week.value)return false;const start=sessionStartMs({week:week.value,dow:summary.session.dow,period:summary.session.period,periods:auth.legacyState?.periods??[]});return Number.isFinite(start)&&nowMs.value>=start})
+const lateBusy=ref<string|null>(null)
+function lateStateFor(studentId:string):RowLateState|null{
+  const summary=selectedSummary.value,row=summary?.rows.find(item=>item.user.id===studentId)
+  if(!showLate.value||!summary||!row||!weekId.value)return null
+  const sessionLate=lateForSession(lateData.value.lates,studentId,weekId.value,summary.session)
+  return{summary:studentLateSummary(lateData.value,studentId),sessionLate,canRecord:canRecordLate({actorRole:actorRole.value,actorId:actorId.value,studentId,bucket:row.bucket,started:sessionStarted.value,alreadyRecorded:Boolean(sessionLate)}),canRevoke:Boolean(sessionLate)&&canRevokeLate(sessionLate!,actorRole.value,actorId.value)}
+}
+const studentName=(id:string)=>users.value.find(user=>user.id===id)?.name??'học sinh'
+async function lateRun(key:string,task:()=>Promise<string>){lateBusy.value=key;status.value='saving';statusMessage.value='Đang ghi nhận và đồng bộ với cơ sở dữ liệu…';try{statusMessage.value=await task();status.value='success'}catch(error){status.value='error';statusMessage.value=error instanceof Error?error.message:'Không hoàn tất được thao tác.'}finally{lateBusy.value=null;await lateQuery.refetch()}}
+async function recordLate(studentId:string){
+  const summary=selectedSummary.value;if(!summary||!weekId.value)return
+  await lateRun(studentId,async()=>{const result=await legacyApi.recordLateRegistration({studentId,weekId:weekId.value!,dow:summary.session.dow,period:summary.session.period});return result.conductCaseId?`Đã ghi trễ cho ${studentName(studentId)}. Đủ ${result.threshold} lần: tạo 1 lần cải thiện ý thức.`:`Đã ghi trễ cho ${studentName(studentId)} (${result.pending}/${result.threshold}).`})
+}
+async function revokeLate(lateId:string){
+  const late=lateData.value.lates.find(item=>item.id===lateId);if(!late)return
+  if(!await appDialog.confirm({title:'Hủy ghi trễ',body:`Hủy lần ghi trễ của ${studentName(late.studentId)} ở buổi này? Chỉ dùng khi ghi nhầm.`,confirmLabel:'Hủy ghi trễ',danger:true}))return
+  await lateRun(late.studentId,async()=>{if(!await legacyApi.revokeLateRegistration(lateId))throw new Error('Lần trễ này đã được hủy trước đó.');return`Đã hủy ghi trễ của ${studentName(late.studentId)}.`})
+}
+async function resolveCase(caseId:string,name:string){
+  const note=await appDialog.prompt({title:'Đã chấp hành xử phạt',body:`Xác nhận ${name} đã chấp hành xử phạt cho lần cải thiện ý thức này. Lần này vẫn được lưu trong lịch sử.`,label:'Hình thức xử phạt (không bắt buộc)',placeholder:'Ví dụ: trực nhật 1 buổi',confirmLabel:'Đã chấp hành'})
+  if(note===null)return
+  await lateRun(caseId,async()=>{if(!await legacyApi.resolveConductCase(caseId,note))throw new Error('Lần cải thiện ý thức này đã được xử lý trước đó.');return`Đã ghi nhận ${name} chấp hành xử phạt.`})
+}
+async function saveThreshold(value:number){if(!classId.value)return;await lateRun('threshold',async()=>`Đã lưu: cứ ${await legacyApi.setLateConductThreshold(classId.value!,value)} lần trễ thành 1 lần cải thiện ý thức.`)}
 async function markOldNotificationRead(ids:string[]){if(!ids.length)return;await markHandledRegistrationNotificationsRead(runtime(),ids)}
 async function rerunRegistrationAi(id:string){
   if(!aiEnabled.value||!classId.value)return
@@ -105,6 +143,7 @@ async function rerunSessionAi(){
   <div class="page-stack tracking-page">
     <header class="page-banner tracking-header"><PageBannerArt tone="primary"/><div class="page-head-lead"><PageArtwork name="tracking" tone="primary"/><div><span class="page-context"><UsersRound aria-hidden="true"/>Theo dõi lớp</span><h1>Theo dõi cả lớp</h1><p>Tuần {{ week?.number??'–' }} · chọn một buổi, sau đó bấm trực tiếp vào số liệu để xem đúng nhóm học sinh của buổi đó.</p></div></div><span v-if="weekQuery.isFetching.value" class="syncing"><RefreshCw aria-hidden="true"/>Đang đồng bộ</span></header>
     <InlineStatus :state="status" :message="statusMessage"/>
+    <AppCard v-if="showLate" padding="lg"><LateConductPanel :data="lateData" :users="users" :actor-role="actorRole" :actor-id="actorId" :can-edit-threshold="manager" :busy-key="lateBusy" @resolve="resolveCase" @save-threshold="saveThreshold"/></AppCard>
     <div v-if="weekQuery.isLoading.value&&!summaries.length" class="tracking-skeleton" aria-label="Đang tải dữ liệu"><span v-for="n in 3" :key="n" class="skeleton-shimmer"></span></div>
 
     <AppCard v-else-if="summaries.length" padding="lg" class="tracking-workspace">
@@ -131,8 +170,8 @@ async function rerunSessionAi(){
 
         <div class="report-toolbar"><div><b>Kết quả · {{ label(selectedSummary.session) }}</b><small>{{ quickReportMode?'Báo cáo nhanh theo nhóm đã chọn':'Danh sách chi tiết theo nhóm đã chọn' }}</small></div><TrackingFilters v-model="filter" v-model:query="query" v-model:sort="sort" :counts="counts" :show-filters="false"/></div>
 
-        <TrackingQuickReport v-if="quickReportMode" :rows="quickReportRows" :filter="quickReportFilter" :session-label="label(selectedSummary.session)"/>
-        <div v-else class="student-list"><StudentTrackingRow v-for="row in visibleRows" :key="row.user.id" :row="row" :actions="actionsFor(row)" :can-ai-rereview="canAiRereview(row)" :busy="busyId===row.registration?.id" @ai-rereview="row.registration&&rerunRegistrationAi(row.registration.id)" @approve="row.registration&&approve(row.registration.id)" @revision="row.registration&&revise(row.registration.id)" @comment="row.registration&&comment(row.registration.id)" @delete="row.registration&&remove(row.registration.id)"/><div v-if="!visibleRows.length" class="empty-list">Không có học sinh phù hợp bộ lọc.</div></div>
+        <TrackingQuickReport v-if="quickReportMode" :rows="quickReportRows" :filter="quickReportFilter" :session-label="label(selectedSummary.session)" :late-for="showLate?lateStateFor:null" :late-busy-id="lateBusy" @record-late="recordLate" @revoke-late="revokeLate"/>
+        <div v-else class="student-list"><StudentTrackingRow v-for="row in visibleRows" :key="row.user.id" :row="row" :actions="actionsFor(row)" :can-ai-rereview="canAiRereview(row)" :busy="busyId===row.registration?.id" :late="lateStateFor(row.user.id)" :late-busy="lateBusy===row.user.id" @record-late="recordLate(row.user.id)" @revoke-late="revokeLate" @ai-rereview="row.registration&&rerunRegistrationAi(row.registration.id)" @approve="row.registration&&approve(row.registration.id)" @revision="row.registration&&revise(row.registration.id)" @comment="row.registration&&comment(row.registration.id)" @delete="row.registration&&remove(row.registration.id)"/><div v-if="!visibleRows.length" class="empty-list">Không có học sinh phù hợp bộ lọc.</div></div>
       </section>
     </AppCard>
 
