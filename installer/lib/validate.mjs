@@ -27,7 +27,8 @@ export function normalizeLoginCode(raw) {
   return String(raw || '').trim().toLowerCase().replace(/[^a-z0-9._-]/g, '')
 }
 
-export function checkAdmin({ code, fullName, password } = {}) {
+export function checkAdmin(input) {
+  const { code, fullName, password } = input || {}
   const clean = normalizeLoginCode(code)
   if (!/^[a-z0-9._-]{2,32}$/.test(clean)) {
     return { error: 'Tên đăng nhập dài 2–32 ký tự, chỉ gồm chữ thường không dấu, số, dấu chấm, gạch dưới hoặc gạch ngang.' }
@@ -43,7 +44,8 @@ export function checkAdmin({ code, fullName, password } = {}) {
 }
 
 /** Cloudflare R2 for homework photos: optional, but all four fields or none. */
-export function checkR2(input = {}) {
+export function checkR2(raw) {
+  const input = raw || {}
   const v = {
     accountId: String(input.accountId || '').trim(),
     bucket: String(input.bucket || '').trim(),

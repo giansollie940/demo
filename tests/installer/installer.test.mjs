@@ -42,6 +42,9 @@ test('validation: admin account mirrors the login screen rules', () => {
 
 test('validation: R2 is all-or-nothing', () => {
   assert.equal(checkR2({}).value, null)
+  assert.equal(checkR2(null).value, null, 'the page sends r2: null after "Bỏ qua"')
+  assert.equal(checkR2(undefined).value, null)
+  assert.ok(checkAdmin(null).error)
   assert.match(checkR2({ bucket: 'anh' }).error, /đủ cả 4/)
   const ok = { accountId: 'a'.repeat(32), bucket: 'so-tu-hoc-anh', accessKeyId: 'k'.repeat(32), secretAccessKey: 's'.repeat(64) }
   assert.deepEqual(checkR2(ok).value, ok)
@@ -220,6 +223,22 @@ test('setup API: token check reports the project state; a locked project answers
   const locked = await handleSetupAction({ password: 'mat-khau-cai-dat', token: TOKEN, action: 'prepare' }, opts)
   assert.equal(locked.status, 409)
   assert.equal(locked.body.locked, true)
+})
+
+test('setup API: secrets step accepts the skipped keys exactly as the page sends them', async () => {
+  const seen = []
+  const fetchImpl = async (url, init) => {
+    seen.push(String(url))
+    if (String(url).endsWith('/secrets')) return Response.json({})
+    const q = JSON.parse(init.body).query
+    if (q.includes('public_tables')) return Response.json([{ public_tables: 66, has_app: true }])
+    if (q.includes("role = 'admin'")) return Response.json([{ n: 0 }])
+    return Response.json([])
+  }
+  const r = await handleSetupAction({ password: 'mat-khau-cai-dat', token: TOKEN, action: 'secrets', input: { groqKey: '', r2: null } },
+    { cfg: readEnv(env), manifest, files, requestOrigin: 'https://truong.vercel.app', fetchImpl, sleep: noSleep })
+  assert.equal(r.status, 200, JSON.stringify(r.body))
+  assert.ok(seen.some(u => u.endsWith(`/projects/${REF}/secrets`)))
 })
 
 test('setup API: a rejected token is explained, not leaked', async () => {
