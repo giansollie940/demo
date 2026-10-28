@@ -9,7 +9,7 @@
     "build:pages": "vite build",
     "typecheck": "vue-tsc -b",
     "preview": "vite preview",
-    "test": "node --test tests/*.test.mjs",
+    "test": "node --test tests/*.test.mjs tests/installer/*.test.mjs",
     "test:unit": "vitest run --configLoader runner tests/unit",
     "test:watch": "vitest",
     "test:static": "node --test tests/*.test.mjs",

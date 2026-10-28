@@ -1,0 +1,147 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex">
+  <title>Cài đặt Sổ Tự Học</title>
+  <link rel="stylesheet" href="./setup.css">
+</head>
+<body>
+  <header class="top">
+    <div class="brand"><span class="logo" aria-hidden="true">📘</span> Cài đặt Sổ Tự Học</div>
+    <p class="lead">Làm lần lượt từng bước. Mỗi khoá bí mật chỉ dùng trong lúc cài và không được lưu lại.</p>
+  </header>
+
+  <main class="layout">
+    <nav class="steps" aria-label="Các bước cài đặt"><ol id="step-list"></ol></nav>
+
+    <section class="panel" aria-live="polite">
+      <!-- 1. Vercel settings -->
+      <article class="step" data-step="env">
+        <h2>1. Kiểm tra cài đặt trên Vercel</h2>
+        <p>Trang này đọc 3 biến môi trường bạn đã điền lúc bấm <b>Deploy</b>.</p>
+        <ul class="checklist" id="env-list"></ul>
+        <div class="help" id="env-help" hidden>
+          <h3>Cách thêm biến còn thiếu</h3>
+          <ol>
+            <li>Mở project trên <a href="https://vercel.com/dashboard" target="_blank" rel="noopener">Vercel</a> → <b>Settings</b> → <b>Environment Variables</b>.</li>
+            <li><b>SUPABASE_URL</b> và <b>SUPABASE_PUBLISHABLE_KEY</b>: trên <a href="https://supabase.com/dashboard" target="_blank" rel="noopener">Supabase</a>, mở project trống của bạn → bấm nút <b>Connect</b> ở trên cùng (hoặc <b>Project Settings → API Keys</b>). Chép <i>Project URL</i> (dạng <code>https://xxxx.supabase.co</code>) và <i>Publishable key</i> (bắt đầu bằng <code>sb_publishable_</code>).</li>
+            <li><b>SETUP_PASSWORD</b>: tự đặt một mật khẩu (ít nhất 8 ký tự) để chỉ bạn mở được trang cài đặt này.</li>
+            <li>Lưu xong, vào tab <b>Deployments</b> → bấm <b>⋯</b> ở bản mới nhất → <b>Redeploy</b>, rồi tải lại trang này.</li>
+          </ol>
+        </div>
+        <p class="msg" id="env-msg"></p>
+        <div class="actions"><button class="primary" data-next="env" disabled>Tiếp tục</button></div>
+      </article>
+
+      <!-- 2. Setup password -->
+      <article class="step" data-step="password" hidden>
+        <h2>2. Mật khẩu cài đặt</h2>
+        <p>Nhập <b>SETUP_PASSWORD</b> bạn đã đặt trên Vercel.</p>
+        <label class="field">Mật khẩu cài đặt
+          <span class="secret"><input id="setup-password" type="password" autocomplete="off" spellcheck="false"><button type="button" class="eye" data-eye="setup-password">Hiện</button></span>
+        </label>
+        <p class="msg" id="password-msg"></p>
+        <div class="actions"><button data-back>Quay lại</button><button class="primary" id="password-check">Kiểm tra</button></div>
+      </article>
+
+      <!-- 3. Supabase access token -->
+      <article class="step" data-step="token" hidden>
+        <h2>3. Kết nối Supabase</h2>
+        <p>Bộ cài cần một <b>Access Token</b> của tài khoản Supabase để tạo cơ sở dữ liệu và các hàm máy chủ trong project của bạn.</p>
+        <ol class="howto">
+          <li>Mở trang <a href="https://supabase.com/dashboard/account/tokens" target="_blank" rel="noopener">Supabase → Access Tokens</a> (đăng nhập bằng tài khoản sở hữu project).</li>
+          <li>Bấm <b>Generate new token</b>, đặt tên ví dụ <code>so-tu-hoc-cai-dat</code>. Nếu được chọn thời hạn, chọn ngắn nhất (1 ngày).</li>
+          <li>Bấm <b>Generate token</b> và chép token vừa hiện (bắt đầu bằng <code>sbp_</code>). Token chỉ hiện một lần.</li>
+          <li>Dán vào ô dưới rồi bấm <b>Kiểm tra</b>.</li>
+        </ol>
+        <label class="field">Supabase Access Token
+          <span class="secret"><input id="token" type="password" autocomplete="off" spellcheck="false" placeholder="sbp_…"><button type="button" class="eye" data-eye="token">Hiện</button></span>
+        </label>
+        <p class="note">Project sẽ cài: <b id="project-ref">—</b> (lấy từ SUPABASE_URL).</p>
+        <p class="msg" id="token-msg"></p>
+        <div class="actions"><button data-back>Quay lại</button><button id="token-check">Kiểm tra</button><button class="primary" data-next="token" disabled>Tiếp tục</button></div>
+      </article>
+
+      <!-- 4. Groq -->
+      <article class="step" data-step="groq" hidden>
+        <h2>4. AI duyệt đăng ký <span class="tag">tuỳ chọn</span></h2>
+        <p>Có khoá Groq (miễn phí) thì AI tự duyệt các đăng ký tự học rõ ràng. Bỏ qua thì giáo viên duyệt tay, app vẫn chạy đầy đủ.</p>
+        <ol class="howto">
+          <li>Mở <a href="https://console.groq.com/keys" target="_blank" rel="noopener">Groq Console → API Keys</a> (đăng nhập bằng Google được).</li>
+          <li>Bấm <b>Create API Key</b>, đặt tên ví dụ <code>so-tu-hoc</code>, bấm <b>Submit</b>.</li>
+          <li>Chép khoá vừa hiện (bắt đầu bằng <code>gsk_</code>), dán vào ô dưới rồi bấm <b>Kiểm tra</b>.</li>
+        </ol>
+        <label class="field">Groq API key
+          <span class="secret"><input id="groq" type="password" autocomplete="off" spellcheck="false" placeholder="gsk_…"><button type="button" class="eye" data-eye="groq">Hiện</button></span>
+        </label>
+        <p class="msg" id="groq-msg"></p>
+        <div class="actions"><button data-back>Quay lại</button><button data-skip="groq">Bỏ qua</button><button id="groq-check">Kiểm tra</button><button class="primary" data-next="groq" disabled>Tiếp tục</button></div>
+      </article>
+
+      <!-- 5. Cloudflare R2 -->
+      <article class="step" data-step="r2" hidden>
+        <h2>5. Ảnh trong báo bài <span class="tag">tuỳ chọn</span></h2>
+        <p>Ảnh đính kèm báo bài được lưu ở Cloudflare R2 (miễn phí tới 10 GB, Cloudflare yêu cầu khai báo thẻ thanh toán khi bật R2). Bỏ qua thì báo bài vẫn dùng được bằng chữ.</p>
+        <ol class="howto">
+          <li>Mở <a href="https://dash.cloudflare.com/?to=/:account/r2/overview" target="_blank" rel="noopener">Cloudflare → R2 Object Storage</a> và bật R2 nếu chưa bật.</li>
+          <li>Bấm <b>Create bucket</b>, đặt tên ví dụ <code>so-tu-hoc-anh</code>, bấm <b>Create</b>. Chép tên bucket vào ô <b>Bucket</b>.</li>
+          <li>Ở trang R2, chép <b>Account ID</b> (32 ký tự) vào ô <b>Account ID</b>.</li>
+          <li>Bấm <b>Manage API tokens</b> → <b>Create API token</b>. Chọn quyền <b>Object Read &amp; Write</b>, chỉ áp dụng cho bucket vừa tạo, bấm <b>Create</b>.</li>
+          <li>Chép <b>Access Key ID</b> và <b>Secret Access Key</b> vào hai ô cuối (Secret chỉ hiện một lần), rồi bấm <b>Kiểm tra</b>.</li>
+        </ol>
+        <div class="grid2">
+          <label class="field">Account ID<input id="r2-account" autocomplete="off" spellcheck="false"></label>
+          <label class="field">Bucket<input id="r2-bucket" autocomplete="off" spellcheck="false"></label>
+          <label class="field">Access Key ID<input id="r2-key" autocomplete="off" spellcheck="false"></label>
+          <label class="field">Secret Access Key
+            <span class="secret"><input id="r2-secret" type="password" autocomplete="off" spellcheck="false"><button type="button" class="eye" data-eye="r2-secret">Hiện</button></span>
+          </label>
+        </div>
+        <p class="msg" id="r2-msg"></p>
+        <div class="actions"><button data-back>Quay lại</button><button data-skip="r2">Bỏ qua</button><button id="r2-check">Kiểm tra</button><button class="primary" data-next="r2" disabled>Tiếp tục</button></div>
+      </article>
+
+      <!-- 6. Admin account -->
+      <article class="step" data-step="admin" hidden>
+        <h2>6. Tài khoản quản trị</h2>
+        <p>Đây là tài khoản đầu tiên của trường. Đăng nhập bằng nó để tạo năm học, lớp, giáo viên và học sinh.</p>
+        <label class="field">Họ tên<input id="admin-name" autocomplete="off" placeholder="Nguyễn Văn A"></label>
+        <label class="field">Tên đăng nhập<input id="admin-code" autocomplete="off" spellcheck="false" placeholder="quantri"><small>Chữ thường không dấu, số, dấu chấm hoặc gạch. Dùng để đăng nhập thay cho email.</small></label>
+        <label class="field">Mật khẩu
+          <span class="secret"><input id="admin-pass" type="password" autocomplete="new-password"><button type="button" class="eye" data-eye="admin-pass">Hiện</button></span>
+          <small>Ít nhất 8 ký tự, có cả chữ lẫn số.</small>
+        </label>
+        <label class="field">Nhập lại mật khẩu<input id="admin-pass2" type="password" autocomplete="new-password"></label>
+        <p class="msg" id="admin-msg"></p>
+        <div class="actions"><button data-back>Quay lại</button><button class="primary" id="admin-next">Tiếp tục</button></div>
+      </article>
+
+      <!-- 7. Install -->
+      <article class="step" data-step="install" hidden>
+        <h2>7. Cài đặt</h2>
+        <ul class="summary" id="summary"></ul>
+        <ol class="progress" id="progress"></ol>
+        <p class="msg" id="install-msg"></p>
+        <div class="actions"><button data-back id="install-back">Quay lại</button><button class="primary" id="install-run">Bắt đầu cài đặt</button></div>
+      </article>
+
+      <!-- Done -->
+      <article class="step" data-step="done" hidden>
+        <h2>🎉 Cài đặt xong!</h2>
+        <p>Đăng nhập Sổ Tự Học bằng tên đăng nhập <b id="done-code"></b> và mật khẩu bạn vừa đặt.</p>
+        <p><a class="button primary" href="../">Mở Sổ Tự Học</a></p>
+        <div class="help">
+          <h3>Nên làm ngay</h3>
+          <ol>
+            <li>Xoá Access Token vừa tạo ở <a href="https://supabase.com/dashboard/account/tokens" target="_blank" rel="noopener">Supabase → Access Tokens</a> (bấm ⋯ → Delete). Bộ cài không cần nó nữa.</li>
+            <li>Trang cài đặt đã tự khoá. Bạn có thể xoá biến <b>SETUP_PASSWORD</b> trên Vercel.</li>
+          </ol>
+        </div>
+      </article>
+    </section>
+  </main>
+  <script type="module" src="./setup.js"></script>
+</body>
+</html>

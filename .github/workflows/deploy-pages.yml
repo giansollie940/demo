@@ -16,6 +16,9 @@ concurrency:
 
 jobs:
   build:
+    # Copies made with the "Deploy to Vercel" button run on Vercel instead; they skip this job unless
+    # the repository variable DEPLOY_GITHUB_PAGES is set to "true".
+    if: github.repository == 'giansollie940/demo' || vars.DEPLOY_GITHUB_PAGES == 'true'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
