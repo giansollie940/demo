@@ -224,13 +224,13 @@ it('các ô được sắp theo thứ rồi tiết', () => {
 
 it('FEAT-011 chuyển lối vào Thiết bị điện tử vào Thời khóa biểu, không thêm quyền cho học sinh', () => {
   const labels = (role: any) => visibleNavigation(role).map(item => item.label)
-  expect(labels('teacher')).toContain('Thời khóa biểu')
+  expect(labels('teacher')).toContain('Tuần & TKB')
   expect(labels('admin')).toContain('Năm học')
   expect(labels('admin')).not.toContain('Thời khóa biểu')
   for (const role of ['student', 'monitor']) expect(labels(role)).not.toContain('Thiết bị điện tử')
   expect(labels('teacher')).not.toContain('Thiết bị điện tử')
   expect(labels('admin')).not.toContain('Thiết bị điện tử')
-  const entry = navigation.find(item => item.label === 'Thời khóa biểu' && item.roles.includes('teacher'))
+  const entry = navigation.find(item => item.label === 'Tuần & TKB' && item.roles.includes('teacher'))
   expect(entry?.to).toBe('/schedule')
 
   const paths = routes.flatMap(route => (route.children ?? []).map(child => child.path))
@@ -388,7 +388,7 @@ it('R-001 Admin có đường vào chỉ-đọc, và không có nút thao tác n
   const labels = (role: any) => visibleNavigation(role).map(item => item.label)
   expect(labels('admin')).toContain('Năm học')
   expect(labels('admin')).not.toContain('Thời khóa biểu')
-  expect(labels('teacher')).toContain('Thời khóa biểu')
+  expect(labels('teacher')).toContain('Tuần & TKB')
   for (const role of ['student', 'monitor']) expect(labels(role)).not.toContain('Thiết bị điện tử')
 
   const adminEntry = navigation.find(item => item.roles.includes('admin') && item.label === 'Năm học')

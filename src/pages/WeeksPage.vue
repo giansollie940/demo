@@ -47,7 +47,7 @@ async function save(){if(!classId.value||!isDirty.value)return;clearStatusReset(
 function goCurrentWeek(){context.resumeAutoWeek(lifecycle.value.currentWeekId);const id=lifecycle.value.currentWeekId;if(id)selectedDraftId.value=id}
 function selectDraft(id:string){selectedDraftId.value=id;context.selectWeek(id,{manual:id!==lifecycle.value.currentWeekId})}
 function viewWeek(id:string){context.selectWeek(id,{manual:true})}
-async function openSchedule(id:string){context.selectWeek(id,{manual:true});await router.push('/schedule')}
+async function openSchedule(id:string){context.selectWeek(id,{manual:true});await router.push({path:'/schedule',query:{tab:'schedule'}})}
 onBeforeUnmount(clearStatusReset)
 </script>
 

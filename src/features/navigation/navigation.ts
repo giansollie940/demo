@@ -15,8 +15,8 @@ export const navigation:NavigationItem[]=[
   item('Báo cáo lỗi','/issues','TriangleAlert',['student','monitor','teacher']),
   item('Theo dõi lớp','/tracking','UsersRound',['monitor']),
   item('Theo dõi cả lớp','/tracking','UsersRound',teachers),
-  item('Quản lý tuần','/weeks','CalendarRange',teachers),
-  item('Thời khóa biểu','/schedule','CalendarClock',teachers),
+  // Quản lý tuần, Thời khóa biểu và Thiết bị điện tử là ba thẻ của cùng một trang /schedule.
+  item('Tuần & TKB','/schedule','CalendarClock',teachers),
   item('Học sinh','/students','GraduationCap',teachers),
   item('Thống kê','/statistics','ChartNoAxesCombined',teachers),
   item('Thống kê của tôi','/statistics','ChartNoAxesCombined',learners),
@@ -42,7 +42,7 @@ export const navigation:NavigationItem[]=[
 const orders:Record<UserRole,string[]>={
   student:['Tổng quan','Báo bài','Đăng ký tự học','Báo cáo lỗi','Lịch sử','Nhận xét GV','Thống kê của tôi'],
   monitor:['Tổng quan','Báo bài','Đăng ký tự học','Báo cáo lỗi','Theo dõi lớp','Lịch sử','Nhận xét GV','Thống kê của tôi'],
-  teacher:['Tổng quan','Báo bài','Duyệt đăng ký','Báo cáo lỗi','Theo dõi cả lớp','Quản lý tuần','Thời khóa biểu','Học sinh','Thống kê','Cài đặt'],
+  teacher:['Tổng quan','Báo bài','Duyệt đăng ký','Báo cáo lỗi','Theo dõi cả lớp','Tuần & TKB','Học sinh','Thống kê','Cài đặt'],
   admin:['Tổng quan','Quản trị Báo bài','Năm học','Lớp học','Học sinh','Giáo viên','Phân quyền','Thùng rác','Dung lượng','Kho lưu trữ','Nhật ký hệ thống'],
 }
 

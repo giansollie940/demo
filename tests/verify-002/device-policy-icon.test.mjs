@@ -6,7 +6,7 @@ const read = path => readFileSync(new URL(`../../${path}`, import.meta.url), 'ut
 
 test('Teacher and Admin enter Device Policy through Schedule, without a standalone sidebar item', () => {
   const nav = read('src/features/navigation/navigation.ts')
-  assert.match(nav, /'Thời khóa biểu','\/schedule','CalendarClock',teachers/)
+  assert.match(nav, /'Tuần & TKB','\/schedule','CalendarClock',teachers/)
   assert.match(nav, /'Năm học','\/admin\?tab=years','CalendarRange',admins/)
   assert.doesNotMatch(nav, /item\('Thiết bị điện tử'/)
   assert.match(read('src/pages/SchedulePage.vue'), /<DevicePolicyIcon\/> Thiết bị điện tử/)
