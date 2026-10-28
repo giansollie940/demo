@@ -79,4 +79,4 @@ Xong là đăng nhập được ngay bằng tài khoản quản trị vừa tạ
 - `installer/sql/10-baseline.sql` là bản chụp cấu trúc cơ sở dữ liệu (không có dữ liệu, không có khoá), sinh bởi `installer/snapshot/generate.sql`.
 - Migration mới trong `supabase/migrations/` được bộ cài tự áp dụng sau bản chụp, không cần làm gì thêm.
 - Muốn chụp lại (ví dụ khi đã có nhiều migration mới): chạy `SUPABASE_ACCESS_TOKEN=… SUPABASE_PROJECT_REF=… node installer/snapshot/fetch.mjs`, rồi cập nhật `baselineMigrations` và `baselineDate` trong `installer/manifest.json`.
-- Test: `node --test tests/installer/`.
+- Test: `npm test` (gồm `tests/installer/*.test.mjs`).
