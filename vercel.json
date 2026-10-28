@@ -1,0 +1,27 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "buildCommand": "npm run build:pages",
+  "outputDirectory": "dist",
+  "rewrites": [
+    { "source": "/config.js", "destination": "/api/config" }
+  ],
+  "functions": {
+    "api/setup/step.js": {
+      "maxDuration": 60,
+      "includeFiles": "{installer/manifest.json,installer/sql/**,supabase/functions/**,supabase/migrations/**}"
+    },
+    "api/setup/status.js": {
+      "includeFiles": "installer/manifest.json"
+    }
+  },
+  "headers": [
+    {
+      "source": "/setup/(.*)",
+      "headers": [
+        { "key": "Cache-Control", "value": "no-store" },
+        { "key": "X-Robots-Tag", "value": "noindex" },
+        { "key": "Referrer-Policy", "value": "no-referrer" }
+      ]
+    }
+  ]
+}

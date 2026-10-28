@@ -1,0 +1,105 @@
+{
+  "$comment": "Sổ Tự Học installer manifest. baselineMigrations: migrations already contained in sql/10-baseline.sql; the installer applies every other file in supabase/migrations after the baseline, in name order.",
+  "baselineDate": "2026-10-28",
+  "sqlSteps": [
+    "00-prepare.sql",
+    "10-baseline.sql",
+    "20-seed.sql"
+  ],
+  "functions": [
+    {
+      "slug": "admin-create-user",
+      "verifyJwt": false
+    },
+    {
+      "slug": "admin-delete-user",
+      "verifyJwt": false
+    },
+    {
+      "slug": "admin-list-users",
+      "verifyJwt": false
+    },
+    {
+      "slug": "admin-manage-classes",
+      "verifyJwt": false
+    },
+    {
+      "slug": "admin-reset-password",
+      "verifyJwt": false
+    },
+    {
+      "slug": "admin-update-user",
+      "verifyJwt": false
+    },
+    {
+      "slug": "ai-review-registration",
+      "verifyJwt": true
+    },
+    {
+      "slug": "archive-media",
+      "verifyJwt": true
+    },
+    {
+      "slug": "audit-log",
+      "verifyJwt": false
+    },
+    {
+      "slug": "bag-enroll",
+      "verifyJwt": true
+    },
+    {
+      "slug": "bag-login",
+      "verifyJwt": false
+    },
+    {
+      "slug": "emergency-register",
+      "verifyJwt": false
+    },
+    {
+      "slug": "homework-media",
+      "verifyJwt": true
+    },
+    {
+      "slug": "homework-media-cleanup",
+      "verifyJwt": false
+    },
+    {
+      "slug": "homework-review",
+      "verifyJwt": false
+    },
+    {
+      "slug": "quote-feed",
+      "verifyJwt": false
+    },
+    {
+      "slug": "storage-health",
+      "verifyJwt": true
+    }
+  ],
+  "baselineMigrations": [
+    "20260815085954_v8301_rls_login_fix.sql",
+    "20260831075330_grant_authenticated_avatar_path_select.sql",
+    "20260831162435_allow_animated_gif_avatars.sql",
+    "20260831162906_revoke_anon_avatar_rpc_execute.sql",
+    "20260831170455_avatar_visibility_by_class_relationship.sql",
+    "20260921060255_verify002_add_device_use_policy_signals_realtime.sql",
+    "20260921060825_verify002_device_slot_key_search_path.sql",
+    "20260923114552_storage_change_signals.sql",
+    "20260924040615_sec_sql_hardening_001_trigger_acl.sql",
+    "20260924040619_sec_sql_hardening_002_anon_helpers.sql",
+    "20260924130155_feat_007_archive_purge_history.sql",
+    "20260924130159_feat_010_device_use_lock_history.sql",
+    "20260924130202_feat_010_rc9_cascade_freeze_fix_history.sql",
+    "20260924133944_sec_sql_hardening_003_cron_rpc_acl.sql",
+    "20260930020245_auth_bag_001_school_bag_login.sql",
+    "20260930120000_bag_game_scores.sql",
+    "20261001090000_homework_awards_by_month.sql",
+    "20261001120000_bag_game_hardening.sql",
+    "20261002033629_sec_registration_insert_001.sql",
+    "20261003061029_bag_min8_admin_homework_alerts.sql",
+    "20261010090000_rls_initplan.sql",
+    "20261010091000_fk_indexes.sql",
+    "20261011090000_rls_initplan_helpers.sql",
+    "20261027090000_late_registration_tracking.sql"
+  ]
+}
