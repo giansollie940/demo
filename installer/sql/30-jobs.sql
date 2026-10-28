@@ -1,5 +1,6 @@
 -- Sổ Tự Học installer — step 3: scheduled jobs.
 -- {{PROJECT_URL}} and {{MEDIA_SECRET}} are filled in by the installer (as SQL string literals).
+-- The photo clean-up job lives in 31-media-cleanup-job.sql: it is only scheduled when R2 is set up.
 -- Safe to run again: secrets are updated in place and cron.schedule replaces a job of the same name.
 
 do $vault$
@@ -25,11 +26,3 @@ select cron.schedule('so-tu-hoc-sync-revision-overdue', '* * * * *', 'select pub
 select cron.schedule('so-tu-hoc-sync-stale-ai-reviews', '* * * * *', 'select public.sync_stale_ai_reviews();');
 select cron.schedule('so-tu-hoc-sync-week-statuses', '*/15 * * * *', 'select public.sync_week_statuses();');
 select cron.schedule('homework-backlog-feat001', '* * * * *', 'select public.homework_maintenance()');
-select cron.schedule('feat006-media-cleanup', '* * * * *', $job$
- select net.http_post(
-  url := (select decrypted_secret from vault.decrypted_secrets where name='feat006_project_url') || '/functions/v1/homework-media-cleanup',
-  headers := jsonb_build_object('Content-Type','application/json','Authorization','Bearer ' || (select decrypted_secret from vault.decrypted_secrets where name='feat006_cleanup_secret')),
-  body := '{}'::jsonb,
-  timeout_milliseconds := 120000
- );
-$job$);

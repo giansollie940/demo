@@ -133,6 +133,9 @@ on conflict (version) do nothing;`)
     await api.setSecrets(ref, secrets)
     await api.runSql(ref, fillTemplate(files.readText('installer/sql/30-jobs.sql'),
       { PROJECT_URL: ctx.projectUrl, MEDIA_SECRET: mediaSecret }))
+    await api.runSql(ref, ctx.input.r2
+      ? files.readText('installer/sql/31-media-cleanup-job.sql')
+      : "select cron.unschedule(jobid) from cron.job where jobname = 'feat006-media-cleanup';")
     const extras = [ctx.input.groqKey && 'Groq', ctx.input.r2 && 'Cloudflare R2'].filter(Boolean)
     return { message: `Đã lưu khoá${extras.length ? ` (gồm ${extras.join(', ')})` : ''} và đặt lịch chạy định kỳ.` }
   }

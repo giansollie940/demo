@@ -134,7 +134,9 @@ test('plan: every step runs in order and the last one locks the installer', asyn
   assert.match(sql, /create extension if not exists pg_cron/)
   assert.match(sql, /insert into supabase_migrations\.schema_migrations \(version, name\) values/)
   assert.match(sql, /insert into public\.periods/)
-  assert.match(sql, /cron\.schedule\('feat006-media-cleanup'/)
+  assert.match(sql, /cron\.schedule\('so-tu-hoc-sync-week-statuses'/)
+  assert.doesNotMatch(sql, /cron\.schedule\('feat006-media-cleanup'/, 'no photo clean-up without R2')
+  assert.match(sql, /cron\.unschedule\(jobid\) from cron\.job where jobname = 'feat006-media-cleanup'/)
   assert.match(sql, /select public\.bootstrap_root_admin\('11111111-1111-4111-8111-111111111111'::uuid\)/)
 
   const [, secrets] = fake.log.find(e => e[0] === 'secrets')
@@ -176,6 +178,7 @@ test('plan: R2 keys become function secrets only when given', async () => {
   await runStep('secrets', ctxFor(fake, { groqKey: '', r2 }))
   const [, secrets] = fake.log.find(e => e[0] === 'secrets')
   assert.equal(secrets.R2_HOMEWORK_BUCKET, 'anh')
+  assert.ok(fake.log.some(e => e[0] === 'sql' && e[1].includes("cron.schedule('feat006-media-cleanup'")), 'photo clean-up scheduled with R2')
   assert.ok(!('GROQ_API_KEY' in secrets))
 })
 

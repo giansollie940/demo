@@ -57,6 +57,12 @@ Xong là đăng nhập được ngay bằng tài khoản quản trị vừa tạ
 - Trang `/setup` tự khoá khi đã có tài khoản quản trị. Có thể xoá biến `SETUP_PASSWORD` trên Vercel.
 - Đăng nhập bằng tài khoản quản trị để tạo năm học, lớp, giáo viên và học sinh.
 
+### Bật ảnh báo bài sau khi cài (nếu lúc cài đã bỏ qua)
+
+1. Tạo bucket và API token trên Cloudflare R2 như hướng dẫn ở bước 5 của trang cài đặt.
+2. Mở Supabase → project của bạn → **Edge Functions → Secrets**, thêm 4 biến: \`R2_ACCOUNT_ID\`, \`R2_HOMEWORK_BUCKET\`, \`R2_ACCESS_KEY_ID\`, \`R2_SECRET_ACCESS_KEY\`.
+3. Mở **SQL Editor**, dán nội dung file [\`installer/sql/31-media-cleanup-job.sql\`](../../installer/sql/31-media-cleanup-job.sql) rồi bấm **Run** để bật việc dọn ảnh định kỳ.
+
 ## An toàn
 
 - Access Token và các khoá chỉ đi từ trình duyệt của bạn tới máy chủ Vercel **của chính bạn**, rồi tới Supabase, Groq và Cloudflare. Chúng không được lưu vào file, vào trình duyệt hay vào biến môi trường.
