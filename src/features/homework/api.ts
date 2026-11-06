@@ -144,7 +144,10 @@ export async function homeworkRpc<T = unknown>(
     // Keep the SQLSTATE. FEAT-008 raises 53100 for a capacity hold, and the UI
     // must tell that apart from a permission or validation failure without
     // matching on message text.
-    throw Object.assign(new Error(error.message || "Không thể thực hiện thao tác Báo bài."), { code: (error as { code?: string }).code });
+    throw Object.assign(new Error(error.message || "Không thể thực hiện thao tác Báo bài."), {
+      code: (error as { code?: string }).code,
+      hint: (error as { hint?: string }).hint,
+    });
   return data as T;
 }
 export async function submitHomework(
@@ -158,11 +161,13 @@ export async function submitHomework(
   });
   if (error) {
     let message = error.message || "Chưa gửi được bài.";
+    let code: string | undefined;
     try {
       const body = await error.context?.json();
       message = body?.error || message;
+      code = body?.code;
     } catch {}
-    throw new Error(message);
+    throw Object.assign(new Error(message), { code });
   }
   const result = data as {
     ok?: boolean;

@@ -23,7 +23,8 @@ Deno.serve(async (req: Request) => {
       "homework_api",
       { p_action: body.action === "correction_decide" ? "correction_decide" : body.action === "retry" ? "retry" : "submit", p_data: body },
     );
-    if (submitError) return json(req, 400, { error: submitError.message });
+    // hint carries a stable code for the page, e.g. HOMEWORK_DUE_IN_PAST (due date already passed).
+    if (submitError) return json(req, 400, { error: submitError.message, code: submitError.hint || undefined });
     if (notice.status !== "pending_duplicate_review")
       return json(req, 200, { ok: true, notice });
     async function aiRpc(action: string, data: Record<string, unknown>) {

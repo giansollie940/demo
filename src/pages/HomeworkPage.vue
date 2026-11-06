@@ -29,6 +29,7 @@ import {
   type Correction,
 } from "../features/homework/api";
 import { homeworkTabs, resolveHomeworkTab, useHomeworkViewStore } from "../features/homework/view-context";
+import { checkDeadline, isDueInPastError } from "../features/homework/deadline";
 import { awardPayload, awardPeriodLabel, awardWeekLabel, defaultAwardPeriod, type AwardWeekOption } from "../features/homework/award-months";
 import AwardPeriodPicker from "../components/homework/AwardPeriodPicker.vue";
 const view = useHomeworkViewStore();
@@ -75,6 +76,16 @@ const data = ref<HomeworkData | null>(null),
   now = ref(Date.now());
 const timer = setInterval(() => (now.value = Date.now()), 60000);
 let loadId = 0;
+// Hạn hiện có của bài đang sửa: giữ nguyên hạn này thì không bị chặn dù nó đã qua.
+const originalDue = ref("");
+const deadlineState = computed(() => checkDeadline(form.deadline, originalDue.value, now.value));
+/** Kiểm tra lại ngay lúc gửi (đồng hồ của trang chỉ nhích mỗi phút). Trả về false nếu phải dừng. */
+function deadlineAllowsSend() {
+  const check = checkDeadline(form.deadline, originalDue.value, Date.now());
+  if (check.level !== "block") return true;
+  error.value = check.message;
+  return false;
+}
 const editing = ref(false),
   deleteTarget = ref<Notice | null>(null),
   deleteReason = ref(""),
@@ -241,15 +252,18 @@ function compose(n?: Notice) {
     content: draft?.content || n?.content || "",
     deadline: draft ? localDeadline(draft.due_at) : n ? localDeadline(n.due_at) : "",
   });
+  originalDue.value = n?.due_at || "";
+  now.value = Date.now();
   media.open(n,activeCorrection.value);
   editing.value = true;
 }
 async function send() {
   if(activeCorrection.value){await saveCorrection(true);return;}
   if (busy.value) return;
-  busy.value = true;
   error.value = "";
   message.value = "";
+  if (!deadlineAllowsSend()) return;
+  busy.value = true;
   try {
     const attachment = await media.payload({class_id:classId.value,notice_id:form.id||null,revision:form.revision,request_id:form.request_id});
     const result = await submitHomework(classId.value, {
@@ -272,16 +286,19 @@ async function send() {
     await load();
     if (result.notice?.status !== "published") tab.value = "history";
   } catch (e) {
-    error.value =
-      (e instanceof Error ? e.message : "Chưa gửi được bài.") +
-      " Kiểm tra Lịch sử đăng trước khi gửi lại.";
+    error.value = isDueInPastError(e)
+      ? (e as Error).message
+      : (e instanceof Error ? e.message : "Chưa gửi được bài.") +
+        " Kiểm tra Lịch sử đăng trước khi gửi lại.";
   } finally {
     busy.value = false;
   }
 }
 async function saveCorrection(resubmit:boolean){
   if(!activeCorrection.value||busy.value)return;
-  const c=activeCorrection.value;busy.value=true;error.value='';
+  error.value='';
+  if(!deadlineAllowsSend())return;
+  const c=activeCorrection.value;busy.value=true;
   try{
     const attachment=await media.payload({class_id:classId.value,notice_id:form.id,request_id:form.request_id,revision:form.revision,correction_id:c.id,round:c.round,version:c.version});
     const result=await homeworkRpc<Correction & {expired?:boolean;message?:string}>(resubmit?'correction_submit':'correction_save',classId.value,{
@@ -818,7 +835,15 @@ onUnmounted(() => {
               v-model="form.deadline"
               type="datetime-local"
               required
+              :aria-invalid="deadlineState.level === 'block'"
+              aria-describedby="deadline-check"
           /></label>
+          <p
+            v-if="deadlineState.level !== 'ok'"
+            id="deadline-check"
+            :class="deadlineState.level === 'block' ? 'error' : 'warning'"
+            :role="deadlineState.level === 'block' ? 'alert' : 'status'"
+          >{{ deadlineState.message }}</p>
           <section class="composer-image" aria-label="Ảnh đính kèm">
             <label>Ảnh đính kèm (tối đa một ảnh)
               <input type="file" accept="image/jpeg,image/png,image/webp,image/heic,image/heif,.heic,.heif" @change="chooseImage">
@@ -838,7 +863,7 @@ onUnmounted(() => {
           <div class="actions">
             <button type="button" :disabled="busy" @click="editing = false">
               Đóng</button
-            ><button v-if="activeCorrection" type="button" :disabled="busy" @click="saveCorrection(false)">Lưu bản nháp</button><button class="primary" :disabled="busy">
+            ><button v-if="activeCorrection" type="button" :disabled="busy || deadlineState.level === 'block'" @click="saveCorrection(false)">Lưu bản nháp</button><button class="primary" :disabled="busy || deadlineState.level === 'block'">
               {{ busy ? "Đang lưu và kiểm tra…" : activeCorrection ? "Gửi lại GV" : "Đăng Báo bài" }}
             </button>
           </div>
@@ -1092,6 +1117,12 @@ textarea {
   background: #fff0ee;
   color: #912c25;
   padding: 15px;
+  border-radius: 12px;
+}
+.warning {
+  background: #fff6df;
+  color: #7a4d00;
+  padding: 12px 15px;
   border-radius: 12px;
 }
 .success {
