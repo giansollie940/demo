@@ -39,6 +39,9 @@ jobs:
       - name: Static tests
         run: npm test
 
+      - name: Homework due-date page test
+        run: npm run test:homework-due:ui
+
       - name: Build (same flags as the Pages deploy)
         env:
           VITE_OWL_MASCOT_V2_ENABLED: 'true'
